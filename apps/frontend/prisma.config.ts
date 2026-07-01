@@ -1,12 +1,11 @@
-import "dotenv/config";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
   datasource: {
-    url: env("DATABASE_URL"),
+    url: "postgresql://postgres.rlscequchmvgjjcdqxfs:4gAJd6LaWx0ROADB@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require",
   },
-  // Place migrations here at the top level of the config object
   migrations: {
-    seed: 'tsx ./prisma/seed.ts',  },
+    seed: 'tsx ./prisma/seed.ts',
+  },
 });

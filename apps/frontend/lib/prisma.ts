@@ -1,24 +1,15 @@
-﻿// apps/frontend/lib/prisma.ts
-import { PrismaClient } from '@prisma/client';
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+﻿import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-/**
- * Initializes the MariaDB adapter.
- */
+// Disable SSL verification for Supabase pooler
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 const createPrismaClient = () => {
-  const adapter = new PrismaMariaDb({
-    host: process.env.DB_HOST ?? 'localhost',
-    user: process.env.DB_USER ?? 'root',
-    password: process.env.DB_PASSWORD ?? '',
-    database: process.env.DB_NAME ?? 'garrison_db',
-    port: parseInt(process.env.DB_PORT ?? '3306', 10),
+  const adapter = new PrismaPg({
+    connectionString: process.env.DATABASE_URL,
   });
 
-  // Create the client with the adapter and extend it for global serialization
-  return new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  }).$extends({
+  return new PrismaClient({ adapter }).$extends({
     result: {
       order: {
         total: {
@@ -36,12 +27,10 @@ const createPrismaClient = () => {
   });
 };
 
-// Global augmentation for the singleton pattern
 declare global {
   var prismaGlobal: undefined | ReturnType<typeof createPrismaClient>;
 }
 
-// Ensure the singleton survives HMR (Hot Module Replacement)
 const prisma = globalThis.prismaGlobal ?? createPrismaClient();
 
 export default prisma;

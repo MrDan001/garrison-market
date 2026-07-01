@@ -1,5 +1,15 @@
-import prisma from "../lib/prisma"; // Use your existing singleton
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from "bcrypt";
+
+// Disable SSL verification for self-signed certificates
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+const adapter = new PrismaPg({
+  connectionString: "postgresql://postgres.rlscequchmvgjjcdqxfs:4gAJd6LaWx0ROADB@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require",
+});
+
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const password = "Garrison2026!";
