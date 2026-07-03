@@ -45,8 +45,7 @@ export default async function OwnerDashboardPage() {
       }),
     ]);
 
-    const serializedSalesData = salesData.map((d) => ({
-      total: Number(d.total),
+    const serializedSalesData = salesData.map((d: { total: number; date: Date }) => ({      total: Number(d.total),
       date: d.date.toISOString(),
     }));
 
