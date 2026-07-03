@@ -50,7 +50,7 @@ export default async function OwnerDashboardPage() {
     }));
 
     const totalSales = serializedSalesData.reduce(
-      (acc, curr) => acc + curr.total,
+      (acc: number, curr: { total: number; date: string }) => acc + curr.total,
       0
     );
 
