@@ -168,8 +168,7 @@ export default async function OwnerDashboardPage() {
                 <h2 className="text-base font-semibold text-white mb-5">Recent Activity</h2>
                 <div className="space-y-3">
                   {user.orders.length > 0 ? (
-                    user.orders.map((order) => (
-                      <div
+user.orders.map((order: { id: number; total: number | { toString(): string }; staff: { fullName: string | null } | null }) => (                      <div
                         key={order.id}
                         className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60 hover:border-slate-700 transition-colors"
                       >
