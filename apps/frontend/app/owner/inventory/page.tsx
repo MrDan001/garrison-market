@@ -71,7 +71,7 @@ export default async function OwnerInventoryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {items.map((item) => (
+              {items.map((item: InventoryItem) => (
                   <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
                     <td className="px-5 py-4 font-semibold text-white">{item.name}</td>
                     <td className="px-5 py-4">
