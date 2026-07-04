@@ -17,7 +17,8 @@ export default async function OwnerInventoryPage() {
   const session = await getSessionUser();
   if (!session || session.role !== 'owner') redirect("/login");
 
-  const items = await prisma.inventory.findMany({
+  // FIX: Explicitly type the result as an array of InventoryItem
+  const items: InventoryItem[] = await prisma.inventory.findMany({
     where: { ownerId: session.id },
     orderBy: { name: "asc" }
   });
@@ -79,7 +80,7 @@ export default async function OwnerInventoryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {items.map((item: InventoryItem) => (
+                {items.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
                     <td className="px-5 py-4 font-semibold text-white">{item.name}</td>
                     <td className="px-5 py-4">
@@ -114,7 +115,7 @@ export default async function OwnerInventoryPage() {
 
             {/* Mobile card list */}
             <div className="sm:hidden divide-y divide-slate-800/60">
-              {items.map((item: InventoryItem) => (
+              {items.map((item) => (
                 <div key={item.id} className="px-4 py-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white truncate">{item.name}</p>
