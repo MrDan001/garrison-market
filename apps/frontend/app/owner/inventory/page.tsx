@@ -5,6 +5,14 @@ import { getSessionUser } from "@/lib/auth.actions";
 import { redirect } from "next/navigation";
 import { updateInventoryQuantity } from "@/lib/business.actions";
 
+// Define the type to satisfy TypeScript
+type InventoryItem = {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number | string;
+};
+
 export default async function OwnerInventoryPage() {
   const session = await getSessionUser();
   if (!session || session.role !== 'owner') redirect("/login");
@@ -71,7 +79,7 @@ export default async function OwnerInventoryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-              {items.map((item: InventoryItem) => (
+                {items.map((item: InventoryItem) => (
                   <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
                     <td className="px-5 py-4 font-semibold text-white">{item.name}</td>
                     <td className="px-5 py-4">
@@ -106,7 +114,7 @@ export default async function OwnerInventoryPage() {
 
             {/* Mobile card list */}
             <div className="sm:hidden divide-y divide-slate-800/60">
-              {items.map((item) => (
+              {items.map((item: InventoryItem) => (
                 <div key={item.id} className="px-4 py-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white truncate">{item.name}</p>
