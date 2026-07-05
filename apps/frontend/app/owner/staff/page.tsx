@@ -1,13 +1,22 @@
-import { Trash2, Ban, CheckCircle, Eye, UserPlus, ArrowLeft } from "lucide-react";
+import { UserPlus, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { getStaffData, toggleStaffStatus, deleteStaff } from "@/lib/auth.actions";
 
+type StaffMember = {
+  id: number;
+  fullName: string | null;
+  email: string;
+  status: string;
+  phoneNumber: string | null;
+  role: string;
+  ownerId: number | null;
+};
+
 export default async function ManageStaffPage() {
-  // Use the action which is secured to only fetch THIS owner's staff
-  const staffMembers: Awaited<ReturnType<typeof getStaffData>> = await getStaffData();
+  const staffMembers = await getStaffData() as StaffMember[];
+
   return (
     <div className="min-h-screen bg-[#0f1117] p-8 text-slate-200">
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div className="flex items-center gap-4">
           <Link href="/owner/dashboard" className="p-2 hover:bg-slate-800 rounded-full transition-colors">
@@ -15,8 +24,7 @@ export default async function ManageStaffPage() {
           </Link>
           <h1 className="text-3xl font-bold">Manage Staff</h1>
         </div>
-
-        <Link 
+        <Link
           href="/owner/staff/register"
           className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-2xl font-semibold transition-all"
         >
@@ -24,18 +32,16 @@ export default async function ManageStaffPage() {
         </Link>
       </div>
 
-      {/* Grid Layout for Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {staffMembers.map((staff) => (
+        {staffMembers.map((staff: StaffMember) => (
           <div key={staff.id} className="border border-slate-800 bg-slate-900/50 rounded-2xl p-6 shadow-xl">
-            
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h2 className="text-xl font-bold text-white">{staff.fullName}</h2>
                 <p className="text-sm text-slate-500">{staff.email}</p>
               </div>
               <span className={`px-3 py-1 rounded-md text-xs font-bold ${
-                staff.status === 'ACTIVE' ? 'bg-emerald-950 text-emerald-500' : 'bg-red-950 text-red-500'
+                staff.status === 'active' ? 'bg-emerald-950 text-emerald-500' : 'bg-red-950 text-red-500'
               }`}>
                 {staff.status}
               </span>
@@ -48,7 +54,7 @@ export default async function ManageStaffPage() {
             <div className="flex gap-3">
               <form action={toggleStaffStatus.bind(null, staff.id, staff.status)} className="flex-1">
                 <button className="w-full py-2.5 bg-rose-950/50 text-rose-200 hover:bg-rose-950/80 rounded-lg text-sm font-semibold transition-colors">
-                  {staff.status === 'ACTIVE' ? 'SUSPEND' : 'REINSTATE'}
+                  {staff.status === 'active' ? 'SUSPEND' : 'REINSTATE'}
                 </button>
               </form>
 
