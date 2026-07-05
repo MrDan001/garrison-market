@@ -4,8 +4,7 @@ import { getStaffData, toggleStaffStatus, deleteStaff } from "@/lib/auth.actions
 
 export default async function ManageStaffPage() {
   // Use the action which is secured to only fetch THIS owner's staff
-  const staffMembers = await getStaffData();
-
+  const staffMembers: Awaited<ReturnType<typeof getStaffData>> = await getStaffData();
   return (
     <div className="min-h-screen bg-[#0f1117] p-8 text-slate-200">
       {/* Header Section */}
