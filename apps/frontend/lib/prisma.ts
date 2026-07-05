@@ -1,38 +1,39 @@
-﻿import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
+﻿import { PrismaPg } from '@prisma/adapter-pg';
 
-const connectionString = process.env.DATABASE_URL;
+const createPrismaClient = () => {
+  const { PrismaClient } = require('@prisma/client');
+  
+  const adapter = new PrismaPg({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
 
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
-
-// Use 'any' to bypass the constructor type check that is failing your build
-const prisma = new PrismaClient({ adapter } as any).$extends({
-  result: {
-    order: {
-      total: {
-        needs: { total: true },
-        compute(data: any) { return Number(data.total); }
-      }
-    },
-    inventory: {
-      price: {
-        needs: { price: true },
-        compute(data: any) { return Number(data.price); }
+  return new PrismaClient({ adapter }).$extends({
+    result: {
+      order: {
+        total: {
+          needs: { total: true },
+          compute(data: { total: any }) { return Number(data.total); }
+        }
+      },
+      inventory: {
+        price: {
+          needs: { price: true },
+          compute(data: { price: any }) { return Number(data.price); }
+        }
       }
     }
-  }
-});
+  });
+};
 
 declare global {
-  var prismaGlobal: undefined | typeof prisma;
+  var prismaGlobal: undefined | ReturnType<typeof createPrismaClient>;
 }
 
-const prismaInstance = globalThis.prismaGlobal ?? prisma;
+const prisma = globalThis.prismaGlobal ?? createPrismaClient();
+
+export default prisma;
 
 if (process.env.NODE_ENV !== 'production') {
-  globalThis.prismaGlobal = prismaInstance;
+  globalThis.prismaGlobal = prisma;
 }
-
-export default prismaInstance;
