@@ -24,7 +24,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed-db": "tsx prisma/seed.ts"
+    "seed-db": "tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.1",
