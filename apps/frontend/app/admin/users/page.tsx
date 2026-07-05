@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { OwnerTable } from "./OwnerTable";
 
+export const dynamic = "force-dynamic";
 export default async function ManageUsersPage() {
   const owners = await prisma.user.findMany({
     where: { role: 'owner' },

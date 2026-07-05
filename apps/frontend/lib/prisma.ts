@@ -1,11 +1,13 @@
 ﻿import { PrismaPg } from '@prisma/adapter-pg';
 
+// Must be set before adapter initialization
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 const createPrismaClient = () => {
   const { PrismaClient } = require('@prisma/client');
-  
+
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
   });
 
   return new PrismaClient({ adapter }).$extends({
