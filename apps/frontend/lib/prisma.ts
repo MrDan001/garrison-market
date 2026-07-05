@@ -1,40 +1,42 @@
 ﻿import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
-// Disable SSL verification for Supabase pooler
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+// 1. Set up the connection pool
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
 
-const createPrismaClient = () => {
-  const adapter = new PrismaPg({
-    connectionString: process.env.DATABASE_URL,
-  });
+// 2. Initialize the adapter
+const adapter = new PrismaPg(pool);
 
-  return new PrismaClient({ adapter }).$extends({
-    result: {
-      order: {
-        total: {
-          needs: { total: true },
-          compute(data) { return Number(data.total); }
-        }
-      },
-      inventory: {
-        price: {
-          needs: { price: true },
-          compute(data) { return Number(data.price); }
-        }
+// 3. Create the client (Use a type assertion if TS is stubborn about the adapter)
+const prisma = new PrismaClient({ 
+  adapter 
+} as any).$extends({
+  result: {
+    order: {
+      total: {
+        needs: { total: true },
+        compute(data) { return Number(data.total); }
+      }
+    },
+    inventory: {
+      price: {
+        needs: { price: true },
+        compute(data) { return Number(data.price); }
       }
     }
-  });
-};
+  }
+});
 
 declare global {
-  var prismaGlobal: undefined | ReturnType<typeof createPrismaClient>;
+  var prismaGlobal: undefined | typeof prisma;
 }
 
-const prisma = globalThis.prismaGlobal ?? createPrismaClient();
-
-export default prisma;
+const prismaInstance = globalThis.prismaGlobal ?? prisma;
 
 if (process.env.NODE_ENV !== 'production') {
-  globalThis.prismaGlobal = prisma;
+  globalThis.prismaGlobal = prismaInstance;
 }
+
+export default prismaInstance;
