@@ -23,7 +23,7 @@ export default async function OwnerReportsPage() {
   });
 
   // Map and inject the actual total sales calculation for the day
-  const reportsWithCalculatedSales = pendingReports.map((report) => {
+  const reportsWithCalculatedSales = pendingReports.map((report: (typeof pendingReports)[0]) => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
