@@ -1,18 +1,30 @@
-import db from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import HistoryClientList from "@/components/HistoryList";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { getSessionUser } from "@/lib/auth.actions";
+import { redirect } from "next/navigation";
+
+export const dynamic = "force-dynamic";
 
 export default async function HistoryPage() {
-  const historyReports = await db.report.findMany({
-    where: { status: { in: ["approved", "declined"] } },
+  const session = await getSessionUser();
+  if (!session) redirect("/login");
+  if (session.role.toLowerCase() !== "owner") redirect("/login");
+
+  const historyReports = await prisma.report.findMany({
+    where: {
+      ownerId: session.id,
+      status: { in: ["approved", "declined"] }
+    },
     orderBy: { date: "desc" },
     include: { author: true }
   });
 
+  const serialized = JSON.parse(JSON.stringify(historyReports));
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-slate-100 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -35,9 +47,14 @@ export default async function HistoryPage() {
         </div>
       </div>
 
-      {/* List */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-        <HistoryClientList reports={historyReports || []} />
+        {serialized.length === 0 ? (
+          <div className="p-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl">
+            No approved or declined reports yet.
+          </div>
+        ) : (
+          <HistoryClientList reports={serialized} />
+        )}
       </div>
     </div>
   );
