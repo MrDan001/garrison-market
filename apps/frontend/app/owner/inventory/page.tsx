@@ -1,11 +1,13 @@
-import { Package, Plus, Trash2, Minus, ArrowLeft } from "lucide-react";
+import { Package, Plus, Trash2, Minus, ArrowLeft, Search } from "lucide-react";
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth.actions";
 import { redirect } from "next/navigation";
 import { updateInventoryQuantity } from "@/lib/business.actions";
+import InventorySearch from "./inventory-search";
 
-// Define the type to satisfy TypeScript
+export const dynamic = "force-dynamic";
+
 type InventoryItem = {
   id: number;
   name: string;
@@ -21,6 +23,8 @@ export default async function OwnerInventoryPage() {
     where: { ownerId: session.id },
     orderBy: { name: "asc" }
   });
+
+  const serialized = JSON.parse(JSON.stringify(items));
 
   return (
     <div className="min-h-screen bg-[#0f1117] text-slate-200">
@@ -59,7 +63,6 @@ export default async function OwnerInventoryPage() {
 
       {/* Content */}
       <div className="px-4 sm:px-8 py-6 sm:py-10">
-
         {items.length === 0 ? (
           <div className="max-w-4xl mx-auto mt-8 border border-dashed border-slate-700 rounded-2xl p-12 text-center">
             <Package size={36} className="mx-auto mb-3 text-slate-600" />
@@ -67,85 +70,7 @@ export default async function OwnerInventoryPage() {
             <p className="text-slate-600 text-xs mt-1">Add your first product to get started.</p>
           </div>
         ) : (
-          <div className="max-w-4xl mx-auto bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
-            {/* Desktop table */}
-            <table className="w-full text-left hidden sm:table">
-              <thead className="bg-slate-950/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-3.5">Item Name</th>
-                  <th className="px-5 py-3.5">Quantity</th>
-                  <th className="px-5 py-3.5">Price (₦)</th>
-                  <th className="px-5 py-3.5">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {/* FIX: Explicitly typed item as InventoryItem */}
-                {items.map((item: InventoryItem) => (
-                  <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
-                    <td className="px-5 py-4 font-semibold text-white">{item.name}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <form action={updateInventoryQuantity.bind(null, item.id, -1)}>
-                          <button type="submit" className="h-7 w-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-                            <Minus size={14} />
-                          </button>
-                        </form>
-                        <span className="w-8 text-center font-mono text-sm font-bold text-white">
-                          {item.quantity}
-                        </span>
-                        <form action={updateInventoryQuantity.bind(null, item.id, 1)}>
-                          <button type="submit" className="h-7 w-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-                            <Plus size={14} />
-                          </button>
-                        </form>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-slate-300 font-medium">
-                      ₦{Number(item.price).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-5 py-4">
-                      <button className="h-7 w-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-500 hover:text-rose-400 transition-colors">
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Mobile card list */}
-            <div className="sm:hidden divide-y divide-slate-800/60">
-              {/* FIX: Explicitly typed item as InventoryItem */}
-              {items.map((item: InventoryItem) => (
-                <div key={item.id} className="px-4 py-4 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">{item.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      ₦{Number(item.price).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <form action={updateInventoryQuantity.bind(null, item.id, -1)}>
-                      <button type="submit" className="h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-                        <Minus size={14} />
-                      </button>
-                    </form>
-                    <span className="w-7 text-center font-mono text-sm font-bold text-white">
-                      {item.quantity}
-                    </span>
-                    <form action={updateInventoryQuantity.bind(null, item.id, 1)}>
-                      <button type="submit" className="h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-                        <Plus size={14} />
-                      </button>
-                    </form>
-                    <button className="h-8 w-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-500 transition-colors ml-1">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <InventorySearch items={serialized} />
         )}
       </div>
     </div>
