@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Package, ShoppingCart, Plus, Minus, X } from "lucide-react";
+import { ArrowLeft, Package, ShoppingCart, Plus, Minus, X, Search } from "lucide-react";
 import Link from "next/link";
 import { processSaleAction } from "@/lib/business.actions";
 
@@ -9,6 +9,12 @@ export default function InventoryClient({ initialItems }: { initialItems: any[] 
   const [cart, setCart] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter items based on search query
+  const filteredItems = initialItems.filter((item) =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const addToCart = (item: any) => {
     setCart((prev) => {
@@ -51,53 +57,46 @@ export default function InventoryClient({ initialItems }: { initialItems: any[] 
   return (
     <div className="min-h-screen bg-[#0f1117] text-slate-200 pb-24 lg:pb-8">
       <div className="p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-        {/* Item List */}
+        
+        {/* Item List Section */}
         <div className="lg:col-span-2">
-          <Link href="/staff/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-white mb-6 lg:mb-8 w-fit">
+          <Link href="/staff/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-white mb-6 w-fit">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-6 lg:mb-8 text-white flex items-center gap-3">
-            <Package className="text-blue-500" /> Market Inventory
-          </h1>
+
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
+              <Package className="text-blue-500" /> Market Inventory
+            </h1>
+            
+            {/* Search Input */}
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
 
           {/* Mobile/Tablet: Card list */}
           <div className="lg:hidden space-y-3">
-            {initialItems.map((item) => {
+            {filteredItems.map((item) => {
               const cartItem = cart.find(c => c.id === item.id);
               const isOutOfStock = item.quantity <= 0;
-
               return (
-                <div
-                  key={item.id}
-                  className={`bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-3 ${isOutOfStock ? "opacity-50" : ""}`}
-                >
+                <div key={item.id} className={`bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-3 ${isOutOfStock ? "opacity-50" : ""}`}>
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-white truncate">
-                      {item.name}
-                      {isOutOfStock && (
-                        <span className="ml-2 text-[10px] text-rose-500 uppercase font-bold">Out</span>
-                      )}
-                    </p>
-                    <p className="text-sm text-slate-400 mt-0.5">
-                      ₦{Number(item.price).toLocaleString()} · {item.quantity} in stock
-                    </p>
+                    <p className="font-semibold text-white truncate">{item.name}</p>
+                    <p className="text-sm text-slate-400 mt-0.5">₦{Number(item.price).toLocaleString()} · {item.quantity} in stock</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => removeFromCart(item.id)}
-                      disabled={!cartItem}
-                      className="bg-slate-800 p-2 rounded-lg hover:bg-slate-700 disabled:opacity-30 active:scale-95 transition-all"
-                    >
-                      <Minus size={16} />
-                    </button>
+                    <button onClick={() => removeFromCart(item.id)} disabled={!cartItem} className="bg-slate-800 p-2 rounded-lg disabled:opacity-30"><Minus size={16} /></button>
                     <span className="w-6 text-center font-bold">{cartItem?.qty || 0}</span>
-                    <button
-                      disabled={isOutOfStock}
-                      onClick={() => addToCart(item)}
-                      className={`p-2 rounded-lg active:scale-95 transition-all ${isOutOfStock ? "bg-slate-800 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500"}`}
-                    >
-                      <Plus size={16} />
-                    </button>
+                    <button disabled={isOutOfStock} onClick={() => addToCart(item)} className={`p-2 rounded-lg ${isOutOfStock ? "bg-slate-800" : "bg-blue-600 hover:bg-blue-500"}`}><Plus size={16} /></button>
                   </div>
                 </div>
               );
@@ -116,33 +115,18 @@ export default function InventoryClient({ initialItems }: { initialItems: any[] 
                 </tr>
               </thead>
               <tbody>
-                {initialItems.map((item) => {
+                {filteredItems.map((item) => {
                   const cartItem = cart.find(c => c.id === item.id);
                   const isOutOfStock = item.quantity <= 0;
-
                   return (
-                    <tr key={item.id} className={`border-t border-slate-800 ${isOutOfStock ? "opacity-50" : "hover:bg-slate-800/30"}`}>
-                      <td className="p-4 font-semibold text-white">
-                        {item.name}
-                        {isOutOfStock && <span className="ml-2 text-[10px] text-rose-500 uppercase font-bold">Out of Stock</span>}
-                      </td>
+                    <tr key={item.id} className="border-t border-slate-800 hover:bg-slate-800/20">
+                      <td className="p-4 font-semibold text-white">{item.name}</td>
                       <td className="p-4">{item.quantity}</td>
                       <td className="p-4">₦{Number(item.price).toLocaleString()}</td>
                       <td className="p-4 flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => removeFromCart(item.id)}
-                          className="bg-slate-800 p-2 rounded-lg hover:bg-slate-700"
-                        >
-                          <Minus size={16} />
-                        </button>
+                        <button onClick={() => removeFromCart(item.id)} className="bg-slate-800 p-2 rounded-lg hover:bg-slate-700"><Minus size={16} /></button>
                         <span className="w-8 text-center font-bold">{cartItem?.qty || 0}</span>
-                        <button
-                          disabled={isOutOfStock}
-                          onClick={() => addToCart(item)}
-                          className={`p-2 rounded-lg ${isOutOfStock ? "bg-slate-800 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500"}`}
-                        >
-                          <Plus size={16} />
-                        </button>
+                        <button disabled={isOutOfStock} onClick={() => addToCart(item)} className={`p-2 rounded-lg ${isOutOfStock ? "bg-slate-800" : "bg-blue-600 hover:bg-blue-500"}`}><Plus size={16} /></button>
                       </td>
                     </tr>
                   );
@@ -156,11 +140,11 @@ export default function InventoryClient({ initialItems }: { initialItems: any[] 
         <div className="hidden lg:block bg-slate-900 border border-slate-800 rounded-3xl p-6 h-fit sticky top-8">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><ShoppingCart /> Checkout</h2>
           <div className="space-y-4 mb-6">
-            {cart.length === 0 && <p className="text-slate-500 italic">Cart is empty</p>}
+            {cart.length === 0 && <p className="text-slate-500 italic text-sm">Cart is empty</p>}
             {cart.map((item) => (
               <div key={item.id} className="flex justify-between items-center text-sm">
                 <span className="truncate pr-2">{item.name} (x{item.qty})</span>
-                <span className="shrink-0">₦{(Number(item.price) * item.qty).toLocaleString()}</span>
+                <span className="shrink-0 font-mono">₦{(Number(item.price) * item.qty).toLocaleString()}</span>
               </div>
             ))}
           </div>
@@ -195,22 +179,17 @@ export default function InventoryClient({ initialItems }: { initialItems: any[] 
       {/* Mobile: Cart bottom sheet */}
       {showCart && (
         <div className="lg:hidden fixed inset-0 z-50 flex items-end">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setShowCart(false)}
-          />
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowCart(false)} />
           <div className="relative w-full bg-slate-900 border-t border-slate-800 rounded-t-3xl p-6 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart /> Checkout</h2>
-              <button onClick={() => setShowCart(false)} className="p-2 text-slate-500">
-                <X size={20} />
-              </button>
+              <button onClick={() => setShowCart(false)} className="p-2 text-slate-500"><X size={20} /></button>
             </div>
             <div className="space-y-4 mb-6">
               {cart.map((item) => (
                 <div key={item.id} className="flex justify-between items-center text-sm">
                   <span className="truncate pr-2">{item.name} (x{item.qty})</span>
-                  <span className="shrink-0">₦{(Number(item.price) * item.qty).toLocaleString()}</span>
+                  <span className="shrink-0 font-mono">₦{(Number(item.price) * item.qty).toLocaleString()}</span>
                 </div>
               ))}
             </div>
