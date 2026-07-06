@@ -40,14 +40,6 @@ export default function StaffRegistrationForm() {
 
   return (
     <div className="space-y-6">
-      {/* 2. Added Back Button */}
-      <button 
-        type="button" 
-        onClick={() => router.back()} 
-        className="flex items-center gap-2 text-slate-500 hover:text-white transition-colors mb-4"
-      >
-        <ArrowLeft size={20} /> Back
-      </button>
 
       <form action={handleSubmit} className="space-y-6">
         <div className="relative">
@@ -73,9 +65,25 @@ export default function StaffRegistrationForm() {
           </button>
         </div>
 
-        <button type="submit" disabled={isLoading} className="w-full py-4 bg-white text-slate-950 font-bold rounded-2xl hover:bg-slate-200 transition-all">
-          {isLoading ? <Loader2 className="animate-spin mx-auto" /> : "Register Staff Member"}
-        </button>
+        <div className="flex gap-4">
+  {/* Back Button - Smaller flex ratio and padding */}
+  <button 
+    type="button" 
+    onClick={() => router.back()} 
+    className="flex-[0.5] py-2 bg-white text-slate-950 font-bold rounded-2xl hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+  >
+    <ArrowLeft size={18} /> Back
+  </button>
+
+  {/* Register Button - Standard flex ratio, reduced padding */}
+  <button 
+    type="submit" 
+    disabled={isLoading} 
+    className="flex-1 py-2 bg-white text-slate-950 font-bold rounded-2xl hover:bg-slate-200 transition-all disabled:opacity-50"
+  >
+    {isLoading ? <Loader2 className="animate-spin mx-auto" /> : "Register Staff Member"}
+  </button>
+</div>
       </form>
     </div>
   );
