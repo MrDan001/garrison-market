@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -7,25 +8,37 @@ datasource db {
 }
 
 model User {
-  id                 Int      @id @default(autoincrement())
-  email              String   @unique
+  id                 Int         @id @default(autoincrement())
+  email              String      @unique
   password           String
-  role               String   @default("owner")
-  status             String   @default("pending")
+  role               String      @default("owner")
+  status             String      @default("pending")
   fullName           String?
   phoneNumber        String?
-  storeName          String?
-  mustChangePassword Boolean  @default(false)
-  createdAt          DateTime @default(now())
+  image              String?
+  storeName          String?     // Kept for backward compatibility
+  mustChangePassword Boolean     @default(false)
+  createdAt          DateTime    @default(now())
+  ownerId            Int?
+  
+  // ── Multi-Store Relationship ──
+  stores             Store[]     @relation("OwnerStores")
+  
+  inventory          Inventory[]
+  orders             Order[]
+  staffOrders        Order[]     @relation("StaffOrders")
+  reports            Report[]
+  owner              User?       @relation("StaffHierarchy", fields: [ownerId], references: [id])
+  managedStaff       User[]      @relation("StaffHierarchy")
+}
 
-  managedStaff User[] @relation("StaffHierarchy")
-  ownerId      Int?
-  owner        User?  @relation("StaffHierarchy", fields: [ownerId], references: [id])
-
-  reports     Report[]
-  inventory   Inventory[]
-  orders      Order[]
-  staffOrders Order[] @relation("StaffOrders")
+model Store {
+  id          Int      @id @default(autoincrement())
+  name        String
+  phoneNumber String?
+  createdAt   DateTime @default(now())
+  ownerId     Int
+  owner       User     @relation("OwnerStores", fields: [ownerId], references: [id])
 }
 
 model Report {
@@ -34,38 +47,42 @@ model Report {
   status   String   @default("pending")
   date     DateTime @default(now())
   authorId Int
-  author   User     @relation(fields: [authorId], references: [id])
   ownerId  Int
+  author   User     @relation(fields: [authorId], references: [id])
 }
 
 model Inventory {
-  id         Int         @id @default(autoincrement())
-  name       String
-  quantity   Int
-  price      Decimal
-  updatedAt  DateTime    @updatedAt
-  orderItems OrderItem[]
-  ownerId    Int
-  owner      User        @relation(fields: [ownerId], references: [id])
+  id           Int         @id @default(autoincrement())
+  name         String
+  quantity     Int
+  price        Decimal     
+  costPrice    Decimal?    
+  category     String?     
+  restockLevel Int?        
+  image        String?     
+  updatedAt    DateTime    @updatedAt
+  ownerId      Int
+  owner        User        @relation(fields: [ownerId], references: [id])
+  orderItems   OrderItem[]
 }
 
 model Order {
   id      Int         @id @default(autoincrement())
   total   Decimal
   date    DateTime    @default(now())
-  items   OrderItem[]
   ownerId Int
-  owner   User        @relation(fields: [ownerId], references: [id])
   staffId Int?
+  owner   User        @relation(fields: [ownerId], references: [id])
   staff   User?       @relation("StaffOrders", fields: [staffId], references: [id])
+  items   OrderItem[]
 }
 
 model OrderItem {
   id          Int       @id @default(autoincrement())
   orderId     Int
-  order       Order     @relation(fields: [orderId], references: [id])
   inventoryId Int
-  inventory   Inventory @relation(fields: [inventoryId], references: [id])
   quantity    Int
   priceAtTime Decimal
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  order       Order     @relation(fields: [orderId], references: [id])
 }

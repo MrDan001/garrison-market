@@ -1,15 +1,25 @@
-﻿import { PrismaPg } from '@prisma/adapter-pg';
+﻿import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-// Must be set before adapter initialization
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+// Only disable SSL if absolutely necessary for local dev. 
+// Remove this in production for security.
+if (process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
 
 const createPrismaClient = () => {
-  const { PrismaClient } = require('@prisma/client');
+  const connectionString = process.env.DATABASE_URL;
 
-  const adapter = new PrismaPg({
-    connectionString: process.env.DATABASE_URL,
-  });
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is not defined in your .env file.");
+  }
 
+  // Initialize the pool
+  const pool = new Pool({ connectionString });
+  const adapter = new PrismaPg(pool);
+
+  // Initialize Prisma with the adapter and extensions
   return new PrismaClient({ adapter }).$extends({
     result: {
       order: {
@@ -28,14 +38,13 @@ const createPrismaClient = () => {
   });
 };
 
-declare global {
-  var prismaGlobal: undefined | ReturnType<typeof createPrismaClient>;
-}
+// Global singleton pattern to prevent multiple instances during hot-reloads
+const globalForPrisma = globalThis as unknown as { prismaGlobal: ReturnType<typeof createPrismaClient> };
 
-const prisma = globalThis.prismaGlobal ?? createPrismaClient();
-
-export default prisma;
+const prisma = globalForPrisma.prismaGlobal ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== 'production') {
-  globalThis.prismaGlobal = prisma;
+  globalForPrisma.prismaGlobal = prisma;
 }
+
+export default prisma;

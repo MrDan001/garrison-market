@@ -3,6 +3,10 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "./auth.actions";
+import { put } from "@vercel/blob"; 
+import { redirect } from "next/navigation";
+
+
 
 export async function submitDailyReport(authorId: number, content: string) {
   const session = await getSessionUser();
@@ -85,16 +89,29 @@ export async function getInventoryForStaff() {
   if (!targetOwnerId) throw new Error("Unauthorized");
 
   return await prisma.inventory.findMany({
-    where: { ownerId: targetOwnerId }
+    where: { ownerId: targetOwnerId },
+    select: {
+      id: true,
+      name: true,
+      quantity: true,
+      price: true,
+      costPrice: true,
+      category: true,
+      restockLevel: true,
+      image: true, // 🌟 Ensure this line is present to pull image URLs from the DB
+      ownerId: true
+    },
+    orderBy: { name: "asc" }
   });
 }
+
 
 export async function addInventoryAction(formData: FormData) {
   const session = await getSessionUser();
   if (!session || session.role !== 'owner') throw new Error("Unauthorized");
 
   const name = formData.get("name") as string;
-  const quantity = parseInt(formData.get("quantity") as string);
+  const quantity = parseInt(formData.get("quantity") as string, 10);
   const price = parseFloat(formData.get("price") as string);
 
   await prisma.inventory.create({
@@ -109,14 +126,108 @@ export async function addItemAction(formData: FormData) {
   if (!session || session.role !== 'owner') throw new Error("Unauthorized");
 
   const name = formData.get("name") as string;
-  const quantity = parseInt(formData.get("quantity") as string);
+  const quantity = parseInt(formData.get("quantity") as string, 10);
+  const costPrice = parseFloat(formData.get("costPrice") as string);
   const price = parseFloat(formData.get("price") as string);
+  const category = formData.get("category") as string;
+  const restockLevel = parseInt(formData.get("restockLevel") as string, 10);
+  
+  const imageFile = formData.get("image") as File | null;
+  let imageUrl: string | null = null;
+
+  if (imageFile && imageFile.size > 0 && imageFile.name !== "undefined") {
+    try {
+      const arrayBuffer = await imageFile.arrayBuffer();
+      const fileBuffer = Buffer.from(arrayBuffer);
+
+      const fileExtension = imageFile.name.split('.').pop() || "jpg";
+      const blobPath = `products/${session.id}_${Date.now()}.${fileExtension}`;
+
+      const blob = await put(blobPath, fileBuffer, {
+        access: "public",
+        contentType: imageFile.type, 
+      });
+
+      imageUrl = blob.url; 
+    } catch (err) {
+      console.error("Vercel Blob asset upload pipeline exploded:", err);
+    }
+  }
 
   await prisma.inventory.create({
-    data: { name, quantity, price, ownerId: session.id }
+    data: { 
+      name, 
+      quantity, 
+      costPrice, 
+      price, 
+      category, 
+      restockLevel,
+      image: imageUrl, 
+      ownerId: session.id 
+    }
   });
 
   revalidatePath("/owner/inventory");
+}
+
+// ── Added brand new Update/Restock Action ──
+export async function updateItemAction(formData: FormData) {
+  const session = await getSessionUser();
+  if (!session || session.role !== 'owner') throw new Error("Unauthorized");
+
+  const id = parseInt(formData.get("id") as string, 10);
+  if (isNaN(id)) throw new Error("Invalid product ID");
+
+  const name = formData.get("name") as string;
+  const quantity = parseInt(formData.get("quantity") as string, 10);
+  const costPrice = parseFloat(formData.get("costPrice") as string);
+  const price = parseFloat(formData.get("price") as string);
+  const category = formData.get("category") as string;
+  const restockLevel = parseInt(formData.get("restockLevel") as string, 10);
+
+  const imageFile = formData.get("image") as File | null;
+  
+  let updateData: any = { 
+    name, 
+    quantity, 
+    costPrice, 
+    price, 
+    category, 
+    restockLevel 
+  };
+
+  if (imageFile && imageFile.size > 0 && imageFile.name !== "undefined") {
+    try {
+      const arrayBuffer = await imageFile.arrayBuffer();
+      const fileBuffer = Buffer.from(arrayBuffer);
+
+      const fileExtension = imageFile.name.split('.').pop() || "jpg";
+      const blobPath = `products/${session.id}_${Date.now()}.${fileExtension}`;
+
+      const blob = await put(blobPath, fileBuffer, {
+        access: "public",
+        contentType: imageFile.type,
+      });
+
+      updateData.image = blob.url;
+    } catch (err) {
+      console.error("Vercel Blob update failed:", err);
+    }
+  }
+
+  try {
+    await prisma.inventory.update({
+      where: { id },
+      data: updateData
+    });
+  } catch (dbError) {
+    console.error("Database update failed:", dbError);
+    throw dbError;
+  }
+
+  // CRITICAL FIX: Placed outside of try/catch blocks to avoid NEXT_REDIRECT interference
+  revalidatePath("/owner/inventory");
+  redirect("/owner/inventory");
 }
 
 export async function processSaleAction(cartItems: any[]) {
@@ -231,4 +342,29 @@ export async function getStaffOrderHistory() {
     orderBy: { date: 'desc' },
     take: 100
   });
+}
+
+export async function createStoreAction(formData: FormData) {
+  const session = await getSessionUser();
+  if (!session?.email) throw new Error("Unauthorized");
+
+  const name = formData.get("name") as string;
+  const phoneNumber = formData.get("phoneNumber") as string;
+
+  if (!name) throw new Error("Store name is required.");
+
+  const user = await prisma.user.findUnique({ where: { email: session.email } });
+  if (!user) throw new Error("User not found.");
+
+  // Create the store in the database
+  await prisma.store.create({
+    data: {
+      name,
+      phoneNumber: phoneNumber || null,
+      ownerId: user.id,
+    },
+  });
+
+  // Redirect to your stores page
+  redirect("/owner/stores");
 }

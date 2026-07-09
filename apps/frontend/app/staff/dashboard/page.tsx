@@ -1,9 +1,11 @@
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Package, ClipboardList, LogOut, UserCircle, FileText, ChevronRight, History } from "lucide-react";
+// Package icon restored below
+import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle } from "lucide-react";
 import Link from "next/link";
-import { logoutAction } from "@/lib/auth.actions";
+
+export const dynamic = "force-dynamic";
 
 export default async function StaffDashboard() {
   const session = await getSessionUser();
@@ -11,84 +13,208 @@ export default async function StaffDashboard() {
 
   const staff = await prisma.user.findUnique({
     where: { email: session.email },
-    select: { fullName: true, role: true, status: true }
+    select: { fullName: true, role: true, status: true, image: true }
   });
 
   const userRole = staff?.role?.toLowerCase().trim();
   const userStatus = staff?.status?.toLowerCase().trim();
 
-  if (!staff || userRole !== "staff") {
-    redirect("/login");
-  }
+  if (!staff || userRole !== "staff") redirect("/login");
+  if (userStatus === "suspended" || userStatus === "pending") redirect("/pending/staff");
 
-  if (userStatus === "suspended" || userStatus === "pending") {
-    redirect("/pending/staff");
-  }
+  // Fixed split array extraction fallback safely
+  const nameParts = staff.fullName?.split(" ") ?? ["Staff"];
+  const firstName = nameParts[0] ?? "Staff";
+  
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const navItems = [
-    { title: "Inventory", desc: "Manage stock & checkout", href: "/staff/inventory", icon: Package, color: "text-blue-400" },
-    { title: "Order History", desc: "View past sales", href: "/staff/orders", icon: History, color: "text-indigo-400" },
-    { title: "Daily Report", desc: "Submit EOD summary", href: "/staff/report", icon: FileText, color: "text-amber-400" },
-    { title: "My Profile", desc: "View account details", href: "/staff/profile", icon: UserCircle, color: "text-emerald-400" },
-  ];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const todayOrders = await prisma.order.count({
+    where: { staffId: session.id, date: { gte: today } }
+  });
+
+  const todaySalesData = await prisma.order.findMany({
+    where: { staffId: session.id, date: { gte: today } },
+    select: { total: true }
+  });
+
+  const todaySales = todaySalesData.reduce((sum: number, o: { total: number | string }) => sum + Number(o.total), 0);
 
   return (
-    <div className="min-h-screen bg-[#0A0C10] p-4 sm:p-6 md:p-8">
-      {/* Profile Header */}
-      <header className="max-w-5xl mx-auto mb-6 md:mb-8 bg-gradient-to-r from-slate-900 to-slate-900/50 p-5 sm:p-6 md:p-8 rounded-3xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight">
-            Welcome back, {staff.fullName}
-          </h1>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-            </span>
-            <span className="text-emerald-500 text-sm font-medium uppercase tracking-wider">{staff.status}</span>
+    <div className="h-screen w-screen bg-[#0A0C10] text-slate-200 flex flex-col overflow-hidden">
+      
+      {/* ── Top Nav Bar (Staff Portal Theme) ── */}
+      <header className="sticky top-0 z-50 bg-[#0a0c12]/80 backdrop-blur-xl border-b border-slate-800/50 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4 flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
+            <Store size={15} className="text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 leading-none">Staff Portal</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-sm font-semibold text-white truncate leading-none">{staff.fullName}</p>
+              
+              <span className="relative flex h-1.5 w-1.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+            </div>
           </div>
         </div>
-        <div className="hidden md:block text-slate-600">
-          <UserCircle size={48} strokeWidth={1.5} />
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Profile Image with Initials Fallback */}
+          <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden border border-slate-700">
+            {staff?.image ? (
+              <img src={staff.image} alt="Profile" className="h-full w-full object-cover" />
+            ) : (
+              <span className="bg-gradient-to-br from-emerald-500 to-teal-600 w-full h-full flex items-center justify-center uppercase">
+                {firstName.charAt(0)}
+              </span>
+            )}
+          </div>
+
+          <Link 
+            href="/login" 
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 transition-all duration-150"
+          >
+            <LogOut size={13} />
+            <span className="hidden sm:inline">Sign out</span>
+          </Link>
         </div>
       </header>
 
-      {/* Navigation Grid */}
-      <main className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-        {navItems.map((item) => (
-          <Link
-            key={item.title}
-            href={item.href}
-            className="group relative p-5 sm:p-6 rounded-3xl border border-slate-800 bg-slate-900/30 hover:border-slate-700 hover:bg-slate-800/50 active:scale-[0.98] transition-all duration-300 flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-              <div className={`p-3 rounded-2xl bg-slate-950 border border-slate-800 shrink-0 ${item.color}`}>
-                <item.icon size={22} className="sm:hidden" />
-                <item.icon size={24} className="hidden sm:block" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="font-semibold text-white truncate">{item.title}</h2>
-                <p className="text-sm text-slate-500 truncate">{item.desc}</p>
-              </div>
-            </div>
-            <ChevronRight className="text-slate-700 group-hover:text-slate-400 transition-colors shrink-0" />
-          </Link>
-        ))}
+      {/* Main scrollable content container */}
+      <div className="flex-1 overflow-y-auto pt-6 pb-28">        
+        
+        {/* Profile Greetings Block inside body */}
+        <div className="px-5 mb-6">
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
+            {greeting}
+          </p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">{firstName} 👋</h1>
+        </div>
 
-        {/* Logout Button */}
-        <form action={logoutAction} className="sm:col-span-2">
-          <button
-            type="submit"
-            className="w-full flex items-center gap-4 p-5 sm:p-6 rounded-3xl border border-rose-900/20 bg-rose-950/5 hover:bg-rose-950/20 active:scale-[0.98] transition-all text-rose-400"
-          >
-            <LogOut size={22} className="shrink-0" />
-            <div className="text-left">
-              <h2 className="font-semibold">Logout</h2>
-              <p className="text-sm text-rose-400/60">Sign out of your session</p>
+        {/* Today's Stats */}
+        <div className="px-5 mb-6">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp size={14} className="text-emerald-400" />
+                <p className="text-[11px] text-slate-500 uppercase tracking-wider">Today's Sales</p>
+              </div>
+              <p className="text-xl font-bold text-white">₦{todaySales.toLocaleString()}</p>
             </div>
-          </button>
-        </form>
-      </main>
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock size={14} className="text-blue-400" />
+                <p className="text-[11px] text-slate-500 uppercase tracking-wider">Orders Today</p>
+              </div>
+              <p className="text-xl font-bold text-white">{todayOrders}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="px-5 mb-6">
+          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <Link href="/staff/report" className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-800 transition-colors">
+              <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <FileText size={18} className="text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Daily Report</p>
+                <p className="text-[11px] text-slate-500">Submit EOD summary</p>
+              </div>
+            </Link>
+
+            <Link href="/staff/orders" className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-800 transition-colors">
+              <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                <History size={18} className="text-indigo-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Order History</p>
+                <p className="text-[11px] text-slate-500">View past sales</p>
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* Today's Activity */}
+        <div className="px-5">
+          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Today's Activity</h2>
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 text-center">
+            {todayOrders === 0 ? (
+              <>
+                <ShoppingBag size={28} className="mx-auto mb-2 text-slate-700" />
+                <p className="text-slate-500 text-sm">No sales yet today</p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-emerald-400 mb-1">₦{todaySales.toLocaleString()}</p>
+                <p className="text-slate-400 text-sm">{todayOrders} order{todayOrders !== 1 ? 's' : ''} processed today</p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bottom Navigation Bar ── */}
+      <div className="fixed bottom-0 left-0 right-0 bg-[#0d0f18]/95 backdrop-blur-xl border-t border-slate-800/50 px-4 py-2 z-50">
+        <div className="flex items-end justify-around max-w-md mx-auto">
+
+          {/* Inventory */}
+          <Link href="/staff/inventory" className="flex flex-col items-center gap-1 py-2 px-3 group">
+            <div className="h-6 w-6 flex items-center justify-center">
+              <Package size={22} className="text-slate-500 group-active:text-blue-400 transition-colors" />
+            </div>
+            <span className="text-[10px] text-slate-500 group-active:text-blue-400 transition-colors">Inventory</span>
+          </Link>
+
+          {/* Orders */}
+          <Link href="/staff/orders" className="flex flex-col items-center gap-1 py-2 px-3 group">
+            <div className="h-6 w-6 flex items-center justify-center">
+              <History size={22} className="text-slate-500 group-active:text-indigo-400 transition-colors" />
+            </div>
+            <span className="text-[10px] text-slate-500 group-active:text-indigo-400 transition-colors">Orders</span>
+          </Link>
+
+          {/* SELL Button — Center */}
+          <Link
+            href="/staff/inventory"
+            className="flex flex-col items-center gap-1 -mt-6"
+          >
+            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 active:scale-95 transition-transform border-4 border-[#0d0f18]">
+              <ShoppingBag size={26} className="text-white" />
+            </div>
+            <span className="text-[10px] text-blue-400 font-bold mt-0.5">SELL</span>
+          </Link>
+
+          {/* Report */}
+          <Link href="/staff/report" className="flex flex-col items-center gap-1 py-2 px-3 group">
+            <div className="h-6 w-6 flex items-center justify-center">
+              <FileText size={22} className="text-slate-500 group-active:text-amber-400 transition-colors" />
+            </div>
+            <span className="text-[10px] text-slate-500 group-active:text-amber-400 transition-colors">Report</span>
+          </Link>
+
+          {/* Profile */}
+
+
+          {/* Profile */}
+          <Link href="/staff/profile" className="flex flex-col items-center gap-1 py-2 px-3 group">
+            <div className="h-6 w-6 flex items-center justify-center">
+              <UserCircle size={22} className="text-slate-500 group-active:text-emerald-400 transition-colors" />
+            </div>
+            <span className="text-[10px] text-slate-500 group-active:text-emerald-400 transition-colors">Profile</span>
+          </Link>
+
+        </div>
+      </div>
     </div>
   );
 }

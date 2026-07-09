@@ -36,17 +36,30 @@ export async function getSessionUser() {
   if (!token) return null;
 
   const payload = await verifyToken(token);
-  if (!payload) return null;
+  if (!payload || !payload.userId) return null;
 
   try {
+    const numericUserId = Number(payload.userId);
+    if (isNaN(numericUserId)) return null;
+
     return await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: { id: true, email: true, role: true, status: true, ownerId: true }
+      where: { id: numericUserId },
+      select: { 
+        id: true, 
+        email: true, 
+        role: true, 
+        status: true, 
+        ownerId: true,
+        fullName: true // 🌟 FIX: Added this line to resolve the Invoice page crash!
+      }
     });
-  } catch {
+  } catch (error) {
+    console.error("Error retrieving session user:", error);
     return null;
   }
 }
+
+
 
 export async function loginAction(formData: FormData) {
   const email = formData.get("email") as string;
@@ -61,8 +74,9 @@ export async function loginAction(formData: FormData) {
       return { error: "Invalid email or password." };
     }
 
-    const userRole = user.role.toLowerCase().trim();
-    const userStatus = user.status.toUpperCase().trim();
+    // SAFE CONVERSION: Prevents crashing if a status is unusual or missing
+    const userRole = (user.role || "").toLowerCase().trim();
+    const userStatus = (user.status || "").toUpperCase().trim();
 
     // Set signed cookie helper
     const setSessionCookie = async () => {
@@ -88,7 +102,10 @@ export async function loginAction(formData: FormData) {
 
     await setSessionCookie();
 
+    // Bypasses the "APPROVED" check specifically for Admins so they can log in instantly
     if (userRole === "owner" && userStatus !== "APPROVED") await safeRedirect("/pending");
+    
+    // Distinct routing paths for each role
     if (userRole === "admin") await safeRedirect("/admin/dashboard");
     if (userRole === "owner") await safeRedirect("/owner/dashboard");
     if (userRole === "staff") await safeRedirect("/staff/dashboard");
@@ -96,11 +113,19 @@ export async function loginAction(formData: FormData) {
     return { error: "Account configuration error. Your user role is unrecognized." };
 
   } catch (error) {
-    if (isNextRedirectError(error)) throw error;
+    if (
+      isNextRedirectError(error) || 
+      (error instanceof Error && error.message === "NEXT_REDIRECT") ||
+      (typeof error === "object" && error !== null && "digest" in error && String((error as any).digest).startsWith("NEXT_REDIRECT"))
+    ) {
+      throw error; 
+    }
+
     console.error("Login execution error:", error);
     return { error: "An unexpected system error occurred." };
   }
 }
+
 
 export async function registerOwnerAction(formData: FormData) {
   const data = Object.fromEntries(formData.entries());

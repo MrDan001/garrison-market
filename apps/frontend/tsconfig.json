@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -17,15 +13,14 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
+    "types": ["node"],  // 🌟 ADDED: Fixes "Cannot find name 'process'"
     "plugins": [
       {
         "name": "next"
       }
     ],
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
@@ -33,10 +28,10 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "prisma/seed.js",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    "prisma/seed.ts",
+    "next.config.ts",
+    "prisma.config.ts" // 🌟 ADDED: Ensures TypeScript checks your config file
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

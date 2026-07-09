@@ -1,9 +1,10 @@
-import { defineConfig } from "prisma/config";
+import 'dotenv/config'; // Required to load .env variables
+import { defineConfig, env } from 'prisma/config';
 
 export default defineConfig({
-  schema: "prisma/schema.prisma",
+  schema: 'prisma/schema.prisma',
   datasource: {
-    url: "postgresql://postgres.rlscequchmvgjjcdqxfs:4gAJd6LaWx0ROADB@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require",
+    url: env('DATABASE_URL'), // This is the required property
   },
   migrations: {
     seed: 'tsx ./prisma/seed.ts',
