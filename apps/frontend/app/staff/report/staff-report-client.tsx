@@ -1,9 +1,12 @@
 "use client";
+
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { submitDailyReport } from "@/lib/business.actions";
-import { FileText, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { FileText, Clock, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
 
 export default function StaffReportClient({ staffId, reports, sales }: any) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [complaint, setComplaint] = useState("");
   const [showHistory, setShowHistory] = useState(false);
@@ -38,20 +41,31 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
 
   const getStatusStyle = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'approved': return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
-      case 'declined': return "bg-rose-500/10 text-rose-500 border-rose-500/20";
-      default: return "bg-amber-500/10 text-amber-500 border-amber-500/20";
+      case 'approved': return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+      case 'declined': return "bg-rose-500/10 text-rose-400 border-rose-500/20";
+      default: return "bg-amber-500/10 text-amber-400 border-amber-500/20";
     }
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-3xl p-5 sm:p-6 text-center shadow-lg shadow-blue-900/20">
-        <p className="text-blue-100 text-xs font-bold uppercase tracking-widest">Total Sales Today</p>
+    <div className="min-h-screen w-full bg-[#0A0C12] text-slate-200 px-4 sm:px-6 py-6 space-y-6">
+      {/* Back Button */}
+      <button
+        onClick={() => router.back()}
+        className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-2"
+      >
+        <ArrowLeft size={20} />
+        <span className="text-sm font-medium">Back</span>
+      </button>
+
+      {/* Sales Header */}
+      <div className="bg-[#11131A] border border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-lg">
+        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Total Sales Today</p>
         <h1 className="text-3xl sm:text-5xl font-bold text-white mt-2">₦{totalValue.toLocaleString()}</h1>
       </div>
 
-      <div className="bg-[#11131a] border border-slate-800 rounded-3xl p-5 sm:p-8 shadow-2xl">
+      {/* Main Report Form */}
+      <div className="bg-[#11131A] border border-slate-800 rounded-3xl p-5 sm:p-8 shadow-2xl">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-5 sm:mb-6">Daily Summary & Submission</h2>
 
         <div className="space-y-5 sm:space-y-6">
@@ -61,10 +75,10 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
             {/* Mobile: stacked cards */}
             <div className="sm:hidden space-y-2">
               {allSoldItems.length === 0 && (
-                <p className="text-slate-500 text-sm italic p-3">No sales yet today.</p>
+                <p className="text-slate-600 text-sm italic p-3">No sales yet today.</p>
               )}
               {allSoldItems.map((item: any, idx: number) => (
-                <div key={idx} className="bg-[#0a0c10] border border-slate-700 rounded-xl p-3 flex justify-between items-center">
+                <div key={idx} className="bg-[#0A0C10] border border-slate-800 rounded-xl p-3 flex justify-between items-center">
                   <div className="min-w-0">
                     <p className="text-sm text-slate-200 truncate">{item.inventory?.name || "N/A"}</p>
                     <p className="text-xs text-slate-500">₦{Number(item.priceAtTime).toLocaleString()} × {item.quantity}</p>
@@ -77,7 +91,7 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
             </div>
 
             {/* Desktop: table */}
-            <div className="hidden sm:block bg-[#0a0c10] border border-slate-700 rounded-2xl p-4 overflow-x-auto">
+            <div className="hidden sm:block bg-[#0A0C10] border border-slate-800 rounded-2xl p-4 overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300">
                 <thead>
                   <tr className="text-slate-500 border-b border-slate-800">
@@ -102,7 +116,7 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
           </div>
 
           <textarea
-            className="w-full h-24 bg-[#0a0c10] border border-slate-700 rounded-2xl p-4 text-slate-200 outline-none focus:border-blue-500 transition-colors"
+            className="w-full h-24 bg-[#0A0C10] border border-slate-800 rounded-2xl p-4 text-slate-200 outline-none focus:border-blue-600 transition-colors"
             placeholder="Type your notes here..."
             value={complaint}
             onChange={(e) => setComplaint(e.target.value)}
@@ -111,28 +125,30 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="w-full py-4 sm:py-5 bg-white hover:bg-slate-200 active:scale-[0.98] disabled:bg-slate-800 text-black rounded-2xl font-bold transition-all"
+            className="w-full py-4 sm:py-5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white rounded-2xl font-bold transition-all active:scale-[0.98]"
           >
             {loading ? "Submitting..." : "Submit Full Daily Report"}
           </button>
         </div>
       </div>
 
+      {/* History Toggle */}
       <button
         onClick={() => setShowHistory(!showHistory)}
-        className="w-full py-4 flex items-center justify-center gap-2 bg-[#11131a] border border-slate-800 rounded-2xl font-semibold text-slate-400 hover:text-white active:scale-[0.98] transition-all"
+        className="w-full py-4 flex items-center justify-center gap-2 bg-[#11131A] border border-slate-800 rounded-2xl font-semibold text-slate-400 hover:text-white transition-all active:scale-[0.98]"
       >
         {showHistory ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         {showHistory ? "Hide Report History" : "View Report History"}
       </button>
 
+      {/* History List */}
       {showHistory && (
         <div className="space-y-3 animate-in fade-in duration-500">
           {reports.length === 0 && (
-            <p className="text-slate-500 text-sm italic text-center py-4">No reports submitted today.</p>
+            <p className="text-slate-600 text-sm italic text-center py-4">No reports submitted today.</p>
           )}
           {reports.map((r: any) => (
-            <div key={r.id} className="bg-[#11131a] p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-3">
+            <div key={r.id} className="bg-[#11131A] p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
                 <FileText size={18} className="text-blue-500 shrink-0 mt-0.5" />
                 <div className="min-w-0">

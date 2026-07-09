@@ -79,10 +79,10 @@ export default function ReportsReviewClient({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[#0A0C12] text-slate-200">
 
       {/* ── Top Header ── */}
-      <div className="sticky top-0 z-10 bg-white border-b border-slate-100 shadow-sm">
+      <div className="sticky top-0 z-10 bg-[#11131A] border-b border-slate-800 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
 
           {/* Left: Back + Title */}
@@ -90,7 +90,7 @@ export default function ReportsReviewClient({
             {/* Back button */}
             <Link
               href="/owner/dashboard"
-              className="flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-600 transition-colors shrink-0"
+              className="flex items-center justify-center h-8 w-8 rounded-lg bg-[#161a29] hover:bg-slate-800 active:bg-slate-700 text-slate-300 transition-colors shrink-0"
               title="Back to Dashboard"
             >
               <ArrowLeft size={16} />
@@ -98,11 +98,11 @@ export default function ReportsReviewClient({
 
             {/* Icon + Title */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="p-1.5 bg-indigo-600 text-white rounded-lg shadow-sm shadow-indigo-200 shrink-0">
+              <div className="p-1.5 bg-blue-600 text-white rounded-lg shadow-sm shrink-0">
                 <ClipboardList size={17} />
               </div>
               <div className="min-w-0">
-                <h1 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
+                <h1 className="text-sm sm:text-base font-bold text-white leading-tight truncate">
                   Staff Reports
                 </h1>
                 {/* Subtitle hidden on very small screens */}
@@ -116,7 +116,7 @@ export default function ReportsReviewClient({
           {/* Right: History link */}
           <Link
             href="/owner/report/history"
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-900 text-white rounded-full text-[11px] sm:text-xs font-semibold hover:bg-slate-700 active:scale-95 transition-all shrink-0"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-full text-[11px] sm:text-xs font-semibold hover:bg-blue-500 active:scale-95 transition-all shrink-0"
           >
             <span className="hidden sm:inline">View </span>History
             <ArrowRight size={13} />
@@ -129,9 +129,9 @@ export default function ReportsReviewClient({
 
         {/* Empty state */}
         {reports.length === 0 ? (
-          <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-10 sm:p-14 text-center shadow-sm mt-4">
-            <ClipboardList size={38} className="mx-auto mb-3 text-slate-300" />
-            <h3 className="text-sm font-semibold text-slate-700">All caught up!</h3>
+          <div className="bg-[#11131A] border border-dashed border-slate-800 rounded-2xl p-10 sm:p-14 text-center shadow-sm mt-4">
+            <ClipboardList size={38} className="mx-auto mb-3 text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-200">All caught up!</h3>
             <p className="text-xs text-slate-400 mt-1">
               No pending staff reports to review right now.
             </p>
@@ -162,19 +162,19 @@ export default function ReportsReviewClient({
             return (
               <div
                 key={report.id}
-                className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden transition-all duration-200"
+                className="bg-[#11131A] border border-slate-800 rounded-2xl shadow-sm overflow-hidden transition-all duration-200"
               >
                 {/* ── Card Header ── */}
                 <div
                   onClick={() => toggleRow(report.id)}
-                  className="px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/60 transition-colors select-none"
+                  className="px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-[#161a29] active:bg-[#1c2135] transition-colors select-none"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 shrink-0 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm shadow-inner">
+                    <div className="h-10 w-10 shrink-0 rounded-xl bg-[#161a29] flex items-center justify-center text-blue-400 font-bold text-sm shadow-inner">
                       {staffName.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-slate-800 truncate">
+                      <h3 className="text-sm font-semibold text-white truncate">
                         {staffName}
                       </h3>
                       <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
@@ -185,10 +185,10 @@ export default function ReportsReviewClient({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-amber-50 text-amber-600 border border-amber-100">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
                       Pending
                     </span>
-                    <div className="text-slate-400 p-1 rounded-lg hover:bg-slate-200/50 transition-colors">
+                    <div className="text-slate-400 p-1 rounded-lg hover:bg-slate-800 transition-colors">
                       {isExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
                     </div>
                   </div>
@@ -196,7 +196,7 @@ export default function ReportsReviewClient({
 
                 {/* ── Expanded Panel ── */}
                 {isExpanded && (
-                  <div className="border-t border-slate-900 bg-[#0f111a] animate-fadeIn">
+                  <div className="border-t border-slate-800 bg-[#0f111a] animate-fadeIn">
 
                     {/* Inner grid: stacked on mobile, side-by-side on desktop */}
                     <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
