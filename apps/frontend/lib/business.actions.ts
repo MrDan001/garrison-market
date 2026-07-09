@@ -168,6 +168,7 @@ export async function addItemAction(formData: FormData) {
   });
 
   revalidatePath("/owner/inventory");
+  redirect("/owner/inventory");
 }
 
 // ── Added brand new Update/Restock Action ──
