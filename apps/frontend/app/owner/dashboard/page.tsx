@@ -1,12 +1,19 @@
 import { LayoutDashboard, Package, ShoppingCart, Settings, Activity, LogOut, TrendingUp, Store, Plus, Banknote } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { isRedirectError } from "next/dist/client/components/redirect-error";
 import prisma from "@/lib/prisma";
 import SalesChart from "@/components/SalesChart";
 import { logoutAction } from "@/lib/auth.actions";
 
-export const dynamic = "force-dynamic";
+function isNextRedirectError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as any).digest === "string" &&
+    (error as any).digest.startsWith("NEXT_REDIRECT")
+  );
+}
 
 export default async function OwnerDashboardPage() {
   try {
@@ -15,63 +22,63 @@ export default async function OwnerDashboardPage() {
 
     const user = await prisma.user.findUnique({
       where: { email: session.email },
-      include: {
-        managedStaff: { select: { fullName: true } },
+      select: {
+        id: true,
+        fullName: true,
+        storeName: true,
+        image: true,
+        status: true,
         orders: {
           take: 5,
           orderBy: { date: "desc" },
-          include: { staff: { select: { fullName: true } } },
+          select: {
+            id: true,
+            total: true,
+            date: true,
+            staff: { select: { fullName: true } },
+          },
         },
       },
     });
 
     if (!user || user.status !== "approved") redirect("/pending");
 
-    // ── Safe Localized Date Bounds ──
     const now = new Date();
-    
-    // Create a precise "Start of Today" localized boundary (00:00:00.000)
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-
-    // Calculate historical 90-day chart range bounds
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    // Concurrent DB requests pulling accurate date ranges
-    const [salesData, activeProducts, ordersToday, todaySalesData] = await Promise.all([
+    // ── 3 concurrent queries instead of 4 ──
+    // "orders today" count + "today's revenue" sum are now ONE aggregate
+    // query instead of two separate round-trips (count() + findMany()).
+    const [salesData, activeProducts, todayAgg] = await Promise.all([
       prisma.order.findMany({
         where: { ownerId: user.id, date: { gte: ninetyDaysAgo } },
         select: { total: true, date: true },
         orderBy: { date: "asc" },
       }),
       prisma.inventory.count({ where: { ownerId: user.id } }),
-      prisma.order.count({
+      prisma.order.aggregate({
         where: { ownerId: user.id, date: { gte: todayStart } },
+        _count: true,
+        _sum: { total: true },
       }),
-      // Query specific live orders placed only since midnight today
-      prisma.order.findMany({
-        where: { ownerId: user.id, date: { gte: todayStart } },
-        select: { total: true }
-      })
     ]);
 
-    // Format historical values for chart rendering components
-    const serializedSalesData = salesData.map((d: { total: number; date: Date }) => ({
+    const ordersToday = todayAgg._count;
+    const todaySalesRevenue = Number(todayAgg._sum.total ?? 0);
+
+    // NOTE: dropped the manual `(d: { total: number; date: Date })` annotation.
+    // Prisma actually returns `total` as its own Decimal type, not a plain
+    // number — the hand-written type was lying to TS. Letting TS infer the
+    // real shape from `salesData` fixes the compile error; Number() still
+    // converts Decimal -> number fine at runtime.
+    const serializedSalesData = salesData.map((d) => ({
       total: Number(d.total),
       date: d.date.toISOString(),
     }));
 
-    // Calculate total 90-day gross revenue sum
-    const totalSales = serializedSalesData.reduce(
-      (acc: number, curr: { total: number; date: string }) => acc + curr.total,
-      0
-    );
-
-    // Calculate precise single day current sales revenue sum
-    const todaySalesRevenue = todaySalesData.reduce(
-      (sum: number, order: { total: any }) => sum + Number(order.total), 
-      0
-    );
+    const totalSales = serializedSalesData.reduce((acc, curr) => acc + curr.total, 0);
 
     const firstName = user.fullName?.split(" ")[0] ?? "there";
     const hour = now.getHours();
@@ -92,7 +99,6 @@ export default async function OwnerDashboardPage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Profile Image with Initials Fallback */}
             <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden border border-slate-700">
               {user?.image ? (
                 <img src={user.image} alt="Profile" className="h-full w-full object-cover" />
@@ -121,7 +127,6 @@ export default async function OwnerDashboardPage() {
             </div>
           </div>
 
-          {/* Expanded Grid cards matrix mapping today's earnings separately */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard title="Today's Sales" value={`₦${todaySalesRevenue.toLocaleString()}`} sub="Since midnight" icon={<Banknote size={17} />} accent="emerald" />
             <StatCard title="Orders Today" value={ordersToday.toString()} sub="Transactions today" icon={<TrendingUp size={17} />} accent="blue" />
@@ -139,7 +144,7 @@ export default async function OwnerDashboardPage() {
                 <h2 className="text-base font-semibold text-white mb-5">Recent Activity</h2>
                 <div className="space-y-3">
                   {user.orders.length > 0 ? (
-                    user.orders.map((order: any) => (
+                    user.orders.map((order) => (
                       <div key={order.id} className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
@@ -185,8 +190,8 @@ export default async function OwnerDashboardPage() {
           </div>
         </main>
 
-               {/* ── Mobile Native Nav ── */}
-               <nav className="lg:hidden fixed bottom-0 left-0 w-full bg-slate-900/95 backdrop-blur-md border-t border-slate-800 h-16 flex items-center justify-around z-50">
+        {/* ── Mobile Native Nav ── */}
+        <nav className="lg:hidden fixed bottom-0 left-0 w-full bg-slate-900/95 backdrop-blur-md border-t border-slate-800 h-16 flex items-center justify-around z-50">
           <a href="/owner/staff" className="flex flex-col items-center text-slate-400 hover:text-white">
             <LayoutDashboard size={20} />
             <span className="text-[10px]">Staff</span>
@@ -210,7 +215,7 @@ export default async function OwnerDashboardPage() {
       </div>
     );
   } catch (error) {
-    if (isRedirectError(error)) throw error;
+    if (isNextRedirectError(error)) throw error;
     return <div className="text-center p-8 text-slate-400">Error loading dashboard.</div>;
   }
 }

@@ -1,11 +1,8 @@
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-// Package icon restored below
 import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle } from "lucide-react";
 import Link from "next/link";
-
-export const dynamic = "force-dynamic";
 
 export default async function StaffDashboard() {
   const session = await getSessionUser();
@@ -13,7 +10,7 @@ export default async function StaffDashboard() {
 
   const staff = await prisma.user.findUnique({
     where: { email: session.email },
-    select: { fullName: true, role: true, status: true, image: true }
+    select: { fullName: true, role: true, status: true, image: true },
   });
 
   const userRole = staff?.role?.toLowerCase().trim();
@@ -22,30 +19,30 @@ export default async function StaffDashboard() {
   if (!staff || userRole !== "staff") redirect("/login");
   if (userStatus === "suspended" || userStatus === "pending") redirect("/pending/staff");
 
-  // Fixed split array extraction fallback safely
   const nameParts = staff.fullName?.split(" ") ?? ["Staff"];
   const firstName = nameParts[0] ?? "Staff";
-  
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const todayOrders = await prisma.order.count({
-    where: { staffId: session.id, date: { gte: today } }
-  });
-
-  const todaySalesData = await prisma.order.findMany({
+  // ── Merged into ONE aggregate query instead of count() + findMany() ──
+  const todayAgg = await prisma.order.aggregate({
     where: { staffId: session.id, date: { gte: today } },
-    select: { total: true }
+    _count: true,
+    _sum: { total: true },
   });
 
-  const todaySales = todaySalesData.reduce((sum: number, o: { total: number | string }) => sum + Number(o.total), 0);
+  const todayOrders = todayAgg._count;
+  // NOTE: dropped the `(o: { total: number | string })` annotation — Prisma's
+  // aggregate _sum.total is typed as Decimal | null, not number | string,
+  // which is what caused the compile error. Number() handles the conversion.
+  const todaySales = Number(todayAgg._sum.total ?? 0);
 
   return (
     <div className="h-screen w-screen bg-[#0A0C10] text-slate-200 flex flex-col overflow-hidden">
-      
       {/* ── Top Nav Bar (Staff Portal Theme) ── */}
       <header className="sticky top-0 z-50 bg-[#0a0c12]/80 backdrop-blur-xl border-b border-slate-800/50 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4 flex-shrink-0">
         <div className="flex items-center gap-2.5">
@@ -56,7 +53,7 @@ export default async function StaffDashboard() {
             <p className="text-[11px] text-slate-500 leading-none">Staff Portal</p>
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-sm font-semibold text-white truncate leading-none">{staff.fullName}</p>
-              
+
               <span className="relative flex h-1.5 w-1.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
@@ -66,7 +63,6 @@ export default async function StaffDashboard() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Profile Image with Initials Fallback */}
           <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden border border-slate-700">
             {staff?.image ? (
               <img src={staff.image} alt="Profile" className="h-full w-full object-cover" />
@@ -77,8 +73,8 @@ export default async function StaffDashboard() {
             )}
           </div>
 
-          <Link 
-            href="/login" 
+          <Link
+            href="/login"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 transition-all duration-150"
           >
             <LogOut size={13} />
@@ -88,13 +84,10 @@ export default async function StaffDashboard() {
       </header>
 
       {/* Main scrollable content container */}
-      <div className="flex-1 overflow-y-auto pt-6 pb-28">        
-        
+      <div className="flex-1 overflow-y-auto pt-6 pb-28">
         {/* Profile Greetings Block inside body */}
         <div className="px-5 mb-6">
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
-            {greeting}
-          </p>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">{greeting}</p>
           <h1 className="text-2xl font-bold text-white tracking-tight">{firstName} 👋</h1>
         </div>
 
@@ -156,7 +149,7 @@ export default async function StaffDashboard() {
             ) : (
               <>
                 <p className="text-2xl font-bold text-emerald-400 mb-1">₦{todaySales.toLocaleString()}</p>
-                <p className="text-slate-400 text-sm">{todayOrders} order{todayOrders !== 1 ? 's' : ''} processed today</p>
+                <p className="text-slate-400 text-sm">{todayOrders} order{todayOrders !== 1 ? "s" : ""} processed today</p>
               </>
             )}
           </div>
@@ -166,8 +159,6 @@ export default async function StaffDashboard() {
       {/* ── Bottom Navigation Bar ── */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#0d0f18]/95 backdrop-blur-xl border-t border-slate-800/50 px-4 py-2 z-50">
         <div className="flex items-end justify-around max-w-md mx-auto">
-
-          {/* Inventory */}
           <Link href="/staff/inventory" className="flex flex-col items-center gap-1 py-2 px-3 group">
             <div className="h-6 w-6 flex items-center justify-center">
               <Package size={22} className="text-slate-500 group-active:text-blue-400 transition-colors" />
@@ -175,7 +166,6 @@ export default async function StaffDashboard() {
             <span className="text-[10px] text-slate-500 group-active:text-blue-400 transition-colors">Inventory</span>
           </Link>
 
-          {/* Orders */}
           <Link href="/staff/orders" className="flex flex-col items-center gap-1 py-2 px-3 group">
             <div className="h-6 w-6 flex items-center justify-center">
               <History size={22} className="text-slate-500 group-active:text-indigo-400 transition-colors" />
@@ -183,18 +173,13 @@ export default async function StaffDashboard() {
             <span className="text-[10px] text-slate-500 group-active:text-indigo-400 transition-colors">Orders</span>
           </Link>
 
-          {/* SELL Button — Center */}
-          <Link
-            href="/staff/inventory"
-            className="flex flex-col items-center gap-1 -mt-6"
-          >
+          <Link href="/staff/inventory" className="flex flex-col items-center gap-1 -mt-6">
             <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 active:scale-95 transition-transform border-4 border-[#0d0f18]">
               <ShoppingBag size={26} className="text-white" />
             </div>
             <span className="text-[10px] text-blue-400 font-bold mt-0.5">SELL</span>
           </Link>
 
-          {/* Report */}
           <Link href="/staff/report" className="flex flex-col items-center gap-1 py-2 px-3 group">
             <div className="h-6 w-6 flex items-center justify-center">
               <FileText size={22} className="text-slate-500 group-active:text-amber-400 transition-colors" />
@@ -202,17 +187,12 @@ export default async function StaffDashboard() {
             <span className="text-[10px] text-slate-500 group-active:text-amber-400 transition-colors">Report</span>
           </Link>
 
-          {/* Profile */}
-
-
-          {/* Profile */}
           <Link href="/staff/profile" className="flex flex-col items-center gap-1 py-2 px-3 group">
             <div className="h-6 w-6 flex items-center justify-center">
               <UserCircle size={22} className="text-slate-500 group-active:text-emerald-400 transition-colors" />
             </div>
             <span className="text-[10px] text-slate-500 group-active:text-emerald-400 transition-colors">Profile</span>
           </Link>
-
         </div>
       </div>
     </div>

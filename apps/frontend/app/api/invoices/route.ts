@@ -4,7 +4,6 @@ import { getSessionUser } from "@/lib/auth.actions";
 
 export const dynamic = "force-dynamic";
 
-// 1. Declare explicit type interfaces for your Prisma structures
 interface PrismaOrderItem {
   id: number;
   orderId: number;
@@ -36,13 +35,19 @@ interface PrismaOrder {
 export async function GET() {
   try {
     const session = await getSessionUser();
-    
-    // Safety check: block unauthorized access
+
     if (!session || session.role !== "owner") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Pull all business transaction invoice records for this owner
+    // session only carries { id, email, role, status, ownerId } — fullName
+    // isn't part of that selected shape, so fetch it directly instead of
+    // assuming it exists on the session object.
+    const ownerProfile = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { fullName: true },
+    });
+
     const orders = (await prisma.order.findMany({
       where: { ownerId: session.id },
       include: {
@@ -50,17 +55,16 @@ export async function GET() {
         owner: { select: { storeName: true, fullName: true, email: true } },
         items: {
           include: {
-            inventory: { select: { name: true } }
-          }
-        }
+            inventory: { select: { name: true } },
+          },
+        },
       },
-      orderBy: { date: "desc" }
+      orderBy: { date: "desc" },
     })) as unknown as PrismaOrder[];
 
-    // 2. Added explicit types (order: PrismaOrder) and (item: PrismaOrderItem) to clear both terminal errors
     const serializedOrders = orders.map((order: PrismaOrder) => ({
       id: order.id,
-      total: Number(order.total.toString()), 
+      total: Number(order.total.toString()),
       date: order.date.toISOString(),
       ownerId: order.ownerId,
       staffId: order.staffId,
@@ -71,14 +75,14 @@ export async function GET() {
         orderId: item.orderId,
         inventoryId: item.inventoryId,
         quantity: item.quantity,
-        priceAtTime: Number(item.priceAtTime.toString()), 
-        inventory: item.inventory
-      }))
+        priceAtTime: Number(item.priceAtTime.toString()),
+        inventory: item.inventory,
+      })),
     }));
 
     return NextResponse.json({
       orders: serializedOrders,
-      merchantName: session.fullName || "Store Owner"
+      merchantName: ownerProfile?.fullName || "Store Owner",
     });
   } catch (error) {
     console.error("API Invoice fetching pipeline error:", error);

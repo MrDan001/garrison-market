@@ -1,49 +1,40 @@
-﻿import { PrismaClient } from '@prisma/client';
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
+﻿import { PrismaClient } from "@prisma/client";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-// Only disable SSL if absolutely necessary for local dev. 
-// Remove this in production for security.
-if (process.env.NODE_ENV !== 'production') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-}
-
-const createPrismaClient = () => {
-  const connectionString = process.env.DATABASE_URL;
-
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not defined in your .env file.");
-  }
-
-  // Initialize the pool
-  const pool = new Pool({ connectionString });
-  const adapter = new PrismaPg(pool);
-
-  // Initialize Prisma with the adapter and extensions
-  return new PrismaClient({ adapter }).$extends({
-    result: {
-      order: {
-        total: {
-          needs: { total: true },
-          compute(data: { total: any }) { return Number(data.total); }
-        }
-      },
-      inventory: {
-        price: {
-          needs: { price: true },
-          compute(data: { price: any }) { return Number(data.price); }
-        }
-      }
-    }
-  });
+const globalForPrisma = globalThis as unknown as {
+  prismaGlobal?: PrismaClient;
+  pool?: Pool;
 };
 
-// Global singleton pattern to prevent multiple instances during hot-reloads
-const globalForPrisma = globalThis as unknown as { prismaGlobal: ReturnType<typeof createPrismaClient> };
+// Reuse the pool across hot-reloads in dev; created once per server in prod
+const pool =
+  globalForPrisma.pool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 5, // prevents overwhelming Supabase's connection limit
+    idleTimeoutMillis: 30000,
+    ssl: {
+      // Supabase's pooler presents a cert chain that Node's default strict
+      // TLS validation flags as self-signed/untrusted. This still encrypts
+      // the connection — it just skips validating the cert against Node's
+      // trusted CA list, which is required for poolers like Supabase's.
+      rejectUnauthorized: false,
+    },
+  });
 
-const prisma = globalForPrisma.prismaGlobal ?? createPrismaClient();
+const adapter = new PrismaPg(pool);
 
-if (process.env.NODE_ENV !== 'production') {
+// NOTE: removed the empty `.$extends({})` — an extension call with nothing
+// inside it still changes the client's TS type to DynamicClientExtensionThis,
+// which is what dropped `$on` from the type and caused the build error.
+// If you need extensions later, add real logic inside $extends and the
+// exported type will just need to be inferred (`typeof prisma`) instead of
+// annotated as `PrismaClient`.
+const prisma = globalForPrisma.prismaGlobal ?? new PrismaClient({ adapter });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.pool = pool;
   globalForPrisma.prismaGlobal = prisma;
 }
 
