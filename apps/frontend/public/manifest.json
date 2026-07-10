@@ -1,6 +1,6 @@
 {
   "name": "Garrison Market",
-  "short_name": "Garrison",
+  "short_name": "Garrison Market",
   "description": "Market management system",
   "start_url": "/",
   "display": "standalone",
