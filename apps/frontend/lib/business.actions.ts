@@ -150,7 +150,10 @@ export async function addItemAction(formData: FormData) {
   });
 
   revalidatePath("/owner/inventory");
-  redirect("/owner/inventory");
+  // NOTE: no redirect() here — called directly from client code (not a
+  // <form action>), so redirect()'s thrown signal gets misread as a real
+  // error by our own try/catch. Client navigates with router.push() instead.
+  return { success: true };
 }
 
 export async function updateItemAction(formData: FormData) {
@@ -182,7 +185,7 @@ export async function updateItemAction(formData: FormData) {
   }
 
   revalidatePath("/owner/inventory");
-  redirect("/owner/inventory");
+  return { success: true };
 }
 
 export async function processSaleAction(cartItems: any[]) {
@@ -322,4 +325,39 @@ export async function createStoreAction(formData: FormData) {
 
   // Redirect to your stores page
   redirect("/owner/stores");
+}
+
+export async function deleteInventoryAction(formData: FormData) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  const id = parseInt(formData.get("id") as string, 10);
+  if (isNaN(id)) throw new Error("Invalid product ID");
+
+  const item = await prisma.inventory.findUnique({ where: { id } });
+  if (!item || item.ownerId !== session.id) throw new Error("Unauthorized");
+
+  let archived = false;
+
+  try {
+    await prisma.inventory.delete({ where: { id } });
+  } catch (error: any) {
+    if (error.code === "P2003") {
+      await prisma.inventory.update({
+        where: { id },
+        data: { quantity: 0 },
+      });
+      archived = true;
+    } else {
+      throw error;
+    }
+  }
+
+  revalidatePath("/owner/inventory");
+  // NOTE: no redirect() here — this action is called directly from client
+  // code (not a <form action>), and redirect() throws a special signal
+  // that only unwraps correctly inside a form submission. Returning a
+  // result and navigating with router.push() on the client works cleanly
+  // instead of surfacing a raw "NEXT_REDIRECT" error.
+  return { success: true, archived };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import { addItemAction } from "@/lib/business.actions";
 import { ArrowLeft, UploadCloud } from "lucide-react";
@@ -13,6 +14,7 @@ export default function AddInventoryItemPage() {
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
 
   const handleCardClick = () => {
     fileInputRef.current?.click();
@@ -53,6 +55,7 @@ export default function AddInventoryItemPage() {
 
       setUploadStatus("Saving item...");
       await addItemAction(formData);
+      router.push("/owner/inventory?status=added");
     } catch (err) {
       console.error("Submission failed:", err);
       setUploadStatus("Something went wrong. Please try again.");
