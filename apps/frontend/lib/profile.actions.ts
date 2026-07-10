@@ -1,6 +1,5 @@
 "use server";
 
-import { put } from "@vercel/blob";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -11,38 +10,18 @@ export async function updateProfileWithPhoto(formData: FormData) {
 
   const fullName = formData.get("fullName") as string;
   const phoneNumber = formData.get("phone") as string;
-  const imageFile = formData.get("image") as File;
 
-  let imageUrl: string | undefined;
+  // The image is already uploaded client-side to Vercel Blob before this
+  // action runs — we just receive the resulting URL, no file handling here.
+  const imageUrl = formData.get("imageUrl") as string | null;
 
-  // Only attempt upload if there is a file
-  if (imageFile && imageFile.size > 0) {
-    try {
-      // 1. Sanitize the filename to prevent upload crashes
-      const fileExtension = imageFile.name.split('.').pop() || 'jpg';
-      const safeFileName = `profiles/${session.id}-${Date.now()}.${fileExtension}`;
-
-      // 2. Upload to Vercel Blob
-      const blob = await put(safeFileName, imageFile, {
-        access: 'public',
-        contentType: imageFile.type, // Required for proper image handling
-        addRandomSuffix: true, 
-      });
-      imageUrl = blob.url;
-    } catch (error) {
-      console.error("Blob Upload Error:", error);
-      throw new Error("Failed to upload image to storage.");
-    }
-  }
-
-  // 3. Update User in DB
   try {
     await prisma.user.update({
       where: { email: session.email },
-      data: { 
-        fullName, 
+      data: {
+        fullName,
         phoneNumber,
-        ...(imageUrl && { image: imageUrl })
+        ...(imageUrl && { image: imageUrl }),
       },
     });
   } catch (error) {
@@ -62,13 +41,12 @@ export async function updateProfileAction(formData: FormData) {
 
   await prisma.user.update({
     where: { email: session.email },
-    data: { 
-      fullName, 
-      phoneNumber 
+    data: {
+      fullName,
+      phoneNumber,
     },
   });
 
-  // Revalidate both paths
   revalidatePath("/owner/profile/edit");
   revalidatePath("/owner/profile");
 }
