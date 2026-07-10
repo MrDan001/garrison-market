@@ -6,11 +6,11 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "@auth/nextjs": "^0.0.0-380f8d56",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@vercel/blob": "^2.5.0",
     "bcrypt": "^6.0.0",
+    "jose": "^6.2.3",
     "lucide-react": "^0.454.0",
     "next": "^16.2.9",
     "pg": "^8.22.0",
