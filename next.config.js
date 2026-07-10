@@ -10,6 +10,11 @@ const nextConfig = {
       },
     ],
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb', // Adjust this size based on your maximum expected upload
+    },
+  },
 };
 
 module.exports = nextConfig;

@@ -1,29 +1,62 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { upload } from "@vercel/blob/client";
 import { addItemAction } from "@/lib/business.actions";
 import { ArrowLeft, UploadCloud } from "lucide-react";
 import Link from "next/link";
 
 export default function AddInventoryItemPage() {
-  // States to hold image file representation properties
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
-  // Trigger hidden native system file explorer when clicking the card grid block
   const handleCardClick = () => {
     fileInputRef.current?.click();
   };
 
-  // Convert the chosen file input to a transient base64 url string for visual preview
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!formRef.current) return;
+
+    setIsSubmitting(true);
+    const formData = new FormData(formRef.current);
+
+    try {
+      // Upload the file directly browser -> Blob storage, bypassing the
+      // server action entirely. Only the resulting URL travels through
+      // our server, which is what makes this fast.
+      if (selectedFile) {
+        setUploadStatus("Uploading image...");
+        const blob = await upload(selectedFile.name, selectedFile, {
+          access: "public",
+          handleUploadUrl: "/api/blob/upload",
+        });
+        formData.set("imageUrl", blob.url);
+      }
+      formData.delete("image"); // raw file no longer needed by the action
+
+      setUploadStatus("Saving item...");
+      await addItemAction(formData);
+    } catch (err) {
+      console.error("Submission failed:", err);
+      setUploadStatus("Something went wrong. Please try again.");
+      setIsSubmitting(false);
     }
   };
 
@@ -37,8 +70,7 @@ export default function AddInventoryItemPage() {
       </div>
 
       <div className="p-4 sm:p-6 pb-20">
-        <form action={addItemAction} className="space-y-5 max-w-lg mx-auto">
-          
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-5 max-w-lg mx-auto">
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Product name *</label>
             <input name="name" required className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-600" />
@@ -60,6 +92,7 @@ export default function AddInventoryItemPage() {
             </div>
           </div>
 
+          {/* Category field temporarily disabled
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Categories *</label>
             <select name="category" className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-600">
@@ -69,23 +102,21 @@ export default function AddInventoryItemPage() {
               <option value="pouch">Pouch</option>
             </select>
           </div>
+          */}
 
-          {/* Clickable Image Selector Field Container Block */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Add product image</label>
-            
-            {/* Hidden actual file input node targeting name property */}
-            <input 
-              type="file" 
-              name="image" 
-              ref={fileInputRef} 
-              onChange={handleFileChange} 
-              accept="image/*" 
-              className="hidden" 
+
+            <input
+              type="file"
+              name="image"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              className="hidden"
             />
 
-            {/* Visual upload card proxy handling click triggers */}
-            <div 
+            <div
               onClick={handleCardClick}
               className="border-2 border-dashed border-slate-800 hover:border-blue-500/50 rounded-2xl p-4 flex flex-col items-center justify-center text-slate-500 min-h-32 bg-[#1a1d24] cursor-pointer transition-all relative overflow-hidden group"
             >
@@ -110,8 +141,12 @@ export default function AddInventoryItemPage() {
             <input name="restockLevel" type="number" className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-600" />
           </div>
 
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold text-sm mt-6 transition-colors shadow-md shadow-blue-500/10">
-            Save Item
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-sm mt-6 transition-colors shadow-md shadow-blue-500/10"
+          >
+            {isSubmitting ? uploadStatus || "Saving..." : "Save Item"}
           </button>
         </form>
       </div>

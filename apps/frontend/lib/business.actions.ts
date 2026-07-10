@@ -123,58 +123,39 @@ export async function addInventoryAction(formData: FormData) {
 
 export async function addItemAction(formData: FormData) {
   const session = await getSessionUser();
-  if (!session || session.role !== 'owner') throw new Error("Unauthorized");
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
 
   const name = formData.get("name") as string;
   const quantity = parseInt(formData.get("quantity") as string, 10);
   const costPrice = parseFloat(formData.get("costPrice") as string);
   const price = parseFloat(formData.get("price") as string);
-  const category = formData.get("category") as string;
+  const category = (formData.get("category") as string) || null; // field currently disabled on the form
   const restockLevel = parseInt(formData.get("restockLevel") as string, 10);
-  
-  const imageFile = formData.get("image") as File | null;
-  let imageUrl: string | null = null;
 
-  if (imageFile && imageFile.size > 0 && imageFile.name !== "undefined") {
-    try {
-      const arrayBuffer = await imageFile.arrayBuffer();
-      const fileBuffer = Buffer.from(arrayBuffer);
-
-      const fileExtension = imageFile.name.split('.').pop() || "jpg";
-      const blobPath = `products/${session.id}_${Date.now()}.${fileExtension}`;
-
-      const blob = await put(blobPath, fileBuffer, {
-        access: "public",
-        contentType: imageFile.type, 
-      });
-
-      imageUrl = blob.url; 
-    } catch (err) {
-      console.error("Vercel Blob asset upload pipeline exploded:", err);
-    }
-  }
+  // The image is now already uploaded client-side to Vercel Blob before
+  // this action runs — we just receive the resulting URL, nothing to upload here.
+  const imageUrl = (formData.get("imageUrl") as string) || null;
 
   await prisma.inventory.create({
-    data: { 
-      name, 
-      quantity, 
-      costPrice, 
-      price, 
-      category, 
+    data: {
+      name,
+      quantity,
+      costPrice,
+      price,
+      category,
       restockLevel,
-      image: imageUrl, 
-      ownerId: session.id 
-    }
+      image: imageUrl,
+      ownerId: session.id,
+    },
   });
 
   revalidatePath("/owner/inventory");
   redirect("/owner/inventory");
 }
 
-// ── Added brand new Update/Restock Action ──
 export async function updateItemAction(formData: FormData) {
   const session = await getSessionUser();
-  if (!session || session.role !== 'owner') throw new Error("Unauthorized");
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
 
   const id = parseInt(formData.get("id") as string, 10);
   if (isNaN(id)) throw new Error("Invalid product ID");
@@ -186,47 +167,20 @@ export async function updateItemAction(formData: FormData) {
   const category = formData.get("category") as string;
   const restockLevel = parseInt(formData.get("restockLevel") as string, 10);
 
-  const imageFile = formData.get("image") as File | null;
-  
-  let updateData: any = { 
-    name, 
-    quantity, 
-    costPrice, 
-    price, 
-    category, 
-    restockLevel 
-  };
+  const updateData: any = { name, quantity, costPrice, price, category, restockLevel };
 
-  if (imageFile && imageFile.size > 0 && imageFile.name !== "undefined") {
-    try {
-      const arrayBuffer = await imageFile.arrayBuffer();
-      const fileBuffer = Buffer.from(arrayBuffer);
-
-      const fileExtension = imageFile.name.split('.').pop() || "jpg";
-      const blobPath = `products/${session.id}_${Date.now()}.${fileExtension}`;
-
-      const blob = await put(blobPath, fileBuffer, {
-        access: "public",
-        contentType: imageFile.type,
-      });
-
-      updateData.image = blob.url;
-    } catch (err) {
-      console.error("Vercel Blob update failed:", err);
-    }
+  const imageUrl = formData.get("imageUrl") as string | null;
+  if (imageUrl) {
+    updateData.image = imageUrl;
   }
 
   try {
-    await prisma.inventory.update({
-      where: { id },
-      data: updateData
-    });
+    await prisma.inventory.update({ where: { id }, data: updateData });
   } catch (dbError) {
     console.error("Database update failed:", dbError);
     throw dbError;
   }
 
-  // CRITICAL FIX: Placed outside of try/catch blocks to avoid NEXT_REDIRECT interference
   revalidatePath("/owner/inventory");
   redirect("/owner/inventory");
 }
