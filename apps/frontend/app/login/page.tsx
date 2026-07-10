@@ -27,76 +27,94 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-4 font-sans text-slate-200">
-      {/* Background Glow */}
-      <div className="fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-[10%] -left-[10%] h-[600px] w-[600px] rounded-full bg-blue-900/10 blur-[150px]" />
-        <div className="absolute top-[30%] -right-[10%] h-[600px] w-[600px] rounded-full bg-indigo-900/10 blur-[150px]" />
-      </div>
-
-      <div className="w-full max-w-[400px] rounded-[2rem] border border-slate-800 bg-slate-900/50 backdrop-blur-3xl shadow-2xl p-10">
+    <div className="flex min-h-screen items-center justify-center bg-[#F1EEE3] px-4 font-sans text-[#16233D]">
+      {/* 
+        Page Card Wrapper with smooth hardware-accelerated entry animation
+      */}
+      <div className="w-full max-w-[400px] rounded-sm border border-[#16233D]/10 bg-white shadow-[0_20px_50px_-12px_rgba(22,35,61,0.15)] p-10 animate-in fade-in slide-in-from-bottom-3 duration-500 ease-out">
+        
+        {/* Brand Header */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800 text-slate-400">
-            <span className="text-2xl font-bold tracking-tighter">GM</span>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-sm bg-[#16233D] text-[#C89A2E]">
+            <span className="text-xl font-bold tracking-tighter" style={{ fontFamily: "var(--font-display, sans-serif)" }}>G</span>
           </div>
-          <h1 className="text-xl font-medium text-slate-100">Garrison Market</h1>
-          <p className="text-sm text-slate-500">Sign in to the administrative panel</p>
+          <h1 className="text-xl font-bold uppercase tracking-tight text-[#16233D]" style={{ fontFamily: "var(--font-display, sans-serif)" }}>
+            Garrison Market
+          </h1>
+          <p className="text-xs font-medium text-[#16233D]/60 uppercase tracking-wider mt-1">
+            Sign in to your shop floor
+          </p>
         </div>
 
-        {/* Error Notification Block */}
+        {/* Error Notification Block — Terracotta Red theme */}
         {error && (
-          <div className="mb-6 rounded-xl bg-red-950/30 border border-red-900/50 p-4 text-center text-sm text-red-400 shadow-sm animate-in fade-in duration-300">
+          <div className="mb-6 rounded-sm bg-[#B23A2E]/5 border border-[#B23A2E]/20 p-4 text-center text-sm font-medium text-[#B23A2E] shadow-sm animate-in fade-in duration-300">
             {error}
           </div>
         )}
 
         <form action={handleSubmit} className="space-y-4">
+          {/* Email Input */}
           <div className="relative">
-            <Mail className="absolute left-4 top-3.5 h-5 w-5 text-slate-600" />
+            <Mail className="absolute left-4 top-3.5 h-4 w-4 text-[#16233D]/40" />
             <input 
               name="email" 
               type="email" 
               placeholder="Email address" 
+              disabled={isLoading}
               required 
-              className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 py-3 pl-12 pr-4 outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-700/50 transition-all text-slate-200 placeholder:text-slate-700" 
+              className="w-full rounded-sm border border-[#16233D]/20 bg-[#F1EEE3]/30 py-3 pl-11 pr-4 text-sm outline-none focus:border-[#16233D] focus:ring-1 focus:ring-[#16233D] transition-all text-[#16233D] placeholder:text-[#16233D]/40 disabled:opacity-60" 
             />
           </div>
 
+          {/* Password Input */}
           <div className="relative">
-            <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-600" />
+            <Lock className="absolute left-4 top-3.5 h-4 w-4 text-[#16233D]/40" />
             <input 
               name="password" 
               type={showPassword ? "text" : "password"} 
               placeholder="Password" 
+              disabled={isLoading}
               required 
-              className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 py-3 pl-12 pr-12 outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-700/50 transition-all text-slate-200 placeholder:text-slate-700" 
+              className="w-full rounded-sm border border-[#16233D]/20 bg-[#F1EEE3]/30 py-3 pl-11 pr-11 text-sm outline-none focus:border-[#16233D] focus:ring-1 focus:ring-[#16233D] transition-all text-[#16233D] placeholder:text-[#16233D]/40 disabled:opacity-60" 
             />
             <button 
               type="button" 
               onClick={() => setShowPassword(!showPassword)} 
-              className="absolute right-4 top-3.5 text-slate-600 hover:text-slate-400 transition-colors"
+              disabled={isLoading}
+              className="absolute right-4 top-3.5 text-[#16233D]/40 hover:text-[#16233D] transition-colors disabled:opacity-40"
             >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
 
+          {/* Interactive Loading Button — Deep Navy Theme */}
           <button 
             type="submit" 
             disabled={isLoading} 
-            className="w-full flex items-center justify-center rounded-2xl bg-slate-100 py-3.5 font-semibold text-slate-950 hover:bg-slate-300 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="w-full flex items-center justify-center rounded-sm bg-[#16233D] py-3.5 font-semibold text-[#F1EEE3] hover:bg-[#1B2E4D] active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : "Sign In"}
+            {isLoading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="animate-spin h-4 w-4" />
+                Authenticating...
+              </span>
+            ) : (
+              "Sign In"
+            )}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-500">
+        {/* Redirect Option — Terracotta Red highlight */}
+        <p className="mt-6 text-center text-sm text-[#16233D]/60">
           Don't have an account?{" "}
-          <Link href="/register" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
+          <Link href="/register" className="text-[#B23A2E] hover:text-[#B23A2E]/80 font-semibold underline underline-offset-4 transition-colors">
             Register now
           </Link>
         </p>
 
-        <p className="mt-8 text-center text-[10px] font-medium text-slate-700 uppercase tracking-[0.2em]">
+        {/* Utilitarian Footer */}
+        <p className="mt-8 text-center text-[10px] font-semibold text-[#16233D]/40 uppercase tracking-[0.2em]" style={{ fontFamily: "var(--font-mono, monospace)" }}>
           © 2026 Garrison Market
         </p>
       </div>

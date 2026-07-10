@@ -15,25 +15,41 @@ export async function updateProfileWithPhoto(formData: FormData) {
 
   let imageUrl: string | undefined;
 
+  // Only attempt upload if there is a file
   if (imageFile && imageFile.size > 0) {
-    const blob = await put(imageFile.name, imageFile, {
-      access: 'public',
-      addRandomSuffix: true, 
-    });
-    imageUrl = blob.url;
+    try {
+      // 1. Sanitize the filename to prevent upload crashes
+      const fileExtension = imageFile.name.split('.').pop() || 'jpg';
+      const safeFileName = `profiles/${session.id}-${Date.now()}.${fileExtension}`;
+
+      // 2. Upload to Vercel Blob
+      const blob = await put(safeFileName, imageFile, {
+        access: 'public',
+        contentType: imageFile.type, // Required for proper image handling
+        addRandomSuffix: true, 
+      });
+      imageUrl = blob.url;
+    } catch (error) {
+      console.error("Blob Upload Error:", error);
+      throw new Error("Failed to upload image to storage.");
+    }
   }
 
-  await prisma.user.update({
-    where: { email: session.email },
-    data: { 
-      fullName, 
-      phoneNumber,
-      ...(imageUrl && { image: imageUrl })
-    },
-  });
+  // 3. Update User in DB
+  try {
+    await prisma.user.update({
+      where: { email: session.email },
+      data: { 
+        fullName, 
+        phoneNumber,
+        ...(imageUrl && { image: imageUrl })
+      },
+    });
+  } catch (error) {
+    console.error("Database Update Error:", error);
+    throw new Error("Failed to update profile data.");
+  }
 
-  // Revalidate both paths to ensure the UI updates everywhere
-  revalidatePath("/owner/profile/edit");
   revalidatePath("/owner/profile");
 }
 

@@ -50,7 +50,7 @@ import {
             { label: "Customers", icon: Users, href: "/owner/customers" },
             { label: "Invoices", icon: Receipt, href: "/owner/invoices" },
             { label: "Expenses", icon: CreditCard, href: "/owner/expenses" },
-            { label: "Reports", icon: Activity, href: "/owner/reports" },
+            { label: "Reports", icon: Activity, href: "/owner/report" },
           ]} />
   
           <MenuSection title="Account" items={[
