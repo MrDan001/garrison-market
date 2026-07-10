@@ -23,7 +23,7 @@ import {
           <a href="/owner/dashboard" className="p-2 -ml-2 hover:bg-slate-800 rounded-full transition-colors">
             <ArrowLeft size={20} />
           </a>
-          <h1 className="text-lg font-bold">More</h1>
+          <h1 className="text-lg font-bold">Back</h1>
         </header>
   
         <main className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
