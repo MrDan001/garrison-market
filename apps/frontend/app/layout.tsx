@@ -28,14 +28,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icon-192x192.png" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Garrison Market" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        
-        {/* Safe anti-flash block using Next.js Script wrapper */}
+        {/* Next.js automatically injects metadata and viewport tags here. */}
+        {/* You only need custom tags if they are not supported by the Metadata API. */}
+      </head>
+      <body 
+        className="antialiased bg-[#F1EEE3] text-[#16233D] dark:bg-[#0a0c12] dark:text-slate-200 transition-colors duration-200" 
+        suppressHydrationWarning={true}
+      >
+        {/* Safe anti-flash block using Next.js Script wrapper (Moved out of <head>) */}
         <Script id="theme-anti-flash" strategy="beforeInteractive">
           {`
             try {
@@ -47,11 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             } catch (_) {}
           `}
         </Script>
-      </head>
-      <body 
-        className="antialiased bg-[#F1EEE3] text-[#16233D] dark:bg-[#0a0c12] dark:text-slate-200 transition-colors duration-200" 
-        suppressHydrationWarning={true}
-      >
+        
         {children}
       </body>
     </html>

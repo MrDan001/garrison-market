@@ -4,7 +4,14 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateOwnerStatus, deleteUser } from "@/lib/auth.actions";
 
-export function OwnerActions({ email, status }: { email: string; status: string }) {
+// Added productsSold to the TypeScript interface
+interface OwnerActionsProps {
+  email: string;
+  status: string;
+  productsSold?: string | null; 
+}
+
+export function OwnerActions({ email, status, productsSold }: OwnerActionsProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 

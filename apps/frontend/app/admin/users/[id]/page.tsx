@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Store, Phone, Mail, Calendar, Package } from "lucide-react";
 import { OwnerActions } from "./OwnerActions";
+import Image from "next/image"; // Replaced raw img tag with Next.js Image for optimization
 
 export default async function OwnerDetailsPage({
   params,
@@ -35,9 +36,14 @@ export default async function OwnerDetailsPage({
 
       {/* Header card with photo + status */}
       <div className="bg-[#161821] rounded-2xl border border-slate-800 p-6 mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-5">
-        <div className="h-20 w-20 rounded-full bg-slate-800 flex items-center justify-center text-2xl font-bold text-white overflow-hidden border-2 border-slate-700 shrink-0">
+        <div className="h-20 w-20 rounded-full bg-slate-800 flex items-center justify-center text-2xl font-bold text-white overflow-hidden border-2 border-slate-700 shrink-0 relative">
           {owner.image ? (
-            <img src={owner.image} alt={owner.fullName || "Owner"} className="h-full w-full object-cover" />
+            <Image 
+              src={owner.image} 
+              alt={owner.fullName || "Owner"} 
+              fill
+              className="object-cover"
+            />
           ) : (
             owner.fullName?.charAt(0).toUpperCase() || "?"
           )}
@@ -64,7 +70,7 @@ export default async function OwnerDetailsPage({
           </div>
         </div>
 
-        {/* Shop details — the key info for approval decisions */}
+        {/* Shop details */}
         <div className="bg-[#161821] p-6 rounded-2xl border border-slate-800">
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Shop Details</h2>
           <div className="space-y-3">
@@ -76,6 +82,7 @@ export default async function OwnerDetailsPage({
                 [owner.shopAddress, owner.shopCity, owner.shopState].filter(Boolean).join(", ") || "Not provided"
               }
             />
+            {/* Double-check if owner.productsSold matches your schema.prisma exactly */}
             <InfoRow icon={Package} label="Sells" value={owner.productsSold || "Not provided"} />
           </div>
         </div>
@@ -84,13 +91,14 @@ export default async function OwnerDetailsPage({
       {/* Approve / decline / suspend / delete actions */}
       <div className="bg-[#161821] p-6 rounded-2xl border border-slate-800">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Actions</h2>
-        <OwnerActions email={owner.email} status={owner.status} />
+        <OwnerActions email={owner.email} status={owner.status} productsSold={owner.productsSold} />
       </div>
     </div>
   );
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+// Added correct typing for Lucide icons components instead of 'any'
+function InfoRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string; value: string }) {
   return (
     <div className="flex items-start gap-3">
       <Icon size={15} className="text-slate-600 mt-0.5 shrink-0" />
