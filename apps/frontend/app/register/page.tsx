@@ -3,10 +3,10 @@
 import React, { useState, ChangeEvent, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Store, Phone, MapPin, Upload, Camera, AlertCircle, Mail, Lock, Eye, EyeOff, Loader2, ChevronRight, ShoppingBag } from "lucide-react";
+import { upload } from "@vercel/blob/client";
+import { Store, Phone, MapPin, Upload, Camera, AlertCircle, Mail, Lock, Eye, EyeOff, Loader2, ChevronRight, ShoppingBag, Building2 } from "lucide-react";
 import { registerOwnerAction } from "@/lib/auth.actions";
 
-// Structured dataset of all 36 Nigerian States + FCT and their component LGAs
 const NIGERIAN_LOCATIONS: Record<string, string[]> = {
   "Abia": ["Aba North", "Aba South", "Arochukwu", "Bende", "Ikwuano", "Isiala Ngwa North", "Isiala Ngwa South", "Isuikwuato", "Obi Ngwa", "Ohafia", "Osisioma", "Ugwunagbo", "Ukwa East", "Ukwa West", "Umuahia North", "Umuahia South", "Umu Nneochi"],
   "Adamawa": ["Demsa", "Fufure", "Ganye", "Gayuk", "Gombi", "Girei", "Hong", "Jada", "Lamurde", "Madagali", "Maiha", "Mayo Belwa", "Michika", "Mubi North", "Mubi South", "Numan", "Shelleng", "Song", "Toungo", "Yola North", "Yola South"],
@@ -50,35 +50,30 @@ const NIGERIAN_LOCATIONS: Record<string, string[]> = {
 export default function RegisterPage() {
   const router = useRouter();
 
-  // Form States
   const [storeName, setStoreName] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [products, setProducts] = useState("");
+  const [shopAddress, setShopAddress] = useState(""); // NEW: was missing entirely before
   const [selectedState, setSelectedState] = useState("");
   const [selectedLga, setSelectedLga] = useState("");
-  
-  // Photo Upload States
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  
-  // Status States
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Password Toggle State
   const [showPassword, setShowPassword] = useState(false);
 
-  // Handle cascading state switches
   const handleStateChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const stateValue = e.target.value;
     setSelectedState(stateValue);
-    setSelectedLga(""); // Reset LGA selection when state changes
+    setSelectedLga("");
   };
 
-  // Image Processing & Client Preview
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -94,7 +89,7 @@ export default function RegisterPage() {
 
     setErrorMessage("");
     setImageFile(file);
-    
+
     const reader = new FileReader();
     reader.onloadend = () => {
       setImagePreview(reader.result as string);
@@ -102,54 +97,53 @@ export default function RegisterPage() {
     reader.readAsDataURL(file);
   };
 
-  // Submission handler
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMessage("");
 
     try {
-      // 1. Instantiating standard dynamic browser FormData container
       const formData = new FormData();
-      
-      // 2. Mapping inputs precisely to keys your action schema reads via Object.fromEntries()
+
       formData.append("email", email);
       formData.append("password", password);
       formData.append("fullName", ownerName);
       formData.append("storeName", storeName);
       formData.append("phoneNumber", `+234${phone}`);
-      
-      // UPDATED: Changed from "products" to "productsSold" to align with database column configurations
-      formData.append("productsSold", products); 
-      
-      // Additional location parameters matching shop profile details
+      formData.append("productsSold", products);
+      formData.append("shopAddress", shopAddress); // NEW: field didn't exist before
       formData.append("shopState", selectedState);
-      formData.append("shopCity", selectedLga); // Using LGA as town/city node context split
-      
+      formData.append("shopCity", selectedLga);
+
+      // FIXED: previously appended the raw File under "file", which the
+      // server action never reads — it expects an "imageUrl" string.
+      // Now we actually upload to Vercel Blob client-side first, same
+      // pattern used for inventory/profile photos, then send the URL.
       if (imageFile) {
-        formData.append("file", imageFile);
+        const blob = await upload(imageFile.name, imageFile, {
+          access: "public",
+          handleUploadUrl: "/api/blob/register-upload",
+        });
+        formData.append("imageUrl", blob.url);
       }
 
-      // 3. Fire the server action safely bypassing native direct form actions
       const result = await registerOwnerAction(formData);
 
       if (result?.redirectUrl) {
-        // 4. Catch the redirect token string cleanly as requested by code design annotations
         router.push(result.redirectUrl);
       } else if (result?.error) {
         setErrorMessage(result.error);
+        setIsSubmitting(false);
       }
     } catch (err) {
       setErrorMessage("Registration sequence failed. Please verify connection credentials.");
-    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-[#0D1527] text-[#F1EEE3] flex flex-col justify-between" style={{ fontFamily: "var(--font-body)" }}>
-      
-      {/* Structural Header */}
+
       <header className="border-b border-[#F1EEE3]/10 bg-[#0D1527]/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
@@ -162,11 +156,9 @@ export default function RegisterPage() {
         </div>
       </header>
 
-      {/* Center Layout Container */}
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="max-w-xl w-full bg-[#16233D] rounded-sm p-8 border border-[#F1EEE3]/10 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)]">
-          
-          {/* Standard Configuration Input Form */}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <h1 className="text-2xl font-bold tracking-tight uppercase text-[#F1EEE3]" style={{ fontFamily: "var(--font-display)" }}>
@@ -184,7 +176,6 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* Dynamic Image Upload Engine */}
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>
                 Store / Verification Image
@@ -210,7 +201,6 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Core Corporate Identity Info */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>Store Name</label>
@@ -227,7 +217,6 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Authentication Credentials Block */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>Email Address</label>
@@ -241,16 +230,16 @@ export default function RegisterPage() {
                 <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>Password</label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F1EEE3]/30" />
-                  <input 
-                    required 
-                    type={showPassword ? "text" : "password"} 
-                    placeholder="••••••••••••" 
-                    value={password} 
+                  <input
+                    required
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••••••"
+                    value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] pl-10 pr-12 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] transition" 
+                    className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] pl-10 pr-12 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] transition"
                   />
                   <button
-                    type="button" 
+                    type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-[#F1EEE3]/40 hover:text-[#F1EEE3] transition focus:outline-none"
                   >
@@ -260,26 +249,42 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Core Inventory Input Engine (What they are selling) */}
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>
                 Products / Services Description
               </label>
               <div className="relative">
                 <ShoppingBag size={16} className="absolute left-3 top-3.5 text-[#F1EEE3]/30" />
-                <textarea 
-                  required 
-                  rows={3} 
-                  placeholder="What are you selling? (e.g. Designer Shoes, Wholesale Electronics, Organic Skincare, Phones & Accessories...)" 
-                  value={products} 
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="What are you selling? (e.g. Designer Shoes, Wholesale Electronics, Organic Skincare, Phones & Accessories...)"
+                  value={products}
                   onChange={(e) => setProducts(e.target.value)}
-                  className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] pl-10 pr-4 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] transition resize-none leading-relaxed" 
+                  className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] pl-10 pr-4 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] transition resize-none leading-relaxed"
                 />
               </div>
               <p className="text-[10px] text-[#F1EEE3]/40">Briefly detail your core commodities or specializations so customers can query your node.</p>
             </div>
 
-            {/* Explicit Phone Formatting Engine (+234 Block) */}
+            {/* NEW: Shop Street Address — was completely missing before */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>
+                Shop Address
+              </label>
+              <div className="relative">
+                <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F1EEE3]/30" />
+                <input
+                  required
+                  type="text"
+                  placeholder="Street address of your shop"
+                  value={shopAddress}
+                  onChange={(e) => setShopAddress(e.target.value)}
+                  className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] pl-10 pr-4 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] transition"
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>Phone Number</label>
               <div className="flex rounded-sm overflow-hidden border border-[#F1EEE3]/10 focus-within:border-[#E55345] transition">
@@ -293,7 +298,6 @@ export default function RegisterPage() {
               <p className="text-[10px] text-[#F1EEE3]/40">Input local number configuration omitting initial zero line prefix.</p>
             </div>
 
-            {/* Cascading Location Matrix Dropdowns */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>State</label>
@@ -325,7 +329,6 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Submit Trigger Execution Button */}
             <button
               type="submit"
               disabled={isSubmitting}
@@ -352,7 +355,6 @@ export default function RegisterPage() {
         </div>
       </main>
 
-      {/* Structural Footer */}
       <footer className="py-6 text-center text-[#F1EEE3]/20 text-xs border-t border-[#F1EEE3]/5">
         &copy; {new Date().getFullYear()} Garrison Market Core // Identity Deployment Matrix
       </footer>

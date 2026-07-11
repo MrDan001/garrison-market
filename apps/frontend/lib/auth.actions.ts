@@ -108,55 +108,56 @@ export async function loginAction(formData: FormData) {
   return { redirectUrl };
 }
 
-export async function registerOwnerAction(formData: FormData) {
-  const data = Object.fromEntries(formData.entries());
-
-  try {
-    const hashedPassword = await bcrypt.hash(data.password as string, 10);
-
-    const newUser = await prisma.user.create({
-      data: {
-        email: data.email as string,
-        password: hashedPassword,
-        fullName: data.fullName as string,
-        storeName: (data.storeName as string) || "N/A",
-        phoneNumber: data.phoneNumber as string,
-        // NEW: shop profile details collected at registration
-        shopAddress: (data.shopAddress as string) || null,
-        shopCity: (data.shopCity as string) || null,
-        shopState: (data.shopState as string) || null,
-        productsSold: (data.productsSold as string) || null,
-        role: 'owner',
-        status: 'pending'
+  export async function registerOwnerAction(formData: FormData) {
+    const data = Object.fromEntries(formData.entries());
+  
+    try {
+      const hashedPassword = await bcrypt.hash(data.password as string, 10);
+  
+      const newUser = await prisma.user.create({
+        data: {
+          email: data.email as string,
+          password: hashedPassword,
+          fullName: data.fullName as string,
+          storeName: (data.storeName as string) || "N/A",
+          phoneNumber: data.phoneNumber as string,
+          // NEW: shop profile details collected at registration
+          shopAddress: (data.shopAddress as string) || null,
+          shopCity: (data.shopCity as string) || null,
+          shopState: (data.shopState as string) || null,
+          productsSold: (data.productsSold as string) || null,
+          image: (data.imageUrl as string) || null,
+          role: 'owner',
+          status: 'pending'
+        }
+      });
+  
+      const token = await signToken(newUser.id, newUser.role);
+      const cookieStore = await cookies();
+      cookieStore.set("session-token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+  
+      revalidatePath('/admin/users');
+  
+      // NOTE: no safeRedirect() call here — invoked directly from client code
+      // via a custom onSubmit handler, not a native <form action>. redirect()
+      // throws a signal the client's try/catch would misread as a real
+      // failure. Returning the URL and letting the client router.push() it
+      // avoids a false "Registration failed" flash right before success.
+      return { redirectUrl: '/pending' };
+  
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        return { error: "An account with this email already exists." };
       }
-    });
-
-    const token = await signToken(newUser.id, newUser.role);
-    const cookieStore = await cookies();
-    cookieStore.set("session-token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-
-    revalidatePath('/admin/users');
-
-    // NOTE: no safeRedirect() call here — invoked directly from client code
-    // via a custom onSubmit handler, not a native <form action>. redirect()
-    // throws a signal the client's try/catch would misread as a real
-    // failure. Returning the URL and letting the client router.push() it
-    // avoids a false "Registration failed" flash right before success.
-    return { redirectUrl: '/pending' };
-
-  } catch (error: any) {
-    if (error.code === 'P2002') {
-      return { error: "An account with this email already exists." };
+      console.error("Registration error:", error);
+      return { error: "An unexpected error occurred." };
     }
-    console.error("Registration error:", error);
-    return { error: "An unexpected error occurred." };
   }
-}
 
 export async function logoutAction() {
   const cookieStore = await cookies();
