@@ -351,13 +351,13 @@ export default function HomePage() {
               {[
                 {
                   title: "Standard",
-                  price: "₦25,000",
+                  price: "₦---",
                   features: ["Up to 10 inventory items", "1 staff account", "Daily sales dashboard"],
                   plan: "standard",
                 },
                 {
                   title: "Pro",
-                  price: "₦35,000",
+                  price: "₦---",
                   features: ["Up to 20 inventory items", "2 staff accounts", "Full staff management"],
                   plan: "pro",
                 },
