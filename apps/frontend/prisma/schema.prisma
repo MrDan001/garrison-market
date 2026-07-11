@@ -20,10 +20,16 @@ model User {
   mustChangePassword Boolean     @default(false)
   createdAt          DateTime    @default(now())
   ownerId            Int?
-  
+
+  // ── Shop profile details (collected at registration, reviewed by admin) ──
+  shopAddress        String?
+  shopCity           String?
+  shopState          String?
+  productsSold       String?
+
   // ── Multi-Store Relationship ──
   stores             Store[]     @relation("OwnerStores")
-  
+
   inventory          Inventory[]
   orders             Order[]
   staffOrders        Order[]     @relation("StaffOrders")
@@ -55,11 +61,11 @@ model Inventory {
   id           Int         @id @default(autoincrement())
   name         String
   quantity     Int
-  price        Decimal     
-  costPrice    Decimal?    
-  category     String?     
-  restockLevel Int?        
-  image        String?     
+  price        Decimal
+  costPrice    Decimal?
+  category     String?
+  restockLevel Int?
+  image        String?
   updatedAt    DateTime    @updatedAt
   ownerId      Int
   owner        User        @relation(fields: [ownerId], references: [id])

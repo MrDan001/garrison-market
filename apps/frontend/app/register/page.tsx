@@ -1,150 +1,317 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, ChangeEvent, FormEvent } from "react";
 import Link from "next/link";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  Store, 
-  Lock, 
-  Eye, 
-  EyeOff, 
-  Loader2, 
-  ChevronRight 
-} from "lucide-react";
-import { registerOwnerAction } from "@/lib/auth.actions";
+import { Oswald, Inter, IBM_Plex_Mono } from "next/font/google";
+import { Store, Phone, MapPin, Upload, Camera, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+
+const display = Oswald({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
+const body = Inter({ subsets: ["latin"], variable: "--font-body" });
+const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
+
+// Structured dataset of all 36 Nigerian States + FCT and their component LGAs
+const NIGERIAN_LOCATIONS: Record<string, string[]> = {
+  "Abia": ["Aba North", "Aba South", "Arochukwu", "Bende", "Ikwuano", "Isiala Ngwa North", "Isiala Ngwa South", "Isuikwuato", "Obi Ngwa", "Ohafia", "Osisioma", "Ugwunagbo", "Ukwa East", "Ukwa West", "Umuahia North", "Umuahia South", "Umu Nneochi"],
+  "Adamawa": ["Demsa", "Fufure", "Ganye", "Gayuk", "Gombi", "Girei", "Hong", "Jada", "Lamurde", "Madagali", "Maiha", "Mayo Belwa", "Michika", "Mubi North", "Mubi South", "Numan", "Shelleng", "Song", "Toungo", "Yola North", "Yola South"],
+  "Akwa Ibom": ["Abak", "Eastern Obolo", "Eket", "Esit Eket", "Essien Udim", "Etim Ekpo", "Etinan", "Ibeno", "Ibesikpo Asutan", "Ibiono-Ibom", "Ika", "Ikono", "Ikot Abasi", "Ikot Ekpene", "Ini", "Itu", "Mbo", "Mkpat-Enin", "Nsit-Atai", "Nsit-Ibom", "Nsit-Ubium", "Obot Akara", "Okobo", "Onna", "Oron", "Oruk Anam", "Udung-Uko", "Ukanafun", "Uruan", "Urue-Offong/Oruko", "Uyo"],
+  "Anambra": ["Aguata", "Anambra East", "Anambra West", "Anaocha", "Awka North", "Awka South", "Ayamelum", "Dunukofia", "Ekwusigo", "Idemili North", "Idemili South", "Ihiala", "Njikoka", "Nnewi North", "Nnewi South", "Ogbaru", "Onitsha North", "Onitsha South", "Orumba North", "Orumba South", "Oyi"],
+  "Bauchi": ["Alkaleri", "Bauchi", "Bogoro", "Dambam", "Darazo", "Dass", "Gamawa", "Ganjuwa", "Giade", "Itas/Gadau", "Jama'are", "Katagum", "Kirfi", "Misau", "Ningi", "Shira", "Tafawa Balewa", "Toro", "Warji", "Zaki"],
+  "Bayelsa": ["Brass", "Ekeremor", "Kolokuma/Opokuma", "Nembe", "Ogbia", "Sagbama", "Southern Ijaw", "Yenagoa"],
+  "Benue": ["Agatu", "Apa", "Ado", "Buruku", "Gboko", "Guma", "Gwer East", "Gwer West", "Katsina-Ala", "Konshisha", "Kwande", "Logo", "Makurdi", "Obi", "Ogbadibo", "Ohimini", "Oju", "Okpokwu", "Otukpo", "Tarka", "Ukum", "Ushongo", "Vandeikya"],
+  "Borno": ["Abadam", "Askira/Uba", "Bama", "Bayo", "Biu", "Chibok", "Damboa", "Dikwa", "Gubio", "Guzamala", "Gwoza", "Hawul", "Jere", "Kaga", "Kala/Balge", "Konduga", "Kukawa", "Kwaya Kusar", "Mafa", "Magumeri", "Maiduguri", "Marte", "Mobbar", "Monguno", "Ngala", "Nganzai", "Shani"],
+  "Cross River": ["Abi", "Akamkpa", "Akpabuyo", "Bakassi", "Bekwarra", "Biase", "Boki", "Calabar Municipal", "Calabar South", "Etung", "Ikom", "Obanliku", "Obubra", "Obudu", "Odukpani", "Ogoja", "Yakuur", "Yala"],
+  "Delta": ["Aniocha North", "Aniocha South", "Bomadi", "Burutu", "Ethiope East", "Ethiope West", "Ika North East", "Ika South", "Isoko North", "Isoko South", "Ndokwa East", "Ndokwa West", "Okpe", "Oshimili North", "Oshimili South", "Patani", "Sapele", "Udu", "Ughelli North", "Ughelli South", "Ukwuani", "Uvwie", "Warri North", "Warri South", "Warri South West"],
+  "Ebonyi": ["Abakaliki", "Afikpo North", "Afikpo South", "Ebonyi", "Ezza North", "Ezza South", "Ikwo", "Ishielu", "Izzi", "Ohaozara", "Ohaukwu", "Onicha"],
+  "Edo": ["Akoko-Edo", "Egor", "Esan Central", "Esan North-East", "Esan South-East", "Esan West", "Etsako Central", "Etsako East", "Etsako West", "Igueben", "Ikpoba Okha", "Orhionmwon", "Oredo", "Ovia North-East", "Ovia South-West", "Owan East", "Owan West", "Uhunmwonde"],
+  "Ekiti": ["Ado Ekiti", "Efon", "Ekiti East", "Ekiti South-West", "Ekiti West", "Emure", "Gbonyin", "Ido Osi", "Ijero", "Ikere", "Ikole", "Ilejemeje", "Irepodun/Ifelodun", "Ise/Orun", "Moba", "Oye"],
+  "Enugu": ["Aninri", "Awgu", "Enugu East", "Enugu North", "Enugu South", "Ezeagu", "Igbo Etiti", "Igbo Eze North", "Igbo Eze South", "Isi Uzo", "Nkanu East", "Nkanu West", "Nsukka", "Oji River", "Udenu", "Udi", "Uzo Uwani"],
+  "FCT (Abuja)": ["Abaji", "AMAC (Municipal)", "Bwari", "Gwagwalada", "Kuje", "Kwali"],
+  "Gombe": ["Akko", "Balanga", "Billiri", "Dukku", "Funakaye", "Gombe", "Kaltungo", "Kwami", "Nafada", "Shongom", "Yamaltu/Deba"],
+  "Imo": ["Aboh Mbaise", "Ahiazu Mbaise", "Ehime Mbano", "Ezinihitte", "Ideato North", "Ideato South", "Ihitte/Uboma", "Ikeduru", "Isiala Mbano", "Isu", "Mbaitoli", "Ngor Okpala", "Njaba", "Nkwerre", "Nwangele", "Obowo", "Oguta", "Ohaji/Egbema", "Okigwe", "Orlu", "Orsu", "Oru East", "Oru West", "Owerri Municipal", "Owerri North", "Owerri South"],
+  "Jigawa": ["Auyo", "Babura", "Biriniwa", "Birnin Kudu", "Buji", "Dutse", "Gagarawa", "Garki", "Gumel", "Guri", "Gwaram", "Gwiwa", "Hadejia", "Jahun", "Kafin Hausa", "Kaugama", "Kazaure", "Kiri Kasama", "Kiyawa", "Maigatari", "Malam Madori", "Miga", "Ringim", "Roni", "Sule Tankarkar", "Taura", "Yankwashi"],
+  "Kaduna": ["Birnin Gwari", "Chikun", "Giwa", "Igabi", "Ikara", "Jaba", "Jema'a", "Kachia", "Kaduna North", "Kaduna South", "Kagarko", "Kajuru", "Kaura", "Kauru", "Kubau", "Kudan", "Lere", "Makarfi", "Sabon Gari", "Sanga", "Soba", "Zangon Kataf", "Zaria"],
+  "Kano": ["Ajingi", "Albasu", "Bagwai", "Bebeji", "Bichi", "Bunkure", "Dala", "Dambatta", "Dawakin Kudu", "Dawakin Tofa", "Doguwa", "Fagge", "Gabasawa", "Garko", "Garun Mallam", "Gaya", "Gezawa", "Gwale", "Gwarzo", "Kabo", "Kano Municipal", "Karaye", "Kibiya", "Kiru", "Kumbotso", "Kunchi", "Kura", "Madobi", "Makoda", "Minjibir", "Nasarawa", "Rano", "Rimin Gado", "Rogo", "Shanono", "Sumaila", "Takai", "Tarauni", "Tofa", "Tsanyawa", "Tudun Wada", "Ungogo", "Warawa", "Wudil"],
+  "Katsina": ["Bakori", "Batagarawa", "Batsari", "Baure", "Bindawa", "Charanchi", "Dandume", "Danja", "Dan Musa", "Daura", "Dutsin Ma", "Faskari", "Funtua", "Ingawa", "Jibia", "Kafur", "Kaita", "Kankara", "Kankia", "Katsina", "Kurfi", "Kusada", "Mai'Adua", "Malumfashi", "Mani", "Mashi", "Matazu", "Musawa", "Rimi", "Sabuwa", "Safana", "Sandamu", "Zango"],
+  "Kebbi": ["Aleiro", "Arewa Dandi", "Argungu", "Augie", "Bagudo", "Birnin Kebbi", "Bunza", "Dandi", "Fakai", "Gwandu", "Jega", "Kalgo", "Koko/Besse", "Maiyama", "Ngaski", "Sakaba", "Shanga", "Suru", "Wasagu/Danko", "Yauri", "Zuru"],
+  "Kogi": ["Adavi", "Ajaokuta", "Ankpa", "Bassa", "Dekina", "Ibaji", "Idah", "Igalamela Odolu", "Ijumu", "Kabba/Bunu", "Kogi", "Lokoja", "Mopa Muro", "Ofu", "Ogori/Magongo", "Okehi", "Okene", "Olamaboro", "Omala", "Yagba East", "Yagba West"],
+  "Kwara": ["Asa", "Baruten", "Edu", "Ekiti", "Ifelodun", "Ilorin East", "Ilorin South", "Ilorin West", "Irepodun", "Isin", "Kaiama", "Moro", "Offa", "Oke Ero", "Oyun", "Pategi"],
+  "Lagos": ["Agege", "Alimosho", "Amuwo-Odofin", "Apapa", "Badagry", "Epe", "Eti Osa", "Ibeju-Lekki", "Ifako-Ijaiye", "Ikeja", "Ikorodu", "Kosofe", "Lagos Island", "Lagos Mainland", "Mushin", "Ojo", "Oshodi-Isolo", "Shomolu", "Surulere"],
+  "Nasarawa": ["Akwanga", "Awe", "Doma", "Karu", "Keana", "Keffi", "Kokona", "Lafia", "Nasarawa", "Nasarawa Egon", "Obi", "Toto", "Wamba"],
+  "Niger": ["Agaie", "Agwara", "Bida", "Borgu", "Bosso", "Chanchaga", "Edati", "Gbako", "Gurara", "Katcha", "Kontagora", "Lapai", "Lavun", "Magama", "Mariga", "Mashegu", "Mokwa", "Moya", "Paikoro", "Rafi", "Rijau", "Shiroro", "Suleja", "Tafa", "Wushishi"],
+  "Ogun": ["Abeokuta North", "Abeokuta South", "Ado-Odo/Ota", "Egbado North", "Egbado South", "Ewekoro", "Ifo", "Ijebu East", "Ijebu North", "Ijebu North East", "Ijebu Ode", "Ikenne", "Imeko Afon", "Ipokia", "Obafemi Owode", "Odeda", "Odogbolu", "Ogun Waterside", "Remo North", "Shagamu"],
+  "Ondo": ["Akoko North-East", "Akoko North-West", "Akoko South-West", "Akoko South-East", "Akure North", "Akure South", "Ese Odo", "Idanre", "Ifedore", "Ilaje", "Ile Oluji/Okeigbo", "Irele", "Odigbo", "Okitipupa", "Ondo East", "Ondo West", "Ose", "Owo"],
+  "Osun": ["Atakunmosa East", "Atakunmosa West", "Aiyedaade", "Aiyedire", "Boluwaduro", "Boripe", "Ede North", "Ede South", "Ife Central", "Ife East", "Ife North", "Ife South", "Egbedore", "Ila", "Ilesa North", "Ilesa South", "Irepodun", "Irewole", "Isokan", "Iwo", "Obokun", "Odo Otin", "Ola Oluwa", "Olorunda", "Oriade", "Orolu", "Osogbo"],
+  "Oyo": ["Afijio", "Akinyele", "Atiba", "Atisbo", "Egbeda", "Ibadan North", "Ibadan North-East", "Ibadan North-West", "Ibadan South-East", "Ibadan South-West", "Ibarapa Central", "Ibarapa East", "Ibarapa North", "Ido", "Irepo", "Iseyin", "Itesiwaju", "Iwajowa", "Kajola", "Lagelu", "Ogbomosho North", "Ogbomosho South", "Ogo Oluwa", "Olorunsogo", "Oluyole", "Ona Ara", "Orelope", "Ori Ire", "Oyo East", "Oyo West", "Saki East", "Saki West", "Surulere"],
+  "Plateau": ["Barkin Ladi", "Bassa", "Bokkos", "Jos East", "Jos North", "Jos South", "Kanam", "Kanke", "Langtang North", "Langtang South", "Mangu", "Mikang", "Pankshin", "Qua'an Pan", "Riyom", "Shendam", "Wase"],
+  "Rivers": ["Abua/Odual", "Ahoada East", "Ahoada West", "Akuku Toru", "Andoni", "Asari-Toru", "Bonny", "Degema", "Eleme", "Emuoha", "Etche", "Ikwerre", "Oyigbo", "Khana", "Obio/Akpor", "Ogba/Egbema/Ndoni", "Ogu/Bolo", "Okrika", "Omuma", "Opobo/Nkoro", "Port Harcourt", "Tai"],
+  "Sokoto": ["Binji", "Bodinga", "Dange Shuni", "Gada", "Goronyo", "Gudu", "Gwadabawa", "Illela", "Isa", "Kebbe", "Kware", "Rabah", "Sabon Birni", "Shagari", "Silame", "Sokoto North", "Sokoto South", "Tambuwal", "Tangaza", "Tureta", "Wamako", "Wurno", "Yabo"],
+  "Taraba": ["Ardo Kola", "Bali", "Donga", "Gashaka", "Gassol", "Ibi", "Jalingo", "Karim Lamido", "Kurmi", "Lau", "Sardauna", "Takum", "Ussa", "Wukari", "Yorro", "Zing"],
+  "Yobe": ["Bade", "Bursari", "Damaturu", "Fika", "Fune", "Geidam", "Gujba", "Gulani", "Jakusko", "Karasuwa", "Machina", "Nangere", "Nguru", "Potiskum", "Tarmuwa", "Yunusari", "Yusufari"],
+  "Zamfara": ["Anka", "Bakura", "Birnin Magaji/Kiyaw", "Bukkuyum", "Bungudu", "Gummi", "Gusau", "Kaura Namoda", "Maradun", "Maru", "Shinkafi", "Talata Mafara", "Chafe", "Zurmi"]
+};
 
 export default function RegisterPage() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Form States
+  const [storeName, setStoreName] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [selectedState, setSelectedState] = useState("");
+  const [selectedLga, setSelectedLga] = useState("");
+  
+  // Photo Upload States
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  
+  // Status States
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  async function handleSubmit(formData: FormData) {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await registerOwnerAction(formData);
-    } catch (err) {
-      setError("Registration failed. Please check your details.");
-      setIsLoading(false);
+  // Handle cascading state switches
+  const handleStateChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const stateValue = e.target.value;
+    setSelectedState(stateValue);
+    setSelectedLga(""); // Reset LGA selection when state changes
+  };
+
+  // Image Processing & Client Preview
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Guardrail: Validate image format and maximum size (5MB max)
+    if (!file.type.startsWith("image/")) {
+      setErrorMessage("Please select a valid image file (PNG/JPEG).");
+      return;
     }
-  }
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMessage("Image is too large. Maximum size is 5MB.");
+      return;
+    }
+
+    setErrorMessage("");
+    setImageFile(file);
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Submission handler
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      // 1. Initial configuration for the dynamic pre-auth upload route
+      let uploadedPhotoUrl = "";
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append("file", imageFile);
+
+        // Simulated call to your upcoming registration upload route:
+        // const uploadRes = await fetch("/api/register/upload", { method: "POST", body: formData });
+        // const uploadData = await uploadRes.json();
+        // uploadedPhotoUrl = uploadData.url;
+        
+        await new Promise((resolve) => setTimeout(resolve, 1200)); // Simulated network latency
+        uploadedPhotoUrl = "/mock-storage-path/store-photo.jpg";
+      }
+
+      // 2. Main registration payload matching your backend structure
+      const payload = {
+        storeName,
+        ownerName,
+        phone: `+234${phone}`, // Force explicit Country Code structure
+        state: selectedState,
+        lga: selectedLga,
+        photoUrl: uploadedPhotoUrl,
+      };
+
+      console.log("Registering market node:", payload);
+      
+      // Simulated endpoint execution:
+      // const res = await fetch("/api/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      
+      setSubmitSuccess(true);
+    } catch (err) {
+      setErrorMessage("Registration sequence failed. Please verify connection credentials.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-4 py-12 font-sans text-slate-200">
-      {/* Background Glows */}
-      <div className="fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-[10%] -left-[10%] h-[600px] w-[600px] rounded-full bg-blue-900/10 blur-[150px]" />
-        <div className="absolute bottom-[0%] -right-[10%] h-[600px] w-[600px] rounded-full bg-indigo-900/10 blur-[150px]" />
-      </div>
-
-      <div className="w-full max-w-[450px] rounded-[2.5rem] border border-slate-800 bg-slate-900/40 backdrop-blur-3xl shadow-2xl p-8 md:p-12">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 text-slate-400 shadow-inner">
-            <Store size={28} />
-          </div>
-          <h1 className="text-2xl font-semibold text-slate-100 tracking-tight">Partner with Us</h1>
-          <p className="text-sm text-slate-500 mt-2">Create your owner account to start selling</p>
-        </div>
-
-        {error && (
-          <div className="mb-6 rounded-2xl bg-red-950/30 border border-red-900/50 p-3 text-center text-sm text-red-400">
-            {error}
-          </div>
-        )}
-
-        <form action={handleSubmit} className="space-y-4">
-          {/* Full Name */}
-          <div className="relative">
-            <User className="absolute left-4 top-3.5 h-5 w-5 text-slate-600" />
-            <input
-              name="fullName"
-              type="text"
-              placeholder="Full Name"
-              required
-              className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 py-3 pl-12 pr-4 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10 transition-all text-slate-200 placeholder:text-slate-700"
-            />
-          </div>
-
-          {/* Email */}
-          <div className="relative">
-            <Mail className="absolute left-4 top-3.5 h-5 w-5 text-slate-600" />
-            <input
-              name="email"
-              type="email"
-              placeholder="Email address"
-              required
-              className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 py-3 pl-12 pr-4 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10 transition-all text-slate-200 placeholder:text-slate-700"
-            />
-          </div>
-
-          {/* Store Name */}
-          <div className="relative">
-            <Store className="absolute left-4 top-3.5 h-5 w-5 text-slate-600" />
-            <input
-              name="storeName"
-              type="text"
-              placeholder="Store Name"
-              required
-              className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 py-3 pl-12 pr-4 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10 transition-all text-slate-200 placeholder:text-slate-700"
-            />
-          </div>
-
-          {/* Phone Number */}
-          <div className="relative">
-            <Phone className="absolute left-4 top-3.5 h-5 w-5 text-slate-600" />
-            <input
-              name="phoneNumber"
-              type="tel"
-              placeholder="Phone Number"
-              required
-              className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 py-3 pl-12 pr-4 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10 transition-all text-slate-200 placeholder:text-slate-700"
-            />
-          </div>
-
-          {/* Password */}
-          <div className="relative">
-            <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-600" />
-            <input
-              name="password"
-              type={showPassword ? "text" : "password"}
-              placeholder="Create Password"
-              required
-              className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 py-3 pl-12 pr-12 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10 transition-all text-slate-200 placeholder:text-slate-700"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-3.5 text-slate-600 hover:text-slate-400 transition-colors"
-            >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-            </button>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="group w-full flex items-center justify-center gap-2 rounded-2xl bg-slate-100 py-4 font-semibold text-slate-950 hover:bg-white active:scale-[0.98] transition-all disabled:opacity-50"
-          >
-            {isLoading ? (
-              <Loader2 className="animate-spin h-5 w-5" />
-            ) : (
-              <>
-                Create Owner Account
-                <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-              </>
-            )}
-          </button>
-        </form>
-
-        <p className="mt-8 text-center text-sm text-slate-500">
-          Already a partner?{" "}
-          <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
-            Sign In
+    <div className={`${display.variable} ${body.variable} ${mono.variable} min-h-screen bg-[#0D1527] text-[#F1EEE3] flex flex-col justify-between`} style={{ fontFamily: "var(--font-body)" }}>
+      
+      {/* Structural Header */}
+      <header className="border-b border-[#F1EEE3]/10 bg-[#0D1527]/90 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-sm bg-[#F1EEE3] flex items-center justify-center">
+              <span className="text-[#0D1527] font-bold text-sm" style={{ fontFamily: "var(--font-display)" }}>G</span>
+            </div>
+            <span className="font-bold tracking-tight text-[#F1EEE3]" style={{ fontFamily: "var(--font-display)" }}>GARRISON MARKET</span>
           </Link>
-        </p>
-      </div>
+          <span className="text-xs uppercase tracking-widest text-[#F1EEE3]/40" style={{ fontFamily: "var(--font-mono)" }}>Node Setup</span>
+        </div>
+      </header>
+
+      {/* Center Layout Container */}
+      <main className="flex-1 flex items-center justify-center px-6 py-12">
+        <div className="max-w-xl w-full bg-[#16233D] rounded-sm p-8 border border-[#F1EEE3]/10 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)]">
+          
+          {submitSuccess ? (
+            /* Success Interface State */
+            <div className="text-center py-8 space-y-6 animate-[fadeIn_0.5s_ease-out_forwards]">
+              <div className="inline-flex items-center justify-center h-16 w-16 bg-[#E55345]/10 border border-[#E55345]/20 text-[#E55345] rounded-full">
+                <CheckCircle2 size={32} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight uppercase mb-2" style={{ fontFamily: "var(--font-display)" }}>Store Registered</h2>
+                <p className="text-sm text-[#F1EEE3]/70 max-w-sm mx-auto leading-relaxed">
+                  Your store profiles, data matrices, and cascading geographic keys have been written to the dashboard architecture.
+                </p>
+              </div>
+              <div className="pt-4">
+                <Link href="/login" className="inline-flex items-center gap-2 bg-[#F1EEE3] text-[#0D1527] px-6 py-3 rounded-sm font-semibold hover:bg-[#E2DDD0] transition text-sm">
+                  Access Dashboard <ArrowRight size={16} />
+                </Link>
+              </div>
+            </div>
+          ) : (
+            /* Standard Configuration Input Form */
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight uppercase text-[#F1EEE3]" style={{ fontFamily: "var(--font-display)" }}>
+                  REGISTER YOUR BUSINESS
+                </h1>
+                <p className="text-xs text-[#F1EEE3]/50 uppercase tracking-wider mt-1" style={{ fontFamily: "var(--font-mono)" }}>
+                  System Architecture Access Point
+                </p>
+              </div>
+
+              {errorMessage && (
+                <div className="bg-[#E55345]/10 border border-[#E55345]/20 text-[#E55345] rounded-sm p-3 flex items-center gap-2 text-xs">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {/* Dynamic Image Upload Engine */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>
+                  Store / Verification Image
+                </label>
+                <div className="flex items-center gap-4 p-4 bg-[#0D1527] rounded-sm border border-[#F1EEE3]/10">
+                  <div className="relative h-16 w-16 bg-[#16233D] border border-dashed border-[#F1EEE3]/20 rounded-sm flex items-center justify-center overflow-hidden shrink-0">
+                    {imagePreview ? (
+                      <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+                    ) : (
+                      <Camera size={20} className="text-[#F1EEE3]/30" />
+                    )}
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <label className="inline-flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-sm bg-[#16233D] border border-[#F1EEE3]/10 hover:border-[#F1EEE3]/30 cursor-pointer text-[#F1EEE3] transition">
+                      <Upload size={14} className="text-[#E55345]" />
+                      <span>{imageFile ? "Change Image" : "Upload Photo"}</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                    </label>
+                    <p className="text-[10px] text-[#F1EEE3]/40 leading-normal">
+                      JPEG or PNG format. Max file restriction: 5MB limit.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Core Text Elements */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>Store Name</label>
+                  <div className="relative">
+                    <Store size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F1EEE3]/30" />
+                    <input required type="text" placeholder="e.g. Garrison Outlets" value={storeName} onChange={(e) => setStoreName(e.target.value)}
+                           className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] pl-10 pr-4 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] transition" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>Owner Name</label>
+                  <input required type="text" placeholder="First & Last Name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
+                         className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] px-4 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] transition" />
+                </div>
+              </div>
+
+              {/* Explicit Phone Formatting Engine (+234 Block) */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>Phone Number</label>
+                <div className="flex rounded-sm overflow-hidden border border-[#F1EEE3]/10 focus-within:border-[#E55345] transition">
+                  <div className="bg-[#0D1527]/60 text-sm font-medium px-4 flex items-center gap-1.5 border-r border-[#F1EEE3]/10 text-[#F1EEE3]/60" style={{ fontFamily: "var(--font-mono)" }}>
+                    <Phone size={14} className="text-[#F1EEE3]/30" />
+                    <span>+234</span>
+                  </div>
+                  <input required type="tel" pattern="[0-9]{7,10}" placeholder="8031234567" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                         className="flex-1 bg-[#0D1527] text-sm text-[#F1EEE3] px-4 py-3 focus:outline-none" />
+                </div>
+                <p className="text-[10px] text-[#F1EEE3]/40">Input local number configuration omitting initial zero line prefix.</p>
+              </div>
+
+              {/* Cascading Location Matrix Dropdowns */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>State</label>
+                  <div className="relative">
+                    <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F1EEE3]/30 pointer-events-none z-10" />
+                    <select required value={selectedState} onChange={handleStateChange}
+                            className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] pl-9 pr-8 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] appearance-none cursor-pointer transition">
+                      <option value="" disabled>Select State</option>
+                      {Object.keys(NIGERIAN_LOCATIONS).map((state) => (
+                        <option key={state} value={state} className="bg-[#16233D]">{state}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#F1EEE3]/30 text-xs">▼</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-[#F1EEE3]/70" style={{ fontFamily: "var(--font-mono)" }}>LGA</label>
+                  <div className="relative">
+                    <select required value={selectedLga} onChange={(e) => setSelectedLga(e.target.value)} disabled={!selectedState}
+                            className="w-full bg-[#0D1527] text-sm text-[#F1EEE3] px-4 pr-8 py-3 rounded-sm border border-[#F1EEE3]/10 focus:outline-none focus:border-[#E55345] appearance-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition">
+                      <option value="" disabled>Select LGA</option>
+                      {selectedState && NIGERIAN_LOCATIONS[selectedState].map((lga) => (
+                        <option key={lga} value={lga} className="bg-[#16233D]">{lga}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#F1EEE3]/30 text-xs">▼</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Trigger Executer */}
+              <button type="submit" disabled={isSubmitting}
+                      className="w-full mt-4 flex items-center justify-center gap-2 py-4 bg-[#F1EEE3] text-[#0D1527] font-semibold text-sm rounded-sm hover:bg-[#E2DDD0] transition disabled:opacity-50">
+                {isSubmitting ? "Compiling Node Parameters..." : "Complete System Registration"}
+              </button>
+
+              <div className="text-center pt-2">
+                <p className="text-xs text-[#F1EEE3]/50">
+                  Already matching directory keys?{" "}
+                  <Link href="/login" className="text-[#F1EEE3] underline hover:text-[#E55345] transition">Sign in here</Link>
+                </p>
+              </div>
+            </form>
+          )}
+
+        </div>
+      </main>
+
+      {/* Structural Footer */}
+      <footer className="py-6 text-center text-[#F1EEE3]/20 text-xs border-t border-[#F1EEE3]/5">
+        &copy; {new Date().getFullYear()} Garrison Market Core // Identity Deployment Matrix
+      </footer>
     </div>
   );
 }

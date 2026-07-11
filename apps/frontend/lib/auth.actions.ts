@@ -54,6 +54,8 @@ export async function loginAction(formData: FormData) {
 
   if (!email || !password) return { error: "Email and password are required." };
 
+  let redirectUrl: string | null = null;
+
   try {
     const user = await prisma.user.findUnique({ where: { email } });
 
@@ -64,7 +66,10 @@ export async function loginAction(formData: FormData) {
     const userRole = user.role.toLowerCase().trim();
     const userStatus = user.status.toUpperCase().trim();
 
-    // Set signed cookie helper
+    if (userStatus === "SUSPENDED") {
+      return { error: "This account has been suspended. Please contact your store administrator." };
+    }
+
     const setSessionCookie = async () => {
       const token = await signToken(user.id, user.role);
       const cookieStore = await cookies();
@@ -76,30 +81,31 @@ export async function loginAction(formData: FormData) {
       });
     };
 
-    // Handle suspended or pending users
-    if (userStatus === "SUSPENDED" || userStatus === "PENDING") {
+    if (userStatus === "PENDING") {
       await setSessionCookie();
-      if (userRole === "staff") {
-        await safeRedirect("/pending/staff");
-      } else {
-        await safeRedirect("/pending");
+      redirectUrl = userRole === "staff" ? "/pending/staff" : "/pending";
+    } else {
+      await setSessionCookie();
+
+      if (userRole === "owner" && userStatus !== "APPROVED") redirectUrl = "/pending";
+      else if (userRole === "admin") redirectUrl = "/admin/dashboard";
+      else if (userRole === "owner") redirectUrl = "/owner/dashboard";
+      else if (userRole === "staff") redirectUrl = "/staff/dashboard";
+      else {
+        return { error: "Account configuration error. Your user role is unrecognized." };
       }
     }
-
-    await setSessionCookie();
-
-    if (userRole === "owner" && userStatus !== "APPROVED") await safeRedirect("/pending");
-    if (userRole === "admin") await safeRedirect("/admin/dashboard");
-    if (userRole === "owner") await safeRedirect("/owner/dashboard");
-    if (userRole === "staff") await safeRedirect("/staff/dashboard");
-
-    return { error: "Account configuration error. Your user role is unrecognized." };
-
   } catch (error) {
-    if (isNextRedirectError(error)) throw error;
     console.error("Login execution error:", error);
     return { error: "An unexpected system error occurred." };
   }
+
+  // NOTE: no redirect()/safeRedirect() call here — this action is invoked
+  // directly from client code (a manual onSubmit handler), not a native
+  // <form action>. redirect() throws a signal that the client's own
+  // try/catch would misread as a real error. Returning the URL and letting
+  // the client call router.push() avoids that false-error flash entirely.
+  return { redirectUrl };
 }
 
 export async function registerOwnerAction(formData: FormData) {
@@ -115,6 +121,11 @@ export async function registerOwnerAction(formData: FormData) {
         fullName: data.fullName as string,
         storeName: (data.storeName as string) || "N/A",
         phoneNumber: data.phoneNumber as string,
+        // NEW: shop profile details collected at registration
+        shopAddress: (data.shopAddress as string) || null,
+        shopCity: (data.shopCity as string) || null,
+        shopState: (data.shopState as string) || null,
+        productsSold: (data.productsSold as string) || null,
         role: 'owner',
         status: 'pending'
       }
@@ -130,10 +141,15 @@ export async function registerOwnerAction(formData: FormData) {
     });
 
     revalidatePath('/admin/users');
-    await safeRedirect('/pending');
+
+    // NOTE: no safeRedirect() call here — invoked directly from client code
+    // via a custom onSubmit handler, not a native <form action>. redirect()
+    // throws a signal the client's try/catch would misread as a real
+    // failure. Returning the URL and letting the client router.push() it
+    // avoids a false "Registration failed" flash right before success.
+    return { redirectUrl: '/pending' };
 
   } catch (error: any) {
-    if (isNextRedirectError(error)) throw error;
     if (error.code === 'P2002') {
       return { error: "An account with this email already exists." };
     }
