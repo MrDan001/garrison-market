@@ -13,6 +13,7 @@ interface Props {
   initialQuantity: number;
   initialCostPrice: number;
   initialPrice: number;
+  initialCategory: string; // Added this property[cite: 3, 4]
   initialRestockLevel: number;
   initialImage: string | null;
 }
@@ -23,6 +24,7 @@ export default function InventoryEditForm({
   initialQuantity,
   initialCostPrice,
   initialPrice,
+  initialCategory, // Added this prop[cite: 3, 4]
   initialRestockLevel,
   initialImage,
 }: Props) {
