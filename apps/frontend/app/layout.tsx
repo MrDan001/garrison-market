@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script'; // 👈 Imported Next.js Script component
 import "./styles.css";
 
 export const metadata: Metadata = {
@@ -38,27 +39,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Next.js automatically injects metadata and viewport tags here. */}
-        {/* You only need custom tags if they are not supported by the Metadata API. */}
-
-        {/*
-          NOTE: switched from next/script's <Script strategy="beforeInteractive">
-          to a plain raw <script> tag here. This is the standard pattern for
-          anti-flash/theme scripts (used by libraries like next-themes) —
-          browsers execute <script> tags in <head> synchronously during HTML
-          parsing, which is what actually prevents the flash. next/script's
-          beforeInteractive strategy was throwing a render error under this
-          Next 16 + Turbopack combination regardless of children vs
-          dangerouslySetInnerHTML, so this sidesteps it entirely.
-        */}
-        <script
-          id="theme-anti-flash"
-          dangerouslySetInnerHTML={{ __html: themeAntiFlashScript }}
-        />
       </head>
       <body
         className="antialiased bg-[#F1EEE3] text-[#16233D] dark:bg-[#0a0c12] dark:text-slate-200 transition-colors duration-200"
         suppressHydrationWarning={true}
       >
+        {/* 
+          Using native Next.js Script component with beforeInteractive strategy 
+          placed here inside the body ensures it runs before React hydration kicks in,
+          completely removing the "script tag while rendering" console error.
+        */}
+        <Script
+          id="theme-anti-flash"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: themeAntiFlashScript }}
+        />
         {children}
       </body>
     </html>

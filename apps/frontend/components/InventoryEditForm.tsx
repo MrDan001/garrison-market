@@ -13,7 +13,6 @@ interface Props {
   initialQuantity: number;
   initialCostPrice: number;
   initialPrice: number;
-  initialCategory: string;
   initialRestockLevel: number;
   initialImage: string | null;
 }
@@ -24,7 +23,6 @@ export default function InventoryEditForm({
   initialQuantity,
   initialCostPrice,
   initialPrice,
-  initialCategory,
   initialRestockLevel,
   initialImage,
 }: Props) {
@@ -32,7 +30,6 @@ export default function InventoryEditForm({
   const [quantity, setQuantity] = useState<number>(initialQuantity);
   const [costPrice, setCostPrice] = useState<number>(initialCostPrice);
   const [price, setPrice] = useState<number>(initialPrice);
-  const [category, setCategory] = useState(initialCategory);
   const [restockLevel, setRestockLevel] = useState<number>(initialRestockLevel);
   const [imagePreview, setImagePreview] = useState<string | null>(initialImage);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -188,23 +185,6 @@ export default function InventoryEditForm({
                 className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Categories *
-            </label>
-            <select
-              name="category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none appearance-none"
-            >
-              <option value="phones">Phones</option>
-              <option value="charger">Charger</option>
-              <option value="headsets">Headsets</option>
-              <option value="pouch">Pouch</option>
-            </select>
           </div>
 
           <div>

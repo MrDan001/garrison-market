@@ -1,7 +1,7 @@
 import { 
     ChevronRight, Store, LayoutDashboard, 
     Activity, CreditCard, Users, Receipt, 
-    Settings, LogOut, ArrowLeft 
+    Settings, LogOut, ArrowLeft, History 
   } from "lucide-react";
   import { getSessionUser } from "@/lib/auth";
   import { redirect } from "next/navigation";
@@ -47,11 +47,12 @@ import {
           </a>
   
           <MenuSection title="Business" items={[
-            { label: "Customers", icon: Users, href: "/owner/customers" },
-            { label: "Invoices", icon: Receipt, href: "/owner/invoices" },
-            { label: "Expenses", icon: CreditCard, href: "/owner/expenses" },
-            { label: "Reports", icon: Activity, href: "/owner/report" },
-          ]} />
+    { label: "Customers", icon: Users, href: "/owner/customers" },
+    { label: "Invoices", icon: Receipt, href: "/owner/invoices" },
+    { label: "Expenses", icon: CreditCard, href: "/owner/expenses" },
+    { label: "Reports", icon: Activity, href: "/owner/report" },
+    { label: "History", icon: History, href: "/owner/history" }, // Updated href to point to your new orders/history route!
+]} />
   
           <MenuSection title="Account" items={[
             { label: "My Stores", icon: Store, href: "/owner/stores" },
