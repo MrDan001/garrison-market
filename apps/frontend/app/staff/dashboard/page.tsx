@@ -1,8 +1,14 @@
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle } from "lucide-react";
+import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart } from "lucide-react";
 import Link from "next/link";
+
+type ActivityItem =
+  | { type: "sale"; id: string; date: Date; amount: number }
+  | { type: "report"; id: string; date: Date; authorName: string; snippet: string }
+  | { type: "alert"; id: string; date: Date; itemName: string; quantity: number; isOutOfStock: boolean }
+  | { type: "restock"; id: string; date: Date; itemName: string; quantity: number };
 
 export default async function StaffDashboard() {
   const session = await getSessionUser();
@@ -10,7 +16,7 @@ export default async function StaffDashboard() {
 
   const staff = await prisma.user.findUnique({
     where: { email: session.email },
-    select: { fullName: true, role: true, status: true, image: true },
+    select: { id: true, fullName: true, role: true, status: true, image: true, ownerId: true },
   });
 
   const userRole = staff?.role?.toLowerCase().trim();
@@ -28,22 +34,82 @@ export default async function StaffDashboard() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // ── Merged into ONE aggregate query instead of count() + findMany() ──
-  const todayAgg = await prisma.order.aggregate({
-    where: { staffId: session.id, date: { gte: today } },
-    _count: true,
-    _sum: { total: true },
-  });
+  const [todayAgg, recentSales, recentReports, inventoryItems] = await Promise.all([
+    prisma.order.aggregate({
+      where: { staffId: staff.id, date: { gte: today } },
+      _count: true,
+      _sum: { total: true },
+    }),
+    prisma.order.findMany({
+      where: { staffId: staff.id },
+      take: 5,
+      orderBy: { date: "desc" },
+      select: { id: true, total: true, date: true },
+    }),
+    prisma.report.findMany({
+      where: { ownerId: staff.ownerId ?? undefined },
+      take: 5,
+      orderBy: { date: "desc" },
+      select: { id: true, content: true, date: true, author: { select: { fullName: true } } },
+    }),
+    prisma.inventory.findMany({
+      where: { ownerId: staff.ownerId ?? undefined },
+      select: { id: true, name: true, quantity: true, restockLevel: true, updatedAt: true, createdAt: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
 
   const todayOrders = todayAgg._count;
-  // NOTE: dropped the `(o: { total: number | string })` annotation — Prisma's
-  // aggregate _sum.total is typed as Decimal | null, not number | string,
-  // which is what caused the compile error. Number() handles the conversion.
   const todaySales = Number(todayAgg._sum.total ?? 0);
+
+  const saleItems: ActivityItem[] = recentSales.map((order) => ({
+    type: "sale",
+    id: `sale-${order.id}`,
+    date: order.date,
+    amount: Number(order.total),
+  }));
+
+  const reportItems: ActivityItem[] = recentReports.map((report) => ({
+    type: "report",
+    id: `report-${report.id}`,
+    date: report.date,
+    authorName: report.author?.fullName || "Staff",
+    snippet: report.content.length > 60 ? report.content.slice(0, 60) + "…" : report.content,
+  }));
+
+  const alertItems: ActivityItem[] = inventoryItems
+    .filter((item) => item.restockLevel != null && item.quantity <= item.restockLevel)
+    .slice(0, 5)
+    .map((item) => ({
+      type: "alert",
+      id: `alert-${item.id}`,
+      date: item.updatedAt,
+      itemName: item.name,
+      quantity: item.quantity,
+      isOutOfStock: item.quantity <= 0,
+    }));
+
+  const restockItems: ActivityItem[] = inventoryItems
+    .filter((item) => {
+      const isEstablished = item.updatedAt.getTime() - item.createdAt.getTime() > 60_000;
+      const isHealthyNow = item.restockLevel == null || item.quantity > item.restockLevel;
+      return isEstablished && isHealthyNow && item.quantity > 0;
+    })
+    .slice(0, 5)
+    .map((item) => ({
+      type: "restock",
+      id: `restock-${item.id}`,
+      date: item.updatedAt,
+      itemName: item.name,
+      quantity: item.quantity,
+    }));
+
+  const activityFeed = [...saleItems, ...reportItems, ...alertItems, ...restockItems]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, 8);
 
   return (
     <div className="h-screen w-screen bg-[#0A0C10] text-slate-200 flex flex-col overflow-hidden">
-      {/* ── Top Nav Bar (Staff Portal Theme) ── */}
       <header className="sticky top-0 z-50 bg-[#0a0c12]/80 backdrop-blur-xl border-b border-slate-800/50 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4 flex-shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
@@ -53,7 +119,6 @@ export default async function StaffDashboard() {
             <p className="text-[11px] text-slate-500 leading-none">Staff Portal</p>
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-sm font-semibold text-white truncate leading-none">{staff.fullName}</p>
-
               <span className="relative flex h-1.5 w-1.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
@@ -72,7 +137,6 @@ export default async function StaffDashboard() {
               </span>
             )}
           </div>
-
           <Link
             href="/login"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 transition-all duration-150"
@@ -83,15 +147,12 @@ export default async function StaffDashboard() {
         </div>
       </header>
 
-      {/* Main scrollable content container */}
       <div className="flex-1 overflow-y-auto pt-6 pb-28">
-        {/* Profile Greetings Block inside body */}
         <div className="px-5 mb-6">
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">{greeting}</p>
           <h1 className="text-2xl font-bold text-white tracking-tight">{firstName} 👋</h1>
         </div>
 
-        {/* Today's Stats */}
         <div className="px-5 mb-6">
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
@@ -111,7 +172,6 @@ export default async function StaffDashboard() {
           </div>
         </div>
 
-        {/* Quick Actions */}
         <div className="px-5 mb-6">
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -137,26 +197,21 @@ export default async function StaffDashboard() {
           </div>
         </div>
 
-        {/* Today's Activity */}
         <div className="px-5">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Today's Activity</h2>
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 text-center">
-            {todayOrders === 0 ? (
-              <>
-                <ShoppingBag size={28} className="mx-auto mb-2 text-slate-700" />
-                <p className="text-slate-500 text-sm">No sales yet today</p>
-              </>
+          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recent Activity</h2>
+          <div className="space-y-3">
+            {activityFeed.length > 0 ? (
+              activityFeed.map((item) => <ActivityRow key={item.id} item={item} />)
             ) : (
-              <>
-                <p className="text-2xl font-bold text-emerald-400 mb-1">₦{todaySales.toLocaleString()}</p>
-                <p className="text-slate-400 text-sm">{todayOrders} order{todayOrders !== 1 ? "s" : ""} processed today</p>
-              </>
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 text-center">
+                <ShoppingBag size={28} className="mx-auto mb-2 text-slate-700" />
+                <p className="text-slate-500 text-sm">No recent activity yet.</p>
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Bottom Navigation Bar ── */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#0d0f18]/95 backdrop-blur-xl border-t border-slate-800/50 px-4 py-2 z-50">
         <div className="flex items-end justify-around max-w-md mx-auto">
           <Link href="/staff/invoice" className="flex flex-col items-center gap-1 py-2 px-3 group">
@@ -194,6 +249,64 @@ export default async function StaffDashboard() {
             <span className="text-[10px] text-slate-500 group-active:text-emerald-400 transition-colors">Profile</span>
           </Link>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+  if (item.type === "sale") {
+    return (
+      <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+            <ShoppingCart size={14} className="text-emerald-400" />
+          </div>
+          <p className="text-sm font-medium text-slate-200">Sale confirmed</p>
+        </div>
+        <p className="text-sm font-bold text-emerald-400 shrink-0">₦{item.amount.toLocaleString()}</p>
+      </div>
+    );
+  }
+
+  if (item.type === "report") {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+          <ClipboardList size={14} className="text-amber-400" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-200">Report submitted</p>
+          <p className="text-[11px] text-slate-500 truncate">by {item.authorName} — {item.snippet}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "restock") {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+          <PackageCheck size={14} className="text-emerald-400" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
+          <p className="text-[11px] text-emerald-400 truncate">Restocked — {item.quantity} in stock</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+      <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${item.isOutOfStock ? "bg-rose-500/10" : "bg-amber-500/10"}`}>
+        <AlertTriangle size={14} className={item.isOutOfStock ? "text-rose-400" : "text-amber-400"} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
+        <p className={`text-[11px] truncate ${item.isOutOfStock ? "text-rose-400" : "text-amber-400"}`}>
+          {item.isOutOfStock ? "Out of stock" : `Low stock — ${item.quantity} left`}
+        </p>
       </div>
     </div>
   );

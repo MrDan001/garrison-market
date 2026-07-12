@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, ShoppingCart, Settings, Activity, LogOut, TrendingUp, Store, Plus, Banknote } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Activity, LogOut, TrendingUp, Store, Plus, Banknote, ClipboardList, AlertTriangle, PackageCheck } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -14,6 +14,12 @@ function isNextRedirectError(error: unknown): boolean {
     (error as any).digest.startsWith("NEXT_REDIRECT")
   );
 }
+
+type ActivityItem =
+  | { type: "sale"; id: string; date: Date; amount: number; staffName: string }
+  | { type: "report"; id: string; date: Date; authorName: string; snippet: string }
+  | { type: "alert"; id: string; date: Date; itemName: string; quantity: number; isOutOfStock: boolean }
+  | { type: "restock"; id: string; date: Date; itemName: string; quantity: number };
 
 export default async function OwnerDashboardPage() {
   try {
@@ -48,10 +54,7 @@ export default async function OwnerDashboardPage() {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    // ── 3 concurrent queries instead of 4 ──
-    // "orders today" count + "today's revenue" sum are now ONE aggregate
-    // query instead of two separate round-trips (count() + findMany()).
-    const [salesData, activeProducts, todayAgg] = await Promise.all([
+    const [salesData, activeProducts, todayAgg, recentReports, lowStockItems] = await Promise.all([
       prisma.order.findMany({
         where: { ownerId: user.id, date: { gte: ninetyDaysAgo } },
         select: { total: true, date: true },
@@ -63,22 +66,90 @@ export default async function OwnerDashboardPage() {
         _count: true,
         _sum: { total: true },
       }),
+      // Recent staff report submissions
+      prisma.report.findMany({
+        where: { ownerId: user.id },
+        take: 5,
+        orderBy: { date: "desc" },
+        select: {
+          id: true,
+          content: true,
+          date: true,
+          author: { select: { fullName: true } },
+        },
+      }),
+      // Items currently low or out of stock — ordered by last update as a
+      // proxy for recency (no dedicated event log exists for this yet)
+      prisma.inventory.findMany({
+        where: { ownerId: user.id },
+        select: { id: true, name: true, quantity: true, restockLevel: true, updatedAt: true, createdAt: true },
+        orderBy: { updatedAt: "desc" },
+      }),
     ]);
 
     const ordersToday = todayAgg._count;
     const todaySalesRevenue = Number(todayAgg._sum.total ?? 0);
 
-    // NOTE: dropped the manual `(d: { total: number; date: Date })` annotation.
-    // Prisma actually returns `total` as its own Decimal type, not a plain
-    // number — the hand-written type was lying to TS. Letting TS infer the
-    // real shape from `salesData` fixes the compile error; Number() still
-    // converts Decimal -> number fine at runtime.
     const serializedSalesData = salesData.map((d) => ({
       total: Number(d.total),
       date: d.date.toISOString(),
     }));
 
     const totalSales = serializedSalesData.reduce((acc, curr) => acc + curr.total, 0);
+
+    // ── Build the merged activity feed ──
+    const saleItems: ActivityItem[] = user.orders.map((order) => ({
+      type: "sale",
+      id: `sale-${order.id}`,
+      date: order.date,
+      amount: Number(order.total),
+      staffName: order.staff?.fullName || "Owner",
+    }));
+
+    const reportItems: ActivityItem[] = recentReports.map((report) => ({
+      type: "report",
+      id: `report-${report.id}`,
+      date: report.date,
+      authorName: report.author?.fullName || "Staff",
+      snippet: report.content.length > 60 ? report.content.slice(0, 60) + "…" : report.content,
+    }));
+
+    const alertItems: ActivityItem[] = lowStockItems
+      .filter((item) => item.restockLevel != null && item.quantity <= item.restockLevel)
+      .slice(0, 5)
+      .map((item) => ({
+        type: "alert",
+        id: `alert-${item.id}`,
+        date: item.updatedAt,
+        itemName: item.name,
+        quantity: item.quantity,
+        isOutOfStock: item.quantity <= 0,
+      }));
+
+    // A "restock" is an EXISTING item (createdAt meaningfully earlier than
+    // updatedAt — at least a minute apart, to exclude items that were just
+    // added) that's now comfortably above its restock threshold. Without a
+    // dedicated stock-change log, this is the best inference available from
+    // current fields — genuinely accurate for real restocks, but can't
+    // distinguish "owner bumped quantity" from "a bulk correction edit."
+    const restockItems: ActivityItem[] = lowStockItems
+      .filter((item) => {
+        const isEstablished = item.updatedAt.getTime() - item.createdAt.getTime() > 60_000;
+        const isHealthyNow = item.restockLevel == null || item.quantity > item.restockLevel;
+        return isEstablished && isHealthyNow && item.quantity > 0;
+      })
+      .slice(0, 5)
+      .map((item) => ({
+        type: "restock",
+        id: `restock-${item.id}`,
+        date: item.updatedAt,
+        itemName: item.name,
+        quantity: item.quantity,
+      }));
+
+    const activityFeed = [...saleItems, ...reportItems, ...alertItems, ...restockItems]
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 8);
 
     const firstName = user.fullName?.split(" ")[0] ?? "there";
     const hour = now.getHours();
@@ -143,21 +214,8 @@ export default async function OwnerDashboardPage() {
               <div className="p-6 sm:p-8 rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl">
                 <h2 className="text-base font-semibold text-white mb-5">Recent Activity</h2>
                 <div className="space-y-3">
-                  {user.orders.length > 0 ? (
-                    user.orders.map((order) => (
-                      <div key={order.id} className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                            <ShoppingCart size={14} className="text-emerald-400" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-slate-200">Sale confirmed</p>
-                            <p className="text-[11px] text-slate-500">by {order.staff?.fullName || "Owner"}</p>
-                          </div>
-                        </div>
-                        <p className="text-sm font-bold text-emerald-400">₦{Number(order.total).toLocaleString()}</p>
-                      </div>
-                    ))
+                  {activityFeed.length > 0 ? (
+                    activityFeed.map((item) => <ActivityRow key={item.id} item={item} />)
                   ) : (
                     <p className="text-slate-500 text-sm text-center py-4">No recent activity.</p>
                   )}
@@ -218,6 +276,74 @@ export default async function OwnerDashboardPage() {
     if (isNextRedirectError(error)) throw error;
     return <div className="text-center p-8 text-slate-400">Error loading dashboard.</div>;
   }
+}
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+  if (item.type === "sale") {
+    return (
+      <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+            <ShoppingCart size={14} className="text-emerald-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-200">Sale confirmed</p>
+            <p className="text-[11px] text-slate-500 truncate">by {item.staffName}</p>
+          </div>
+        </div>
+        <p className="text-sm font-bold text-emerald-400 shrink-0">₦{item.amount.toLocaleString()}</p>
+      </div>
+    );
+  }
+
+  if (item.type === "report") {
+    return (
+      <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+            <ClipboardList size={14} className="text-amber-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-200">Report submitted</p>
+            <p className="text-[11px] text-slate-500 truncate">by {item.authorName} — {item.snippet}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "restock") {
+    return (
+      <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+            <PackageCheck size={14} className="text-emerald-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
+            <p className="text-[11px] text-emerald-400 truncate">Restocked — {item.quantity} in stock</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // alert
+  return (
+    <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${item.isOutOfStock ? "bg-rose-500/10" : "bg-amber-500/10"}`}>
+          <AlertTriangle size={14} className={item.isOutOfStock ? "text-rose-400" : "text-amber-400"} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
+          <p className={`text-[11px] truncate ${item.isOutOfStock ? "text-rose-400" : "text-amber-400"}`}>
+            {item.isOutOfStock ? "Out of stock" : `Low stock — ${item.quantity} left`}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const accentMap = {

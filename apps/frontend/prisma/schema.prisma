@@ -69,6 +69,7 @@ model Inventory {
   category     String?
   restockLevel Int?
   image        String?
+  createdAt    DateTime    @default(now())  // NEW — needed to distinguish "restocked" from "just added"
   updatedAt    DateTime    @updatedAt
   ownerId      Int
   owner        User        @relation(fields: [ownerId], references: [id])
