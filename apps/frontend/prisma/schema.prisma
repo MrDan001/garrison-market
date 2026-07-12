@@ -29,6 +29,7 @@ model User {
 
   // ── Preferences ──
   notificationsEnabled Boolean   @default(true)
+  discountEnabled      Boolean   @default(false)  // Owner controls whether staff can apply discounts
 
   // ── Multi-Store Relationship ──
   stores             Store[]     @relation("OwnerStores")
@@ -69,7 +70,7 @@ model Inventory {
   category     String?
   restockLevel Int?
   image        String?
-  createdAt    DateTime    @default(now())  // NEW — needed to distinguish "restocked" from "just added"
+  createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   ownerId      Int
   owner        User        @relation(fields: [ownerId], references: [id])

@@ -1,0 +1,165 @@
+"use client";
+// app/owner/more/settings-dropdown.tsx
+
+import { useState, useTransition } from "react";
+import {
+  Settings, ChevronDown, ChevronUp,
+  Bell, Tag, CheckCircle2, Loader2,
+} from "lucide-react";
+import { toggleDiscountAction, toggleNotificationsAction } from "@/lib/settings.actions";
+
+interface Props {
+  notificationsEnabled: boolean;
+  discountEnabled: boolean;
+}
+
+export default function SettingsDropdown({ notificationsEnabled, discountEnabled }: Props) {
+  const [open, setOpen] = useState(false);
+  const [notifications, setNotifications] = useState(notificationsEnabled);
+  const [discount, setDiscount] = useState(discountEnabled);
+  const [isPending, startTransition] = useTransition();
+  const [lastChanged, setLastChanged] = useState<"notifications" | "discount" | null>(null);
+
+  const handleToggleNotifications = () => {
+    const newVal = !notifications;
+    setNotifications(newVal);
+    setLastChanged("notifications");
+    startTransition(async () => {
+      await toggleNotificationsAction(newVal);
+      setLastChanged(null);
+    });
+  };
+
+  const handleToggleDiscount = () => {
+    const newVal = !discount;
+    setDiscount(newVal);
+    setLastChanged("discount");
+    startTransition(async () => {
+      await toggleDiscountAction(newVal);
+      setLastChanged(null);
+    });
+  };
+
+  return (
+    <div>
+      {/* Settings Row — acts as toggle trigger */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <Settings size={18} className="text-slate-400" />
+          <span className="text-sm font-medium">Settings</span>
+        </div>
+        {open ? (
+          <ChevronUp size={18} className="text-slate-500 transition-transform" />
+        ) : (
+          <ChevronDown size={18} className="text-slate-500 transition-transform" />
+        )}
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-4 space-y-4">
+
+          {/* Section label */}
+          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+            Preferences
+          </p>
+
+          {/* Notifications toggle */}
+          <ToggleRow
+            icon={<Bell size={16} />}
+            label="Notifications"
+            description="Receive in-app alerts"
+            value={notifications}
+            loading={isPending && lastChanged === "notifications"}
+            onToggle={handleToggleNotifications}
+          />
+
+          {/* Divider */}
+          <div className="border-t border-slate-800/40" />
+
+          {/* Section label */}
+          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+            Staff Permissions
+          </p>
+
+          {/* Discount toggle */}
+          <ToggleRow
+            icon={<Tag size={16} />}
+            label="Allow Discounts"
+            description="Staff can apply discounts at checkout"
+            value={discount}
+            loading={isPending && lastChanged === "discount"}
+            onToggle={handleToggleDiscount}
+            accent="emerald"
+          />
+
+          {discount && (
+            <div className="flex items-center gap-2 text-emerald-500 text-xs font-medium bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-3 py-2">
+              <CheckCircle2 size={13} />
+              Staff can now apply discounts on sales
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToggleRow({
+  icon,
+  label,
+  description,
+  value,
+  loading,
+  onToggle,
+  accent = "blue",
+}: {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  value: boolean;
+  loading: boolean;
+  onToggle: () => void;
+  accent?: "blue" | "emerald";
+}) {
+  const trackOn  = accent === "emerald" ? "bg-emerald-600" : "bg-blue-600";
+  const trackOff = "bg-slate-700";
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="h-8 w-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-200 leading-tight">{label}</p>
+          <p className="text-[11px] text-slate-500 leading-tight">{description}</p>
+        </div>
+      </div>
+
+      <button
+        onClick={onToggle}
+        disabled={loading}
+        className="shrink-0 relative h-6 w-11 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-60"
+        style={{ backgroundColor: value ? (accent === "emerald" ? "#059669" : "#2563eb") : "#374151" }}
+        aria-label={`Toggle ${label}`}
+      >
+        {loading ? (
+          <Loader2
+            size={12}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white animate-spin"
+          />
+        ) : (
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+              value ? "translate-x-5" : "translate-x-0.5"
+            }`}
+          />
+        )}
+      </button>
+    </div>
+  );
+}

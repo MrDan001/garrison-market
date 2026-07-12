@@ -1,17 +1,17 @@
+// app/staff/inventory/page.tsx
 import { getInventoryForStaff } from "@/lib/business.actions";
-import InventoryClient from "./inventory-client";
+import { getSessionUser } from "@/lib/auth";
+import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import InventoryClient from "./inventory-client";
 
 function sanitize(data: any) {
   return JSON.parse(
     JSON.stringify(data, (key, value) => {
-      // Handles native Prisma Decimal field conversions perfectly
-      if (value && typeof value === 'object' && value.constructor.name === 'Decimal') {
+      if (value && typeof value === "object" && value.constructor.name === "Decimal") {
         return Number(value);
       }
-      if (value instanceof Date) {
-        return value.toISOString();
-      }
+      if (value instanceof Date) return value.toISOString();
       return value;
     })
   );
@@ -19,23 +19,34 @@ function sanitize(data: any) {
 
 export default async function InventoryPage() {
   try {
-    // 🌟 Catch potential unauthorized exceptions directly from your server action
+    const session = await getSessionUser();
+    if (!session) redirect("/login");
+
+    // Get the staff member's owner to read discountEnabled
+    const staffUser = await prisma.user.findUnique({
+      where: { email: session.email },
+      select: {
+        ownerId: true,
+        owner: { select: { discountEnabled: true } },
+      },
+    });
+
+    const discountEnabled = staffUser?.owner?.discountEnabled ?? false;
+
     const items = await getInventoryForStaff();
-    
-    // Fallback safely to an empty list collection if data lookup returns empty
-    const itemsList = items || [];
-    const serializedItems = sanitize(itemsList);
-    
-    return <InventoryClient initialItems={serializedItems} />;
+    const serializedItems = sanitize(items || []);
+
+    return (
+      <InventoryClient
+        initialItems={serializedItems}
+        discountEnabled={discountEnabled}
+      />
+    );
   } catch (error: any) {
-    console.error("Staff inventory rendering error catch block:", error);
-    
-    // 🌟 Smoothly redirect to login or error screen instead of hitting a white screen/500 error
+    console.error("Staff inventory error:", error);
     if (error.message?.includes("Unauthorized")) {
       redirect("/login?error=session_expired");
     }
-    
-    // Fallback safe rendering state so the client client view can load
-    return <InventoryClient initialItems={[]} />;
+    return <InventoryClient initialItems={[]} discountEnabled={false} />;
   }
 }
