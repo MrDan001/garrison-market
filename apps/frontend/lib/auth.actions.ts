@@ -7,8 +7,6 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { signToken, verifyToken } from "@/lib/auth";
 
-// Detects a Next.js redirect "error" by its digest, since isRedirectError
-// is no longer publicly exported in Next 16.
 function isNextRedirectError(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -66,10 +64,6 @@ export async function loginAction(formData: FormData) {
     const userRole = user.role.toLowerCase().trim();
     const userStatus = user.status.toUpperCase().trim();
 
-    if (userStatus === "SUSPENDED") {
-      return { error: "This account has been suspended. Please contact your store administrator." };
-    }
-
     const setSessionCookie = async () => {
       const token = await signToken(user.id, user.role);
       const cookieStore = await cookies();
@@ -81,83 +75,73 @@ export async function loginAction(formData: FormData) {
       });
     };
 
-    if (userStatus === "PENDING") {
+    if (userStatus === "PENDING" || userStatus === "SUSPENDED" || userStatus === "DECLINED") {
       await setSessionCookie();
       redirectUrl = userRole === "staff" ? "/pending/staff" : "/pending";
-    } else {
+    } else if (userStatus === "APPROVED") {
       await setSessionCookie();
 
-      if (userRole === "owner" && userStatus !== "APPROVED") redirectUrl = "/pending";
-      else if (userRole === "admin") redirectUrl = "/admin/dashboard";
+      if (userRole === "admin") redirectUrl = "/admin/dashboard";
       else if (userRole === "owner") redirectUrl = "/owner/dashboard";
       else if (userRole === "staff") redirectUrl = "/staff/dashboard";
       else {
         return { error: "Account configuration error. Your user role is unrecognized." };
       }
+    } else {
+      return { error: "Account status configuration error. Unrecognized status state." };
     }
   } catch (error) {
     console.error("Login execution error:", error);
     return { error: "An unexpected system error occurred." };
   }
 
-  // NOTE: no redirect()/safeRedirect() call here — this action is invoked
-  // directly from client code (a manual onSubmit handler), not a native
-  // <form action>. redirect() throws a signal that the client's own
-  // try/catch would misread as a real error. Returning the URL and letting
-  // the client call router.push() avoids that false-error flash entirely.
   return { redirectUrl };
 }
 
-  export async function registerOwnerAction(formData: FormData) {
-    const data = Object.fromEntries(formData.entries());
-  
-    try {
-      const hashedPassword = await bcrypt.hash(data.password as string, 10);
-  
-      const newUser = await prisma.user.create({
-        data: {
-          email: data.email as string,
-          password: hashedPassword,
-          fullName: data.fullName as string,
-          storeName: (data.storeName as string) || "N/A",
-          phoneNumber: data.phoneNumber as string,
-          // NEW: shop profile details collected at registration
-          shopAddress: (data.shopAddress as string) || null,
-          shopCity: (data.shopCity as string) || null,
-          shopState: (data.shopState as string) || null,
-          productsSold: (data.productsSold as string) || null,
-          image: (data.imageUrl as string) || null,
-          role: 'owner',
-          status: 'pending'
-        }
-      });
-  
-      const token = await signToken(newUser.id, newUser.role);
-      const cookieStore = await cookies();
-      cookieStore.set("session-token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
-      });
-  
-      revalidatePath('/admin/users');
-  
-      // NOTE: no safeRedirect() call here — invoked directly from client code
-      // via a custom onSubmit handler, not a native <form action>. redirect()
-      // throws a signal the client's try/catch would misread as a real
-      // failure. Returning the URL and letting the client router.push() it
-      // avoids a false "Registration failed" flash right before success.
-      return { redirectUrl: '/pending' };
-  
-    } catch (error: any) {
-      if (error.code === 'P2002') {
-        return { error: "An account with this email already exists." };
+export async function registerOwnerAction(formData: FormData) {
+  const data = Object.fromEntries(formData.entries());
+
+  try {
+    const hashedPassword = await bcrypt.hash(data.password as string, 10);
+
+    const newUser = await prisma.user.create({
+      data: {
+        email: data.email as string,
+        password: hashedPassword,
+        fullName: data.fullName as string,
+        storeName: (data.storeName as string) || "N/A",
+        phoneNumber: data.phoneNumber as string,
+        shopAddress: (data.shopAddress as string) || null,
+        shopCity: (data.shopCity as string) || null,
+        shopState: (data.shopState as string) || null,
+        productsSold: (data.productsSold as string) || null,
+        image: (data.imageUrl as string) || null,
+        role: 'owner',
+        status: 'pending'
       }
-      console.error("Registration error:", error);
-      return { error: "An unexpected error occurred." };
+    });
+
+    const token = await signToken(newUser.id, newUser.role);
+    const cookieStore = await cookies();
+    cookieStore.set("session-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    revalidatePath('/admin/users');
+
+    return { redirectUrl: '/pending' };
+
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return { error: "An account with this email already exists." };
     }
+    console.error("Registration error:", error);
+    return { error: "An unexpected error occurred." };
   }
+}
 
 export async function logoutAction() {
   const cookieStore = await cookies();
@@ -241,8 +225,15 @@ export async function toggleStaffStatus(id: number, currentStatus: string) {
 
 export async function updateOwnerStatus(email: string, status: 'approved' | 'declined' | 'suspended') {
   try {
-    await prisma.user.update({ where: { email }, data: { status } });
+    const normalizedStatus = status.toLowerCase().trim();
+
+    await prisma.user.update({ 
+      where: { email }, 
+      data: { status: normalizedStatus } 
+    });
+    
     revalidatePath("/admin/users");
+    revalidatePath("/pending");
     return { success: true };
   } catch (error) {
     return { success: false, error: "Failed to update status" };

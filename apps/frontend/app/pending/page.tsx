@@ -6,8 +6,6 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 export const dynamic = "force-dynamic";
 
-// Detects a Next.js redirect "error" by its digest, since isRedirectError
-// is no longer publicly exported in Next 16.
 function isNextRedirectError(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -18,7 +16,6 @@ function isNextRedirectError(error: unknown): boolean {
   );
 }
 
-// 1. Define the shape of your user
 interface UserStatus {
   fullName: string | null;
   status: string;
@@ -28,13 +25,12 @@ export default async function PendingPage() {
   const session = await getSessionUser();
   if (!session) redirect("/login");
 
-  // 2. Explicitly type the variable
   let user: UserStatus | null = null;
 
   try {
     user = await prisma.user.findUnique({
       where: { id: session.id },
-      select: { status: true, fullName: true }
+      select: { status: true, fullName: true },
     });
 
     if (!user) {
@@ -43,7 +39,17 @@ export default async function PendingPage() {
       redirect("/login");
     }
 
-    if (user.status === "approved") {
+    // FIX: normalize before comparing. Previously this checked
+    // `user.status === "approved"` with strict lowercase equality — but
+    // nothing guaranteed the stored value was always exactly lowercase
+    // "approved" (case could drift from older writes, manual DB edits,
+    // etc). updateOwnerStatus and OwnerTable both normalize before
+    // comparing/writing; this page didn't, which meant an approved owner
+    // could stay stuck seeing "Awaiting Verification" forever if the
+    // casing ever didn't match exactly.
+    const normalizedStatus = user!.status.toLowerCase().trim();
+
+    if (normalizedStatus === "approved") {
       redirect("/owner/dashboard");
     }
   } catch (error) {
@@ -51,8 +57,9 @@ export default async function PendingPage() {
     console.error("Error checking user status:", error);
   }
 
-  const isDeclined = user?.status === "declined";
-  const isSuspended = user?.status === "suspended";
+  const normalizedStatus = user?.status?.toLowerCase().trim() ?? "pending";
+  const isDeclined = normalizedStatus === "declined";
+  const isSuspended = normalizedStatus === "suspended";
 
   const getStatusContent = () => {
     if (isDeclined) return {
@@ -112,16 +119,14 @@ export default async function PendingPage() {
   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Status</span>
   
   <div className="flex items-center gap-2">
-    {/* Solid dot */}
     <div className={`h-2 w-2 rounded-full ${
       isDeclined || isSuspended ? 'bg-red-500' : 'bg-amber-500'
     }`} />
     
-    {/* Serious, solid-background label */}
     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
       isDeclined || isSuspended ? 'bg-red-500/20 text-red-500' : 'bg-amber-500/20 text-amber-400'
     }`}>
-      {user?.status?.toUpperCase() || "PENDING"}
+      {normalizedStatus.toUpperCase()}
     </span>
   </div>
 </div>

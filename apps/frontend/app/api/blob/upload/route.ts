@@ -10,17 +10,21 @@ export async function POST(request: Request): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async () => {
-        // Runs before the browser gets an upload token — enforce auth here,
-        // since the actual file upload now bypasses your server action.
+        // NOTE: relaxed from "owner only" to "any authenticated user" —
+        // this route is now shared by inventory uploads (owner-only,
+        // enforced inside addItemAction/updateItemAction) AND staff profile
+        // photo uploads. The actual save-to-database authorization already
+        // happens in each specific server action, so gatekeeping role here
+        // too was redundant and blocked legitimate staff uploads.
         const session = await getSessionUser();
-        if (!session || session.role !== "owner") {
+        if (!session) {
           throw new Error("Unauthorized");
         }
 
         return {
           allowedContentTypes: ["image/jpeg", "image/png", "image/webp"],
           addRandomSuffix: true,
-          maximumSizeInBytes: 5 * 1024 * 1024, // 5MB cap, adjust as needed
+          maximumSizeInBytes: 5 * 1024 * 1024,
         };
       },
       onUploadCompleted: async ({ blob }) => {

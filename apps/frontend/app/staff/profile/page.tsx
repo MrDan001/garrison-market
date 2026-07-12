@@ -1,8 +1,18 @@
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { User, Mail, ShieldCheck, Clock, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { Package, History, ShoppingBag, FileText, CircleUser } from "lucide-react";
+import StaffProfileSections from "@/components/StaffProfileSections";
+
+export const dynamic = "force-dynamic";
+
+const statusStyles: Record<string, string> = {
+  active: "bg-emerald-500/10 text-emerald-400",
+  approved: "bg-emerald-500/10 text-emerald-400",
+  pending: "bg-amber-500/10 text-amber-400",
+  suspended: "bg-rose-500/10 text-rose-400",
+};
 
 export default async function StaffProfilePage() {
   const session = await getSessionUser();
@@ -11,61 +21,94 @@ export default async function StaffProfilePage() {
   const staff = await prisma.user.findUnique({
     where: { email: session.email },
     select: {
+      id: true,
       fullName: true,
       email: true,
+      phoneNumber: true,
       role: true,
       status: true,
-      createdAt: true
-    }
+      image: true,
+      createdAt: true,
+      notificationsEnabled: true,
+    },
   });
 
   if (!staff || staff.role.toLowerCase() !== "staff") redirect("/login");
 
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const monthAgg = await prisma.order.aggregate({
+    where: { staffId: staff.id, date: { gte: monthStart } },
+    _sum: { total: true },
+    _count: true,
+  });
+
+  const monthSales = Number(monthAgg._sum.total ?? 0);
+  const monthOrders = monthAgg._count;
+  const statusKey = staff.status.toLowerCase();
+
   return (
-    <div className="min-h-screen bg-[#0f1117] text-slate-200 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-2xl mx-auto">
-        <Link href="/staff/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-white mb-6 lg:mb-8 w-fit transition-colors">
-          <ArrowLeft size={20} /> Back to Dashboard
+    <div className="min-h-screen bg-[#070b12] text-slate-100 flex flex-col">
+      <div className="border-b border-white/[0.06] px-5 pb-4 pt-4">
+        <Link href="/staff/dashboard" className="text-[13px] text-slate-500 hover:text-slate-300 transition-colors">
+          ‹ Back
         </Link>
-
-        <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-5 sm:p-8 shadow-xl">
-          <div className="flex flex-col items-center mb-6 sm:mb-8">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 bg-slate-800 rounded-full flex items-center justify-center mb-4">
-              <User size={40} className="sm:hidden text-slate-500" />
-              <User size={48} className="hidden sm:block text-slate-500" />
+        <div className="mt-3 flex items-center gap-3">
+          <div className="relative shrink-0">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-xl font-bold text-white overflow-hidden">
+              {staff.image ? (
+                <img src={staff.image} alt={staff.fullName || "Staff"} className="h-full w-full object-cover" />
+              ) : (
+                staff.fullName?.charAt(0).toUpperCase() || "?"
+              )}
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-white text-center break-words">{staff.fullName}</h1>
-            <p className="text-slate-400 capitalize">{staff.role} Account</p>
           </div>
-
-          <div className="space-y-3 sm:space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-0 p-4 bg-slate-950 rounded-xl border border-slate-800">
-              <div className="flex items-center gap-3 text-slate-400">
-                <Mail size={20} className="shrink-0" /> Email
-              </div>
-              <span className="text-white break-all sm:text-right">{staff.email}</span>
-            </div>
-
-            <div className="flex justify-between items-center p-4 bg-slate-950 rounded-xl border border-slate-800">
-              <div className="flex items-center gap-3 text-slate-400">
-                <ShieldCheck size={20} className="shrink-0" /> Status
-              </div>
-              <span className="px-3 py-1 bg-emerald-950 text-emerald-400 rounded-lg text-sm font-bold capitalize shrink-0">
-                {staff.status}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center p-4 bg-slate-950 rounded-xl border border-slate-800">
-              <div className="flex items-center gap-3 text-slate-400">
-                <Clock size={20} className="shrink-0" /> Member Since
-              </div>
-              <span className="text-white shrink-0">
-                {new Date(staff.createdAt).toLocaleDateString()}
-              </span>
-            </div>
+          <div className="min-w-0">
+            <p className="truncate text-lg font-bold text-white">{staff.fullName}</p>
+            <p className="text-[13px] text-slate-400 capitalize">{staff.role} Account</p>
+            <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusStyles[statusKey] || "bg-slate-500/10 text-slate-400"}`}>
+              {staff.status}
+            </span>
           </div>
         </div>
       </div>
+
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 pb-24">
+        <StaffProfileSections
+          email={staff.email}
+          phone={staff.phoneNumber || "Not set"}
+          joinedDate={staff.createdAt.toLocaleDateString()}
+          monthSales={monthSales}
+          monthOrders={monthOrders}
+          notificationsEnabled={staff.notificationsEnabled}
+        />
+      </div>
+
+      <nav className="fixed bottom-0 left-0 right-0 flex items-center justify-around border-t border-white/[0.06] bg-[#070b12] px-2 py-2.5">
+        <Link href="/staff/inventory" className="flex flex-col items-center gap-1">
+          <Package size={22} strokeWidth={1.8} className="text-slate-500" />
+          <span className="text-[10.5px] text-slate-500">Inventory</span>
+        </Link>
+        <Link href="/staff/orders" className="flex flex-col items-center gap-1">
+          <History size={22} strokeWidth={1.8} className="text-slate-500" />
+          <span className="text-[10.5px] text-slate-500">Orders</span>
+        </Link>
+        <Link href="/staff/inventory" className="flex flex-col items-center gap-1 -mt-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 shadow-lg shadow-blue-500/30">
+            <ShoppingBag size={20} className="text-white" strokeWidth={2} />
+          </div>
+          <span className="text-[10.5px] font-semibold text-blue-400">Sell</span>
+        </Link>
+        <Link href="/staff/report" className="flex flex-col items-center gap-1">
+          <FileText size={22} strokeWidth={1.8} className="text-slate-500" />
+          <span className="text-[10.5px] text-slate-500">Report</span>
+        </Link>
+        <Link href="/staff/profile" className="flex flex-col items-center gap-1">
+          <CircleUser size={22} strokeWidth={1.8} className="text-blue-400" />
+          <span className="text-[10.5px] font-semibold text-blue-400">Profile</span>
+        </Link>
+      </nav>
     </div>
   );
 }

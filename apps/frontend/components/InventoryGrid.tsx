@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2 } from "lucide-react";
+import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown } from "lucide-react";
 import Link from "next/link";
 
 interface InventoryItem {
@@ -45,7 +45,26 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
   const outOfStockItems = items.filter((i) => i.quantity <= 0);
   const inStockItems = items.filter((i) => i.quantity > 0);
 
-  const visibleItems = tab === "in-stock" ? inStockItems : tab === "out-of-stock" ? outOfStockItems : items;
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showStats, setShowStats] = useState(false);
+
+  const tabFiltered = tab === "in-stock" ? inStockItems : tab === "out-of-stock" ? outOfStockItems : items;
+  const visibleItems = searchQuery.trim()
+    ? tabFiltered.filter((i) => i.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : tabFiltered;
+
+  // Totals always reflect the FULL inventory, regardless of search/tab —
+  // quantity-weighted, since that's what actually represents capital tied
+  // up in stock and its full potential revenue.
+  const { totalCost, totalSelling, totalProfit, totalCombined } = useMemo(() => {
+    let cost = 0;
+    let selling = 0;
+    for (const item of items) {
+      cost += (item.costPrice ?? 0) * item.quantity;
+      selling += item.price * item.quantity;
+    }
+    return { totalCost: cost, totalSelling: selling, totalProfit: selling - cost, totalCombined: cost + selling };
+  }, [items]);
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: "all", label: "All", count: items.length },
@@ -67,6 +86,60 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
           <Link href="/owner/inventory/add" className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-full text-xs font-semibold">
             <Plus size={13} /> Add Item
           </Link>
+        </div>
+
+        {/* Totals bar — collapsible, always reflects full inventory regardless of open/closed state */}
+        <button
+          onClick={() => setShowStats((s) => !s)}
+          className="w-full flex items-center justify-between px-3 py-2.5 mb-2 bg-[#1a1d24] border border-slate-800 rounded-xl text-xs font-semibold text-slate-300"
+        >
+          <span className="flex items-center gap-1.5">
+            <Wallet size={13} className="text-slate-500" /> Inventory Value
+          </span>
+          <ChevronDown size={15} className={`text-slate-500 transition-transform ${showStats ? "rotate-180" : ""}`} />
+        </button>
+
+        {showStats && (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="bg-[#1a1d24] border border-amber-500/20 rounded-xl px-3 py-2">
+              <p className="text-[9px] uppercase tracking-wide text-amber-400/70 font-semibold flex items-center gap-1">
+                <Wallet size={10} /> Total Cost
+              </p>
+              <p className="text-sm font-bold text-amber-400 truncate">₦{totalCost.toLocaleString()}</p>
+            </div>
+            <div className="bg-[#1a1d24] border border-blue-500/20 rounded-xl px-3 py-2">
+              <p className="text-[9px] uppercase tracking-wide text-blue-400/70 font-semibold flex items-center gap-1">
+                <TrendingUp size={10} /> Total Selling
+              </p>
+              <p className="text-sm font-bold text-blue-400 truncate">₦{totalSelling.toLocaleString()}</p>
+            </div>
+            <div className={`bg-[#1a1d24] border rounded-xl px-3 py-2 ${totalProfit >= 0 ? "border-emerald-500/20" : "border-rose-500/20"}`}>
+              <p className={`text-[9px] uppercase tracking-wide font-semibold flex items-center gap-1 ${totalProfit >= 0 ? "text-emerald-400/70" : "text-rose-400/70"}`}>
+                {totalProfit >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />} Total Profit
+              </p>
+              <p className={`text-sm font-bold truncate ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                ₦{totalProfit.toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-[#1a1d24] border border-purple-500/20 rounded-xl px-3 py-2">
+              <p className="text-[9px] uppercase tracking-wide text-purple-400/70 font-semibold flex items-center gap-1">
+                <Wallet size={10} /> Cost + Selling
+              </p>
+              <p className="text-sm font-bold text-purple-400 truncate">₦{totalCombined.toLocaleString()}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="relative mb-3">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search products..."
+            className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-600 transition-colors"
+          />
         </div>
 
         {/* Tabs */}
@@ -149,14 +222,14 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
                   <p className={`text-xs ${isOutOfStock ? "text-rose-400 font-medium" : isLowStock ? "text-amber-400 font-medium" : "text-slate-400"}`}>
                     Qty: {item.quantity}
                   </p>
-                  <p className="text-xs font-bold text-blue-400">₦{item.price.toLocaleString()}</p>
+                  <p className="text-xs font-bold text-blue-400">Sell: ₦{item.price.toLocaleString()}</p>
                 </div>
 
                 {item.costPrice != null && (
-                  <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1 border-t border-slate-800/60">
-                    <span>Cost: ₦{item.costPrice.toLocaleString()}</span>
+                  <div className="flex justify-between items-center text-[10px] pt-1 border-t border-slate-800/60">
+                    <span className="font-semibold text-amber-400">Cost: ₦{item.costPrice.toLocaleString()}</span>
                     {margin != null && (
-                      <span className={margin >= 0 ? "text-emerald-500" : "text-rose-400"}>
+                      <span className={`font-semibold ${margin >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                         {margin >= 0 ? "+" : ""}₦{margin.toLocaleString()} margin
                       </span>
                     )}

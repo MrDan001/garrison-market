@@ -50,3 +50,16 @@ export async function updateProfileAction(formData: FormData) {
   revalidatePath("/owner/profile/edit");
   revalidatePath("/owner/profile");
 }
+export async function updateNotificationPreference(enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session?.email) throw new Error("Unauthorized");
+
+  await prisma.user.update({
+    where: { email: session.email },
+    data: { notificationsEnabled: enabled },
+  });
+
+  revalidatePath("/staff/profile");
+  revalidatePath("/owner/profile");
+  return { success: true };
+}

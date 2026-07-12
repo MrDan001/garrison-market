@@ -159,11 +159,11 @@ export default async function StaffDashboard() {
       {/* ── Bottom Navigation Bar ── */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#0d0f18]/95 backdrop-blur-xl border-t border-slate-800/50 px-4 py-2 z-50">
         <div className="flex items-end justify-around max-w-md mx-auto">
-          <Link href="/staff/inventory" className="flex flex-col items-center gap-1 py-2 px-3 group">
+          <Link href="/staff/invoice" className="flex flex-col items-center gap-1 py-2 px-3 group">
             <div className="h-6 w-6 flex items-center justify-center">
               <Package size={22} className="text-slate-500 group-active:text-blue-400 transition-colors" />
             </div>
-            <span className="text-[10px] text-slate-500 group-active:text-blue-400 transition-colors">Inventory</span>
+            <span className="text-[10px] text-slate-500 group-active:text-blue-400 transition-colors">Invoice</span>
           </Link>
 
           <Link href="/staff/orders" className="flex flex-col items-center gap-1 py-2 px-3 group">
