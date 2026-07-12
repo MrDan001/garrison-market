@@ -157,7 +157,9 @@ export default function InventoryClient({
         <h1 className="text-xl font-bold text-white flex items-center gap-2">
           <Package size={20} className="text-blue-500" /> Inventory
         </h1>
-        <p className="text-xs text-slate-500 mt-0.5">{filteredItems.length} items · tap a product to view details</p>
+        <p className="text-xs text-slate-500 mt-0.5">
+          {filteredItems.length} items · {discountEnabled ? "tap a product to view details" : "tap + to add to cart"}
+        </p>
       </div>
 
       {/* Grid */}
@@ -175,6 +177,20 @@ export default function InventoryClient({
               const cartItem = cart.find((c) => c.id === item.id);
               const isOutOfStock = item.quantity <= 0;
               const qtyInCart = cartItem?.qty || 0;
+
+              if (!discountEnabled) {
+                return (
+                  <SimpleCard
+                    key={item.id}
+                    item={item}
+                    qtyInCart={qtyInCart}
+                    isOutOfStock={isOutOfStock}
+                    onAdd={() => addToCart(item)}
+                    onRemove={() => removeFromCart(item.id)}
+                  />
+                );
+              }
+
               const hasDiscount = cartItem?.discountValue !== undefined;
 
               return (
@@ -245,8 +261,8 @@ export default function InventoryClient({
         </div>
       )}
 
-      {/* Product Drawer */}
-      {drawerItem && (
+      {/* Product Drawer — discount mode only */}
+      {discountEnabled && drawerItem && (
         <div className="fixed inset-0 z-50 flex items-end">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeDrawer} />
           <div className="relative w-full bg-[#111318] border-t border-slate-800 rounded-t-3xl z-10 max-h-[88vh] overflow-y-auto">
@@ -282,100 +298,98 @@ export default function InventoryClient({
                 <StatChip label="In Cart" value={(drawerCartItem?.qty || 0).toString()} highlight={!!drawerCartItem} />
               </div>
 
-              {/* Discount section — only when owner enabled */}
-              {discountEnabled && (
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
-                  <button
-                    onClick={() => setShowDiscount((v) => !v)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-800/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                        <Tag size={14} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-semibold text-white">Apply Discount</p>
-                        {showDiscount && savings > 0 && (
-                          <p className="text-xs text-emerald-400">Saving ₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                        )}
-                      </div>
+              {/* Discount section */}
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+                <button
+                  onClick={() => setShowDiscount((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-800/30 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-7 w-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Tag size={14} />
                     </div>
-                    <ChevronRight size={16} className={`text-slate-500 transition-transform ${showDiscount ? "rotate-90" : ""}`} />
-                  </button>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-white">Apply Discount</p>
+                      {showDiscount && savings > 0 && (
+                        <p className="text-xs text-emerald-400">Saving ₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className={`text-slate-500 transition-transform ${showDiscount ? "rotate-90" : ""}`} />
+                </button>
 
-                  {showDiscount && (
-                    <div className="px-4 pb-4 space-y-3 border-t border-slate-800/60">
-                      {/* Type pills */}
-                      <div className="flex gap-2 mt-3">
-                        {(["percent", "flat"] as const).map((t) => (
+                {showDiscount && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-slate-800/60">
+                    {/* Type pills */}
+                    <div className="flex gap-2 mt-3">
+                      {(["percent", "flat"] as const).map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setDiscountType(t)}
+                          className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                            discountType === t ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          {t === "percent" ? "% Percentage" : "₦ Flat Amount"}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Input */}
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">
+                        {discountType === "percent" ? "%" : "₦"}
+                      </span>
+                      <input
+                        type="number"
+                        placeholder={discountType === "percent" ? "e.g. 10" : "e.g. 500"}
+                        value={discountInput}
+                        onChange={(e) => setDiscountInput(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 pl-8 pr-4 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                      />
+                    </div>
+
+                    {/* Live preview */}
+                    {discountInput && (
+                      <div className="flex items-center justify-between bg-slate-950/60 rounded-xl px-4 py-3 border border-slate-800">
+                        <div>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">New Price</p>
+                          <p className="text-lg font-bold text-emerald-400">₦{previewPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">You save</p>
+                          <p className="text-lg font-bold text-white">₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Reasons */}
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1.5 font-medium">Reason</p>
+                      <div className="flex flex-wrap gap-2">
+                        {DISCOUNT_REASONS.map((r) => (
                           <button
-                            key={t}
-                            onClick={() => setDiscountType(t)}
-                            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                              discountType === t ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
+                            key={r}
+                            onClick={() => setDiscountReason(r)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                              discountReason === r ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
                             }`}
                           >
-                            {t === "percent" ? "% Percentage" : "₦ Flat Amount"}
+                            {r}
                           </button>
                         ))}
                       </div>
-
-                      {/* Input */}
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">
-                          {discountType === "percent" ? "%" : "₦"}
-                        </span>
-                        <input
-                          type="number"
-                          placeholder={discountType === "percent" ? "e.g. 10" : "e.g. 500"}
-                          value={discountInput}
-                          onChange={(e) => setDiscountInput(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 pl-8 pr-4 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                        />
-                      </div>
-
-                      {/* Live preview */}
-                      {discountInput && (
-                        <div className="flex items-center justify-between bg-slate-950/60 rounded-xl px-4 py-3 border border-slate-800">
-                          <div>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">New Price</p>
-                            <p className="text-lg font-bold text-emerald-400">₦{previewPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">You save</p>
-                            <p className="text-lg font-bold text-white">₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Reasons */}
-                      <div>
-                        <p className="text-xs text-slate-500 mb-1.5 font-medium">Reason</p>
-                        <div className="flex flex-wrap gap-2">
-                          {DISCOUNT_REASONS.map((r) => (
-                            <button
-                              key={r}
-                              onClick={() => setDiscountReason(r)}
-                              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                                discountReason === r ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
-                              }`}
-                            >
-                              {r}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {discountType === "percent" && parseFloat(discountInput) > 100 && (
-                        <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-                          <AlertCircle size={13} />
-                          Percentage cannot exceed 100%
-                        </div>
-                      )}
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {discountType === "percent" && parseFloat(discountInput) > 100 && (
+                      <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                        <AlertCircle size={13} />
+                        Percentage cannot exceed 100%
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Add to cart / controls */}
               {drawerCartItem ? (
@@ -495,6 +509,84 @@ function StatChip({ label, value, highlight = false }: { label: string; value: s
     <div className={`rounded-xl border px-3 py-2.5 text-center ${highlight ? "border-blue-500/30 bg-blue-500/10" : "border-slate-800 bg-slate-900/60"}`}>
       <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">{label}</p>
       <p className={`text-base font-bold mt-0.5 ${highlight ? "text-blue-400" : "text-white"}`}>{value}</p>
+    </div>
+  );
+}
+
+// Plain card used when the owner has discounts turned off — no drawer,
+// the cart control (add button / stepper) lives right on the card face.
+function SimpleCard({
+  item,
+  qtyInCart,
+  isOutOfStock,
+  onAdd,
+  onRemove,
+}: {
+  item: InventoryItem;
+  qtyInCart: number;
+  isOutOfStock: boolean;
+  onAdd: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      className={`relative bg-slate-900/60 border rounded-2xl overflow-hidden flex flex-col transition-all ${
+        isOutOfStock ? "border-slate-800 opacity-50"
+          : qtyInCart > 0 ? "border-blue-500/50 shadow-lg shadow-blue-500/10"
+          : "border-slate-800 hover:border-slate-700"
+      }`}
+    >
+      <div className="relative bg-slate-950 aspect-square flex items-center justify-center overflow-hidden">
+        {item.image ? (
+          <img src={item.image} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="h-12 w-12 rounded-xl bg-slate-800 flex items-center justify-center">
+            <Package size={24} className="text-slate-500" />
+          </div>
+        )}
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
+            <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded-full">OUT OF STOCK</span>
+          </div>
+        )}
+
+        {/* Cart button overlaid on the image — only while item isn't in the cart yet */}
+        {!isOutOfStock && qtyInCart === 0 && (
+          <button
+            onClick={onAdd}
+            aria-label={`Add ${item.name} to cart`}
+            className="absolute bottom-2 right-2 z-10 h-9 w-9 rounded-full bg-blue-600 hover:bg-blue-500 active:scale-95 flex items-center justify-center text-white shadow-lg shadow-black/30 transition-all"
+          >
+            <ShoppingCart size={16} />
+          </button>
+        )}
+      </div>
+
+      <div className="p-3 flex flex-col gap-1 flex-1">
+        <p className="text-sm font-semibold text-white leading-tight truncate">{item.name}</p>
+        <p className="text-xs text-slate-500">{item.quantity} in stock</p>
+        <p className="mt-auto text-sm font-bold text-blue-400">₦{item.price.toLocaleString()}</p>
+      </div>
+
+      {/* Qty stepper — moves to a full-width bar at the bottom once added */}
+      {qtyInCart > 0 && (
+        <div className="flex items-center justify-center gap-3 border-t border-slate-800 bg-slate-950/60 px-3 py-2">
+          <button
+            onClick={onRemove}
+            className="h-7 w-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-white transition-colors"
+          >
+            <Minus size={14} />
+          </button>
+          <span className="text-sm font-bold text-white w-5 text-center">{qtyInCart}</span>
+          <button
+            onClick={onAdd}
+            disabled={qtyInCart >= item.quantity}
+            className="h-7 w-7 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-30 flex items-center justify-center text-white transition-colors"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
