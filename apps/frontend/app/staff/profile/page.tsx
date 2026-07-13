@@ -86,9 +86,9 @@ export default async function StaffProfilePage() {
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 flex items-center justify-around border-t border-white/[0.06] bg-[#070b12] px-2 py-2.5">
-        <Link href="/staff/inventory" className="flex flex-col items-center gap-1">
+        <Link href="/staff/dashboard" className="flex flex-col items-center gap-1">
           <Package size={22} strokeWidth={1.8} className="text-slate-500" />
-          <span className="text-[10.5px] text-slate-500">Inventory</span>
+          <span className="text-[10.5px] text-slate-500">Home</span>
         </Link>
         <Link href="/staff/orders" className="flex flex-col items-center gap-1">
           <History size={22} strokeWidth={1.8} className="text-slate-500" />

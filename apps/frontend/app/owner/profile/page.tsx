@@ -1,4 +1,4 @@
-// app/owner/more/page.tsx
+// app/owner/profile/page.tsx
 import {
   ChevronRight, Store, LayoutDashboard,
   Activity, CreditCard, Users, Receipt,
@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { logoutAction } from "@/lib/auth.actions";
 import SettingsDropdown from "./settings-dropdown";
+import OwnerAnnouncementForm from "@/components/OwnerAnnouncementForm";
 
 export const dynamic = "force-dynamic";
 
@@ -34,10 +35,7 @@ export default async function MorePage() {
     <div className="fixed inset-0 bg-[#0a0c12] text-slate-200 flex flex-col pb-20">
       {/* Header */}
       <header className="flex items-center gap-4 p-4 border-b border-slate-800">
-        <a
-          href="/owner/dashboard"
-          className="p-2 -ml-2 hover:bg-slate-800 rounded-full transition-colors"
-        >
+        <a href="/owner/dashboard" className="p-2 -ml-2 hover:bg-slate-800 rounded-full transition-colors">
           <ArrowLeft size={20} />
         </a>
         <h1 className="text-lg font-bold">More</h1>
@@ -45,10 +43,7 @@ export default async function MorePage() {
 
       <main className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
         {/* Profile Card */}
-        <a
-          href="/owner/profile/edit"
-          className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center gap-4 hover:border-slate-600 transition-all block"
-        >
+        <a href="/owner/profile/edit" className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center gap-4 hover:border-slate-600 transition-all block">
           <div className="flex items-center gap-4 w-full">
             <div className="h-14 w-14 rounded-full bg-indigo-600 flex items-center justify-center text-xl font-bold overflow-hidden border border-slate-700 shrink-0">
               {user.image ? (
@@ -77,6 +72,12 @@ export default async function MorePage() {
           ]}
         />
 
+        {/* Announcement section */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Communication</h3>
+          <OwnerAnnouncementForm />
+        </div>
+
         {/* Account section — Settings row is the inline dropdown */}
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Account</h3>
@@ -96,7 +97,7 @@ export default async function MorePage() {
               <ChevronRight size={18} className="text-slate-600" />
             </a>
 
-            {/* ── Inline Settings Dropdown ── */}
+            {/* Inline Settings Dropdown */}
             <SettingsDropdown
               notificationsEnabled={user.notificationsEnabled}
               discountEnabled={user.discountEnabled}
@@ -130,11 +131,7 @@ function MenuSection({
       <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">{title}</h3>
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl divide-y divide-slate-800">
         {items.map((item) => (
-          <a
-            key={item.label}
-            href={item.href}
-            className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors"
-          >
+          <a key={item.label} href={item.href} className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
             <div className="flex items-center gap-3">
               <item.icon size={18} className="text-slate-400" />
               <span className="text-sm font-medium">{item.label}</span>

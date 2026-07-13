@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart } from "lucide-react";
 import Link from "next/link";
+import NotificationBell from "@/components/NotificationBell";
 
 type ActivityItem =
   | { type: "sale"; id: string; date: Date; amount: number }
@@ -16,7 +17,7 @@ export default async function StaffDashboard() {
 
   const staff = await prisma.user.findUnique({
     where: { email: session.email },
-    select: { id: true, fullName: true, role: true, status: true, image: true, ownerId: true },
+    select: { id: true, fullName: true, role: true, status: true, image: true, ownerId: true, notificationsEnabled: true },
   });
 
   const userRole = staff?.role?.toLowerCase().trim();
@@ -69,12 +70,16 @@ export default async function StaffDashboard() {
     amount: Number(order.total),
   }));
 
-  const reportItems: ActivityItem[] = recentReports.map((report) => ({
-    type: "report",
-    id: `report-${report.id}`,
-    date: report.date,
-    authorName: report.author?.fullName || "Staff",
-    snippet: (report.notes ?? "").length > 60 ? (report.notes ?? "").slice(0, 60) + "…" : (report.notes ?? "Pending backfill"),  }));
+  const reportItems: ActivityItem[] = recentReports.map((report) => {
+    const notes = report.notes ?? "Pending backfill";
+    return {
+      type: "report",
+      id: `report-${report.id}`,
+      date: report.date,
+      authorName: report.author?.fullName || "Staff",
+      snippet: notes.length > 60 ? notes.slice(0, 60) + "…" : notes,
+    };
+  });
 
   const alertItems: ActivityItem[] = inventoryItems
     .filter((item) => item.restockLevel != null && item.quantity <= item.restockLevel)
@@ -127,6 +132,8 @@ export default async function StaffDashboard() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <NotificationBell notificationsEnabled={staff.notificationsEnabled} />
+
           <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden border border-slate-700">
             {staff?.image ? (
               <img src={staff.image} alt="Profile" className="h-full w-full object-cover" />

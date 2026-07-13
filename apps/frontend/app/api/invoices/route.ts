@@ -10,9 +10,7 @@ interface PrismaOrderItem {
   inventoryId: number;
   quantity: number;
   priceAtTime: any;
-  inventory: {
-    name: string;
-  } | null;
+  inventory: { name: string } | null;
 }
 
 interface PrismaOrder {
@@ -21,14 +19,8 @@ interface PrismaOrder {
   date: Date;
   ownerId: number;
   staffId: number | null;
-  staff: {
-    fullName: string | null;
-  } | null;
-  owner: {
-    storeName: string | null;
-    fullName: string | null;
-    email: string;
-  } | null;
+  staff: { fullName: string | null } | null;
+  owner: { storeName: string | null; fullName: string | null; email: string } | null;
   items: PrismaOrderItem[];
 }
 
@@ -36,27 +28,24 @@ export async function GET() {
   try {
     const session = await getSessionUser();
 
-    if (!session || session.role !== "owner") {
+    if (!session || (session.role !== "owner" && session.role !== "staff")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // session only carries { id, email, role, status, ownerId } — fullName
-    // isn't part of that selected shape, so fetch it directly instead of
-    // assuming it exists on the session object.
+    const targetOwnerId = Number(session.role === "owner" ? session.id : session.ownerId);
+
     const ownerProfile = await prisma.user.findUnique({
-      where: { id: session.id },
+      where: { id: targetOwnerId },
       select: { fullName: true },
     });
 
     const orders = (await prisma.order.findMany({
-      where: { ownerId: session.id },
+      where: { ownerId: targetOwnerId },
       include: {
         staff: { select: { fullName: true } },
         owner: { select: { storeName: true, fullName: true, email: true } },
         items: {
-          include: {
-            inventory: { select: { name: true } },
-          },
+          include: { inventory: { select: { name: true } } },
         },
       },
       orderBy: { date: "desc" },
@@ -85,7 +74,7 @@ export async function GET() {
       merchantName: ownerProfile?.fullName || "Store Owner",
     });
   } catch (error) {
-    console.error("API Invoice fetching pipeline error:", error);
+    console.error("API Invoice fetching error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

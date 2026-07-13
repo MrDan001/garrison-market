@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "./auth.actions";
 import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";
+import { createNotification } from "./notification.actions";
 
 export async function submitDailyReport(authorId: number, content: string) {
   const session = await getSessionUser();

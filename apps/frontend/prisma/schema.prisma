@@ -20,6 +20,9 @@ model User {
   mustChangePassword Boolean     @default(false)
   createdAt          DateTime    @default(now())
   ownerId            Int?
+  ownerNotifications     Notification[] @relation("OwnerNotifications")
+  recipientNotifications Notification[] @relation("RecipientNotifications")
+
 
   // ── Shop profile details (collected at registration, reviewed by admin) ──
   shopAddress        String?
@@ -119,4 +122,18 @@ model OrderItem {
   discountReason String?
   inventory      Inventory @relation(fields: [inventoryId], references: [id])
   order          Order     @relation(fields: [orderId], references: [id])
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  type        String   // "report_status" | "low_stock" | "new_item" | "announcement"
+  message     String
+  link        String?
+  read        Boolean  @default(false)
+  ownerId     Int
+  recipientId Int?     // specific staff member; null = broadcast to everyone under ownerId
+  createdAt   DateTime @default(now())
+
+  owner       User     @relation("OwnerNotifications", fields: [ownerId], references: [id])
+  recipient   User?    @relation("RecipientNotifications", fields: [recipientId], references: [id])
 }
