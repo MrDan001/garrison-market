@@ -4,21 +4,31 @@
 import { useState, useTransition } from "react";
 import {
   Settings, ChevronDown, ChevronUp,
-  Bell, Tag, CheckCircle2, Loader2,
+  Bell, Tag, Truck, CheckCircle2, Loader2,
 } from "lucide-react";
-import { toggleDiscountAction, toggleNotificationsAction } from "@/lib/settings.actions";
+import {
+  toggleDiscountAction,
+  toggleNotificationsAction,
+  toggleConsignmentAction,
+} from "@/lib/settings.actions";
 
 interface Props {
   notificationsEnabled: boolean;
   discountEnabled: boolean;
+  consignmentEnabled: boolean;
 }
 
-export default function SettingsDropdown({ notificationsEnabled, discountEnabled }: Props) {
+export default function SettingsDropdown({
+  notificationsEnabled,
+  discountEnabled,
+  consignmentEnabled,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState(notificationsEnabled);
   const [discount, setDiscount] = useState(discountEnabled);
+  const [consignment, setConsignment] = useState(consignmentEnabled);
   const [isPending, startTransition] = useTransition();
-  const [lastChanged, setLastChanged] = useState<"notifications" | "discount" | null>(null);
+  const [lastChanged, setLastChanged] = useState<"notifications" | "discount" | "consignment" | null>(null);
 
   const handleToggleNotifications = () => {
     const newVal = !notifications;
@@ -36,6 +46,16 @@ export default function SettingsDropdown({ notificationsEnabled, discountEnabled
     setLastChanged("discount");
     startTransition(async () => {
       await toggleDiscountAction(newVal);
+      setLastChanged(null);
+    });
+  };
+
+  const handleToggleConsignment = () => {
+    const newVal = !consignment;
+    setConsignment(newVal);
+    setLastChanged("consignment");
+    startTransition(async () => {
+      await toggleConsignmentAction(newVal);
       setLastChanged(null);
     });
   };
@@ -102,6 +122,24 @@ export default function SettingsDropdown({ notificationsEnabled, discountEnabled
               Staff can now apply discounts on sales
             </div>
           )}
+
+          {/* Consignment toggle */}
+          <ToggleRow
+            icon={<Truck size={16} />}
+            label="Allow Consignment"
+            description="Staff can sign out goods to third parties for resale"
+            value={consignment}
+            loading={isPending && lastChanged === "consignment"}
+            onToggle={handleToggleConsignment}
+            accent="violet"
+          />
+
+          {consignment && (
+            <div className="flex items-center gap-2 text-violet-400 text-xs font-medium bg-violet-500/8 border border-violet-500/20 rounded-xl px-3 py-2">
+              <CheckCircle2 size={13} />
+              Staff can now sign out goods on consignment
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -123,9 +161,10 @@ function ToggleRow({
   value: boolean;
   loading: boolean;
   onToggle: () => void;
-  accent?: "blue" | "emerald";
+  accent?: "blue" | "emerald" | "violet";
 }) {
-  const onColor = accent === "emerald" ? "#059669" : "#2563eb";
+  const onColor =
+    accent === "emerald" ? "#059669" : accent === "violet" ? "#7c3aed" : "#2563eb";
 
   return (
     <div className="flex items-center justify-between gap-4">

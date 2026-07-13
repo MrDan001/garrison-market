@@ -28,3 +28,15 @@ export async function toggleNotificationsAction(enabled: boolean) {
 
   revalidatePath("/owner/more");
 }
+
+export async function toggleConsignmentAction(enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  await prisma.user.update({
+    where: { id: session.id },
+    data: { consignmentEnabled: enabled },
+  });
+
+  revalidatePath("/owner/more");
+}

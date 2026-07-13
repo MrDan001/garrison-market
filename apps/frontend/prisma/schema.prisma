@@ -33,6 +33,7 @@ model User {
   // ── Preferences ──
   notificationsEnabled Boolean   @default(true)
   discountEnabled      Boolean   @default(false)  // Owner controls whether staff can apply discounts
+  consignmentEnabled   Boolean   @default(false)  // Owner controls whether staff can sign out goods on consignment
 
   // ── Multi-Store Relationship ──
   stores             Store[]     @relation("OwnerStores")
@@ -43,6 +44,10 @@ model User {
   reports            Report[]
   owner              User?       @relation("StaffHierarchy", fields: [ownerId], references: [id])
   managedStaff       User[]      @relation("StaffHierarchy")
+
+  // ── Consignment relationships ──
+  consignmentsOwned    Consignment[] @relation("OwnerConsignments")
+  consignmentsStaffed  Consignment[] @relation("StaffConsignments")
 }
 
 model Store {
@@ -97,6 +102,9 @@ model Inventory {
   owner        User         @relation(fields: [ownerId], references: [id])
   orderItems   OrderItem[]
   reportItems  ReportItem[]
+
+  // ── Consignment relationship ──
+  consignmentItems ConsignmentItem[]
 }
 
 model Order {
@@ -108,6 +116,12 @@ model Order {
   owner   User        @relation(fields: [ownerId], references: [id])
   staff   User?       @relation("StaffOrders", fields: [staffId], references: [id])
   items   OrderItem[]
+
+  // ── Optional link back to the consignment that generated this sale ──
+  // Null for ordinary over-the-counter sales; set when a sale came from
+  // settling a consignment, so reports can show "via consignment (name)".
+  consignmentId Int?
+  consignment   Consignment? @relation(fields: [consignmentId], references: [id])
 }
 
 model OrderItem {
@@ -136,4 +150,41 @@ model Notification {
 
   owner       User     @relation("OwnerNotifications", fields: [ownerId], references: [id])
   recipient   User?    @relation("RecipientNotifications", fields: [recipientId], references: [id])
+}
+
+// ── Consignment feature ──────────────────────────────────────────────
+// A staff member signs out inventory to an external person (e.g. a
+// roadside seller) to sell on the shop's behalf. Nothing here touches
+// the existing Order/Report flow directly — settlement later creates
+// a normal Order for whatever was actually sold, tagged back to this
+// record for traceability, and returns unsold stock to inventory.
+
+model Consignment {
+  id             Int               @id @default(autoincrement())
+  ownerId        Int
+  staffId        Int
+  recipientName  String
+  recipientPhone String
+  recipientNote  String?
+  status         String            @default("out") // "out" | "settled"
+  createdAt      DateTime          @default(now())
+  settledAt      DateTime?
+
+  owner          User              @relation("OwnerConsignments", fields: [ownerId], references: [id])
+  staff          User              @relation("StaffConsignments", fields: [staffId], references: [id])
+  items          ConsignmentItem[]
+  orders         Order[]
+}
+
+model ConsignmentItem {
+  id               Int         @id @default(autoincrement())
+  consignmentId    Int
+  inventoryId      Int
+  quantityOut      Int
+  quantitySold     Int         @default(0)
+  quantityReturned Int         @default(0)
+  priceAtTime      Decimal
+
+  consignment      Consignment @relation(fields: [consignmentId], references: [id])
+  inventory        Inventory   @relation(fields: [inventoryId], references: [id])
 }

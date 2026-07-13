@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Info,
   LogOut,
+  Truck,
 } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/auth.actions";
@@ -181,6 +182,7 @@ export default function StaffProfileSections({
           icon: TrendingUp,
         },
         { label: "Order history", sub: "View all your past orders", icon: ShoppingBag, href: "/staff/orders" },
+        { label: "Consignment", sub: "Sign out or settle goods", icon: Truck, href: "/staff/consignment" },
       ] as RowData[],
     },
     {

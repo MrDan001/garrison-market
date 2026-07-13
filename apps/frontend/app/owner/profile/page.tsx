@@ -26,6 +26,7 @@ export default async function MorePage() {
       image: true,
       notificationsEnabled: true,
       discountEnabled: true,
+      consignmentEnabled: true,
     },
   });
 
@@ -69,6 +70,7 @@ export default async function MorePage() {
             { label: "Expenses",   icon: CreditCard,     href: "/owner/expenses" },
             { label: "Reports",    icon: Activity,       href: "/owner/report" },
             { label: "History",    icon: History,        href: "/owner/history" },
+            { label: "Consignments", icon: Store,         href: "/owner/consignments" },
           ]}
         />
 
@@ -101,6 +103,7 @@ export default async function MorePage() {
             <SettingsDropdown
               notificationsEnabled={user.notificationsEnabled}
               discountEnabled={user.discountEnabled}
+              consignmentEnabled={user.consignmentEnabled}
             />
           </div>
         </div>
