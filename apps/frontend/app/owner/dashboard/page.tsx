@@ -73,7 +73,7 @@ export default async function OwnerDashboardPage() {
         orderBy: { date: "desc" },
         select: {
           id: true,
-          content: true,
+          notes: true,
           date: true,
           author: { select: { fullName: true } },
         },
@@ -111,8 +111,7 @@ export default async function OwnerDashboardPage() {
       id: `report-${report.id}`,
       date: report.date,
       authorName: report.author?.fullName || "Staff",
-      snippet: report.content.length > 60 ? report.content.slice(0, 60) + "…" : report.content,
-    }));
+      snippet: (report.notes ?? "").length > 60 ? (report.notes ?? "").slice(0, 60) + "…" : (report.notes ?? "Pending backfill"),    }));
 
     const alertItems: ActivityItem[] = lowStockItems
       .filter((item) => item.restockLevel != null && item.quantity <= item.restockLevel)

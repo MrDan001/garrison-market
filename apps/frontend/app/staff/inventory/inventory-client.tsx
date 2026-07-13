@@ -23,6 +23,7 @@ interface CartItem extends InventoryItem {
   qty: number;
   finalPrice: number;
   discountValue?: number;
+  discountType?: "percent" | "flat";
   discountReason?: string;
 }
 
@@ -58,13 +59,19 @@ export default function InventoryClient({
     item.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const addToCart = (item: InventoryItem, finalPrice?: number, discountValue?: number, reason?: string) => {
+  const addToCart = (
+    item: InventoryItem,
+    finalPrice?: number,
+    discountValue?: number,
+    discountType?: "percent" | "flat",
+    reason?: string
+  ) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.id === item.id);
       const currentQty = existing ? existing.qty : 0;
       if (currentQty >= item.quantity) return prev;
       if (existing) return prev.map((i) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { ...item, qty: 1, finalPrice: finalPrice ?? item.price, discountValue, discountReason: reason }];
+      return [...prev, { ...item, qty: 1, finalPrice: finalPrice ?? item.price, discountValue, discountType, discountReason: reason }];
     });
   };
 
@@ -80,7 +87,11 @@ export default function InventoryClient({
   const handleProcessSale = async () => {
     setLoading(true);
     try {
-      const payload = cart.map((item) => ({ ...item, price: item.finalPrice }));
+      const payload = cart.map((item) => ({
+        ...item,
+        originalPrice: item.price,
+        price: item.finalPrice,
+      }));
       await processSaleAction(payload);
       setCart([]);
       setShowCart(false);
@@ -106,7 +117,13 @@ export default function InventoryClient({
     if (!drawerItem) return;
     const discountVal = parseFloat(discountInput);
     const hasDiscount = showDiscount && !isNaN(discountVal) && discountVal > 0;
-    addToCart(drawerItem, hasDiscount ? previewPrice : drawerItem.price, hasDiscount ? discountVal : undefined, hasDiscount ? discountReason : undefined);
+    addToCart(
+      drawerItem,
+      hasDiscount ? previewPrice : drawerItem.price,
+      hasDiscount ? discountVal : undefined,
+      hasDiscount ? discountType : undefined,
+      hasDiscount ? discountReason : undefined
+    );
     closeDrawer();
   };
 
@@ -513,8 +530,6 @@ function StatChip({ label, value, highlight = false }: { label: string; value: s
   );
 }
 
-// Plain card used when the owner has discounts turned off — no drawer,
-// the cart control (add button / stepper) lives right on the card face.
 function SimpleCard({
   item,
   qtyInCart,
@@ -550,7 +565,6 @@ function SimpleCard({
           </div>
         )}
 
-        {/* Cart button overlaid on the image — only while item isn't in the cart yet */}
         {!isOutOfStock && qtyInCart === 0 && (
           <button
             onClick={onAdd}
@@ -568,7 +582,6 @@ function SimpleCard({
         <p className="mt-auto text-sm font-bold text-blue-400">₦{item.price.toLocaleString()}</p>
       </div>
 
-      {/* Qty stepper — moves to a full-width bar at the bottom once added */}
       {qtyInCart > 0 && (
         <div className="flex items-center justify-center gap-3 border-t border-slate-800 bg-slate-950/60 px-3 py-2">
           <button

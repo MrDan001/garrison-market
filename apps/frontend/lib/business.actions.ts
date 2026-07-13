@@ -3,10 +3,8 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "./auth.actions";
-import { put } from "@vercel/blob"; 
+import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";
-
-
 
 export async function submitDailyReport(authorId: number, content: string) {
   const session = await getSessionUser();
@@ -30,20 +28,31 @@ export async function submitDailyReport(authorId: number, content: string) {
   const allSoldItems = recentSales.flatMap((s: any) => s.items);
   const totalValue = recentSales.reduce((sum: number, s: any) => sum + Number(s.total), 0);
 
-  const itemizedList = allSoldItems
-    .map((i: any) => `${i.inventory?.name} (Price: ₦${Number(i.priceAtTime).toLocaleString()}, Qty: ${i.quantity}, Total: ₦${(Number(i.priceAtTime) * i.quantity).toLocaleString()})`)
-    .join(" | ");
-
-  const cleanStaffNotes = content && content.trim() !== "" ? content.trim() : "None";
-  const exactSnapshotContent = `TOTAL SALES: ₦${totalValue.toLocaleString()}. ITEMS: ${itemizedList || "None"}. NOTES: ${cleanStaffNotes}`;
-
   await prisma.report.create({
     data: {
-      content: exactSnapshotContent,
+      totalSales: totalValue,
+      notes: content && content.trim() !== "" ? content.trim() : "None",
       status: "pending",
       author: { connect: { id: authorId } },
-      ownerId: session.ownerId!
-    }
+      ownerId: session.ownerId!,
+      items: {
+        create: allSoldItems.map((i: any) => ({
+          inventoryId: i.inventoryId,
+          name: i.inventory?.name ?? "Unknown Item",
+          quantity: i.quantity,
+          price: i.priceAtTime,
+          total: Number(i.priceAtTime) * i.quantity,
+          ...(i.discountValue
+            ? {
+                originalPrice: i.originalPrice,
+                discountValue: i.discountValue,
+                discountType: i.discountType,
+                discountReason: i.discountReason,
+              }
+            : {}),
+        })),
+      },
+    },
   });
 
   revalidatePath("/staff/report");
@@ -98,13 +107,12 @@ export async function getInventoryForStaff() {
       costPrice: true,
       category: true,
       restockLevel: true,
-      image: true, // 🌟 Ensure this line is present to pull image URLs from the DB
+      image: true,
       ownerId: true
     },
     orderBy: { name: "asc" }
   });
 }
-
 
 export async function addInventoryAction(formData: FormData) {
   const session = await getSessionUser();
@@ -129,11 +137,9 @@ export async function addItemAction(formData: FormData) {
   const quantity = parseInt(formData.get("quantity") as string, 10);
   const costPrice = parseFloat(formData.get("costPrice") as string);
   const price = parseFloat(formData.get("price") as string);
-  const category = (formData.get("category") as string) || null; // field currently disabled on the form
+  const category = (formData.get("category") as string) || null;
   const restockLevel = parseInt(formData.get("restockLevel") as string, 10);
 
-  // The image is now already uploaded client-side to Vercel Blob before
-  // this action runs — we just receive the resulting URL, nothing to upload here.
   const imageUrl = (formData.get("imageUrl") as string) || null;
 
   await prisma.inventory.create({
@@ -150,9 +156,6 @@ export async function addItemAction(formData: FormData) {
   });
 
   revalidatePath("/owner/inventory");
-  // NOTE: no redirect() here — called directly from client code (not a
-  // <form action>), so redirect()'s thrown signal gets misread as a real
-  // error by our own try/catch. Client navigates with router.push() instead.
   return { success: true };
 }
 
@@ -194,8 +197,6 @@ export async function processSaleAction(cartItems: any[]) {
 
   const total = cartItems.reduce((sum: number, item: any) => sum + (Number(item.price) * item.qty), 0);
 
-  // Use individual operations instead of $transaction to avoid type conflicts with extended client
-  // 1. Validate Stock Availability
   for (const item of cartItems) {
     const inventory = await prisma.inventory.findUnique({
       where: { id: item.id }
@@ -207,7 +208,6 @@ export async function processSaleAction(cartItems: any[]) {
     }
   }
 
-  // 2. Create the Order
   await prisma.order.create({
     data: {
       total: total,
@@ -217,13 +217,20 @@ export async function processSaleAction(cartItems: any[]) {
         create: cartItems.map((item: any) => ({
           inventoryId: item.id,
           quantity: item.qty,
-          priceAtTime: Number(item.price)
+          priceAtTime: Number(item.price),
+          ...(item.discountValue
+            ? {
+                originalPrice: Number(item.originalPrice),
+                discountValue: Number(item.discountValue),
+                discountType: item.discountType ?? null,
+                discountReason: item.discountReason ?? null,
+              }
+            : {}),
         }))
       }
     }
   });
 
-  // 3. Decrement Inventory
   for (const item of cartItems) {
     await prisma.inventory.update({
       where: { id: item.id },
@@ -249,7 +256,8 @@ export async function getStaffReports() {
       include: {
         author: {
           select: { fullName: true, email: true, role: true }
-        }
+        },
+        items: true
       },
       orderBy: { date: 'desc' }
     });
@@ -314,7 +322,6 @@ export async function createStoreAction(formData: FormData) {
   const user = await prisma.user.findUnique({ where: { email: session.email } });
   if (!user) throw new Error("User not found.");
 
-  // Create the store in the database
   await prisma.store.create({
     data: {
       name,
@@ -323,7 +330,6 @@ export async function createStoreAction(formData: FormData) {
     },
   });
 
-  // Redirect to your stores page
   redirect("/owner/stores");
 }
 
@@ -354,10 +360,5 @@ export async function deleteInventoryAction(formData: FormData) {
   }
 
   revalidatePath("/owner/inventory");
-  // NOTE: no redirect() here — this action is called directly from client
-  // code (not a <form action>), and redirect() throws a special signal
-  // that only unwraps correctly inside a form submission. Returning a
-  // result and navigating with router.push() on the client works cleanly
-  // instead of surfacing a raw "NEXT_REDIRECT" error.
   return { success: true, archived };
 }

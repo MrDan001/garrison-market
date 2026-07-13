@@ -18,7 +18,7 @@ export default async function HistoryPage() {
       status: { in: ["approved", "declined"] }
     },
     orderBy: { date: "desc" },
-    include: { author: true }
+    include: { author: true, items: true }
   });
 
   const serialized = JSON.parse(JSON.stringify(historyReports));

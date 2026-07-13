@@ -10,47 +10,6 @@ export default function HistoryList({ reports = [] }: { reports?: any[] }) {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const parseReportContent = (content: string) => {
-    if (!content) return { items: [], notes: "No content available.", totalSales: 0 };
-
-    // 1. Extract total sales from the content string (e.g., "TOTAL SALES: ₦1,050")
-    const totalMatch = content.match(/TOTAL SALES:\s*₦?\s*([\d,]+)/i);
-    const totalSales = totalMatch ? Number(totalMatch[1].replace(/,/g, '')) : 0;
-
-    // 2. Clean content for items/notes parsing
-    const cleanedContent = content.replace(/TOTAL SALES:\s*₦?[\d,]+\.?\s*/i, "");
-    
-    const itemsSegmentMatch = cleanedContent.match(/ITEMS:\s*(.*?)\.\s*NOTES:/i);
-    let parsedItems: any[] = [];
-    
-    if (itemsSegmentMatch) {
-      const rawItems = itemsSegmentMatch[1].split(" | ");
-      parsedItems = rawItems.map((itemStr) => {
-        const namePart = itemStr.split(" (")[0];
-        // Clean prices by removing non-numeric chars
-        const priceRaw = itemStr.match(/Price:\s*₦([\d,]+)/)?.[1] || "0";
-        const qtyRaw = itemStr.match(/Qty:\s*(\d+)/)?.[1] || "1";
-        const totalRaw = itemStr.match(/Total:\s*₦([\d,]+)/)?.[1] || "0";
-        
-        return { 
-          name: namePart, 
-          price: priceRaw.replace(/,/g, ''), 
-          quantity: qtyRaw, 
-          total: totalRaw.replace(/,/g, '') 
-        };
-      });
-    }
-
-    const notesMatch = content.match(/NOTES:\s*([\s\S]*)$/i);
-    let cleanNotes = notesMatch ? notesMatch[1].replace(/ITEMS:[\s\S]*?NOTES:/gi, "").trim() : "No feedback provided.";
-    
-    return { 
-      items: parsedItems, 
-      notes: cleanNotes.replace(/^NOTES:\s*/i, "").trim(),
-      totalSales 
-    };
-  };
-
   const safeReports = reports || [];
 
   return (
@@ -58,7 +17,7 @@ export default function HistoryList({ reports = [] }: { reports?: any[] }) {
       {safeReports.length > 0 ? (
         safeReports.map((report) => {
           const isExpanded = !!expandedRows[report.id];
-          const parsed = parseReportContent(report.content || "");
+          const items = report.items || [];
 
           return (
             <div key={report.id} className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
@@ -72,9 +31,14 @@ export default function HistoryList({ reports = [] }: { reports?: any[] }) {
                     <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Calendar size={12} /> {new Date(report.date).toLocaleDateString()}</p>
                   </div>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase ${report.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                  {report.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase ${report.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                    {report.status}
+                  </span>
+                  <div className="text-slate-400">
+                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </div>
+                </div>
               </div>
 
               {isExpanded && (
@@ -87,27 +51,45 @@ export default function HistoryList({ reports = [] }: { reports?: any[] }) {
                           <tr><th className="p-3">Item</th><th className="p-3 text-center">Price</th><th className="p-3 text-center">Qty</th><th className="p-3 text-right">Total</th></tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/40">
-                          {parsed.items.map((item, idx) => (
-                            <tr key={idx}>
-                              <td className="p-3">{item.name}</td>
-                              <td className="p-3 text-center">₦{Number(item.price).toLocaleString()}</td>
-                              <td className="p-3 text-center font-bold text-blue-400">{item.quantity}</td>
-                              <td className="p-3 text-right font-bold text-white">₦{Number(item.total).toLocaleString()}</td>
-                            </tr>
-                          ))}
+                          {items.length === 0 ? (
+                            <tr><td colSpan={4} className="p-4 text-center text-slate-500">No items captured in snapshot.</td></tr>
+                          ) : (
+                            items.map((item: any) => (
+                              <tr key={item.id}>
+                                <td className="p-3">
+                                  <span className="flex items-center gap-1.5">
+                                    {item.name}
+                                    {item.discountValue != null && (
+                                      <span
+                                        title={item.discountReason ?? "Discount applied"}
+                                        className="inline-flex items-center gap-1 text-[9px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-bold"
+                                      >
+                                        -{item.discountType === "percent" ? `${item.discountValue}%` : `₦${Number(item.discountValue).toLocaleString()}`}
+                                      </span>
+                                    )}
+                                  </span>
+                                  {item.discountReason && (
+                                    <span className="block text-[10px] text-slate-500 mt-0.5">{item.discountReason}</span>
+                                  )}
+                                </td>
+                                <td className="p-3 text-center">₦{Number(item.price).toLocaleString()}</td>
+                                <td className="p-3 text-center font-bold text-blue-400">{item.quantity}</td>
+                                <td className="p-3 text-right font-bold text-white">₦{Number(item.total).toLocaleString()}</td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
                     <h4 className="text-xs font-bold text-slate-500 uppercase mt-4">Staff Feedback</h4>
-                    <div className="p-3 bg-[#090a10] border border-slate-800 rounded-xl text-xs text-slate-300">{parsed.notes}</div>
+                    <div className="p-3 bg-[#090a10] border border-slate-800 rounded-xl text-xs text-slate-300">{report.notes}</div>
                   </div>
 
                   <div className="md:col-span-5 bg-gradient-to-br from-[#141829] to-[#0d0f18] p-5 rounded-xl border border-slate-800">
                     <span className="text-[10px] font-bold text-blue-400 uppercase flex items-center gap-1.5"><ShieldCheck size={13} /> Finalized Audit</span>
                     <div className="mt-4">
                       <p className="text-xs text-slate-400">Total Audited Sales</p>
-                      {/* Using the parsed totalSales instead of report.staffTotalSales */}
-                      <p className="text-3xl font-black text-white">₦{parsed.totalSales.toLocaleString()}</p>
+                      <p className="text-3xl font-black text-white">₦{Number(report.totalSales).toLocaleString()}</p>
                     </div>
                   </div>
                 </div>

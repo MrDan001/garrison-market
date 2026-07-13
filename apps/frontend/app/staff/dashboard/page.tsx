@@ -50,7 +50,7 @@ export default async function StaffDashboard() {
       where: { ownerId: staff.ownerId ?? undefined },
       take: 5,
       orderBy: { date: "desc" },
-      select: { id: true, content: true, date: true, author: { select: { fullName: true } } },
+      select: { id: true, notes: true, date: true, author: { select: { fullName: true } } },
     }),
     prisma.inventory.findMany({
       where: { ownerId: staff.ownerId ?? undefined },
@@ -74,8 +74,7 @@ export default async function StaffDashboard() {
     id: `report-${report.id}`,
     date: report.date,
     authorName: report.author?.fullName || "Staff",
-    snippet: report.content.length > 60 ? report.content.slice(0, 60) + "…" : report.content,
-  }));
+    snippet: (report.notes ?? "").length > 60 ? (report.notes ?? "").slice(0, 60) + "…" : (report.notes ?? "Pending backfill"),  }));
 
   const alertItems: ActivityItem[] = inventoryItems
     .filter((item) => item.restockLevel != null && item.quantity <= item.restockLevel)

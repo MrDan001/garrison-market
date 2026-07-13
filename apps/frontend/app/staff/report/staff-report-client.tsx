@@ -22,14 +22,10 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
 
     setLoading(true);
 
-    const itemizedList = allSoldItems
-      .map((i: any) => `${i.inventory?.name} (Price: ₦${Number(i.priceAtTime).toLocaleString()}, Qty: ${i.quantity}, Total: ₦${(Number(i.priceAtTime) * i.quantity).toLocaleString()})`)
-      .join(" | ");
-
-    const content = `TOTAL SALES: ₦${totalValue.toLocaleString()}. ITEMS: ${itemizedList}. NOTES: ${complaint}`;
-
     try {
-      await submitDailyReport(staffId, content);
+      // submitDailyReport derives totals/items itself from Order/OrderItem —
+      // just pass the staff's actual typed notes, no string-building needed.
+      await submitDailyReport(staffId, complaint.trim());
       setComplaint("");
       window.location.reload();
     } catch (e) {
@@ -152,7 +148,7 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
               <div className="flex items-start gap-3 min-w-0">
                 <FileText size={18} className="text-blue-500 shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <p className="text-[11px] text-slate-300 leading-tight line-clamp-3 sm:line-clamp-none">{r.content}</p>
+                  <p className="text-[11px] text-slate-300 leading-tight line-clamp-3 sm:line-clamp-none">{r.notes}</p>
                   <p className="text-[9px] text-slate-500 mt-1"><Clock size={10} className="inline mr-1" /> {new Date(r.date).toLocaleTimeString()}</p>
                 </div>
               </div>

@@ -52,17 +52,35 @@ model Store {
 }
 
 model Report {
-  id       Int      @id @default(autoincrement())
-  content  String
-  status   String   @default("pending")
-  date     DateTime @default(now())
-  authorId Int
-  ownerId  Int
-  author   User     @relation(fields: [authorId], references: [id])
+  id         Int          @id @default(autoincrement())
+  status     String       @default("pending")
+  date       DateTime     @default(now())
+  totalSales Decimal
+  notes      String
+  authorId   Int
+  ownerId    Int
+  author     User         @relation(fields: [authorId], references: [id])
+  items      ReportItem[]
+}
+
+model ReportItem {
+  id             Int       @id @default(autoincrement())
+  reportId       Int
+  inventoryId    Int
+  name           String
+  quantity       Int
+  price          Decimal
+  total          Decimal
+  originalPrice  Decimal?
+  discountValue  Decimal?
+  discountType   String?
+  discountReason String?
+  report         Report    @relation(fields: [reportId], references: [id])
+  inventory      Inventory @relation(fields: [inventoryId], references: [id])
 }
 
 model Inventory {
-  id           Int         @id @default(autoincrement())
+  id           Int          @id @default(autoincrement())
   name         String
   quantity     Int
   price        Decimal
@@ -70,11 +88,12 @@ model Inventory {
   category     String?
   restockLevel Int?
   image        String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   ownerId      Int
-  owner        User        @relation(fields: [ownerId], references: [id])
+  owner        User         @relation(fields: [ownerId], references: [id])
   orderItems   OrderItem[]
+  reportItems  ReportItem[]
 }
 
 model Order {
@@ -89,11 +108,15 @@ model Order {
 }
 
 model OrderItem {
-  id          Int       @id @default(autoincrement())
-  orderId     Int
-  inventoryId Int
-  quantity    Int
-  priceAtTime Decimal
-  inventory   Inventory @relation(fields: [inventoryId], references: [id])
-  order       Order     @relation(fields: [orderId], references: [id])
+  id             Int       @id @default(autoincrement())
+  orderId        Int
+  inventoryId    Int
+  quantity       Int
+  priceAtTime    Decimal
+  originalPrice  Decimal?
+  discountValue  Decimal?
+  discountType   String?
+  discountReason String?
+  inventory      Inventory @relation(fields: [inventoryId], references: [id])
+  order          Order     @relation(fields: [orderId], references: [id])
 }

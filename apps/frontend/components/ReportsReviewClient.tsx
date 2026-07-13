@@ -1,0 +1,286 @@
+"use client";
+
+import React, { useState } from "react";
+import { updateReportStatus } from "@/lib/business.actions";
+import {
+  ClipboardList,
+  Check,
+  X,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck,
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+} from "lucide-react";
+import Link from "next/link";
+
+export default function ReportsReviewClient({
+  initialReports,
+}: {
+  initialReports: any[];
+}) {
+  const [reports, setReports] = useState(initialReports);
+  const [processingId, setProcessingId] = useState<number | null>(null);
+  const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
+
+  const toggleRow = (id: number) => {
+    setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleStatusUpdate = async (
+    reportId: number,
+    status: "approved" | "declined"
+  ) => {
+    setProcessingId(reportId);
+    try {
+      await updateReportStatus(reportId, status);
+      setReports((prev) => prev.filter((r) => r.id !== reportId));
+    } catch (error) {
+      console.error("Failed to update status:", error);
+      alert("Something went wrong updating the report.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0A0C12] text-slate-200">
+
+      {/* ── Top Header ── */}
+      <div className="sticky top-0 z-10 bg-[#11131A] border-b border-slate-800 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href="/owner/dashboard"
+              className="flex items-center justify-center h-8 w-8 rounded-lg bg-[#161a29] hover:bg-slate-800 active:bg-slate-700 text-slate-300 transition-colors shrink-0"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft size={16} />
+            </Link>
+
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-1.5 bg-blue-600 text-white rounded-lg shadow-sm shrink-0">
+                <ClipboardList size={17} />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-base font-bold text-white leading-tight truncate">
+                  Staff Reports
+                </h1>
+                <p className="hidden sm:block text-[11px] text-slate-400 leading-tight">
+                  Review submitted daily reports
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Link
+            href="/owner/report/history"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-full text-[11px] sm:text-xs font-semibold hover:bg-blue-500 active:scale-95 transition-all shrink-0"
+          >
+            <span className="hidden sm:inline">View </span>History
+            <ArrowRight size={13} />
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Feed ── */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 sm:py-8 space-y-4 pb-24">
+
+        {reports.length === 0 ? (
+          <div className="bg-[#11131A] border border-dashed border-slate-800 rounded-2xl p-10 sm:p-14 text-center shadow-sm mt-4">
+            <ClipboardList size={38} className="mx-auto mb-3 text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-200">All caught up!</h3>
+            <p className="text-xs text-slate-400 mt-1">
+              No pending staff reports to review right now.
+            </p>
+          </div>
+        ) : (
+          reports.map((report) => {
+            const staffName = report.author?.fullName || "Staff Member";
+            const reportDate = report.date
+              ? new Date(report.date).toLocaleDateString("en-NG", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "Today";
+            const isExpanded = !!expandedRows[report.id];
+            const items = report.items || [];
+
+            return (
+              <div
+                key={report.id}
+                className="bg-[#11131A] border border-slate-800 rounded-2xl shadow-sm overflow-hidden transition-all duration-200"
+              >
+                {/* ── Card Header ── */}
+                <div
+                  onClick={() => toggleRow(report.id)}
+                  className="px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-[#161a29] active:bg-[#1c2135] transition-colors select-none"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-10 w-10 shrink-0 rounded-xl bg-[#161a29] flex items-center justify-center text-blue-400 font-bold text-sm shadow-inner">
+                      {staffName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-white truncate">
+                        {staffName}
+                      </h3>
+                      <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                        <Calendar size={11} />
+                        {reportDate}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Pending
+                    </span>
+                    <div className="text-slate-400 p-1 rounded-lg hover:bg-slate-800 transition-colors">
+                      {isExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Expanded Panel ── */}
+                {isExpanded && (
+                  <div className="border-t border-slate-800 bg-[#0f111a] animate-fadeIn">
+
+                    <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
+
+                      {/* LEFT — Report Table + Notes */}
+                      <div className="md:col-span-7 space-y-3">
+                        <div>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            Report Narrative
+                          </h4>
+                          <span className="text-[10px] text-slate-600 block mt-0.5">
+                            Staff Submitted Breakdown
+                          </span>
+                        </div>
+
+                        {/* Table */}
+                        <div className="border border-slate-800 rounded-xl overflow-hidden bg-[#131622]">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-800/60 text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-[#161a29]">
+                                <th className="p-2.5 sm:p-3">Item</th>
+                                <th className="p-2.5 sm:p-3 text-center">Price</th>
+                                <th className="p-2.5 sm:p-3 text-center">Qty</th>
+                                <th className="p-2.5 sm:p-3 text-right">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody className="text-[11px] sm:text-xs text-slate-300 divide-y divide-slate-800/40 font-medium">
+                              {items.length === 0 ? (
+                                <tr>
+                                  <td colSpan={4} className="p-4 text-center text-slate-500">
+                                    No items captured in snapshot.
+                                  </td>
+                                </tr>
+                              ) : (
+                                items.map((item: any) => (
+                                  <tr key={item.id}>
+                                    <td className="p-2.5 sm:p-3 text-slate-200 max-w-[100px] sm:max-w-none truncate">
+                                      <span className="flex items-center gap-1.5">
+                                        {item.name}
+                                        {item.discountValue != null && (
+                                          <span
+                                            title={item.discountReason ?? "Discount applied"}
+                                            className="inline-flex items-center gap-1 text-[9px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-bold"
+                                          >
+                                            -{item.discountType === "percent" ? `${item.discountValue}%` : `₦${Number(item.discountValue).toLocaleString()}`}
+                                          </span>
+                                        )}
+                                      </span>
+                                      {item.discountReason && (
+                                        <span className="block text-[10px] text-slate-500 mt-0.5">{item.discountReason}</span>
+                                      )}
+                                    </td>
+                                    <td className="p-2.5 sm:p-3 text-center text-slate-400">
+                                      ₦{Number(item.price).toLocaleString()}
+                                    </td>
+                                    <td className="p-2.5 sm:p-3 text-center font-bold text-blue-400">
+                                      {item.quantity}
+                                    </td>
+                                    <td className="p-2.5 sm:p-3 text-right font-bold text-white">
+                                      ₦{Number(item.total).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Notes */}
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-2">
+                          Staff Feedback & Comments
+                        </label>
+                        <div className="p-3 min-h-[56px] bg-[#090a10] border border-slate-800 rounded-xl text-[11px] sm:text-xs text-slate-300 font-medium whitespace-pre-wrap leading-relaxed">
+                          {report.notes}
+                        </div>
+                      </div>
+
+                      {/* RIGHT — Verification Card */}
+                      <div className="md:col-span-5 bg-gradient-to-br from-[#141829] to-[#0d0f18] p-4 sm:p-5 rounded-xl border border-slate-800 flex flex-col justify-between shadow-inner">
+                        <div>
+                          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                            <ShieldCheck size={12} /> Live Verification Check
+                          </span>
+                          <span className="text-xs font-medium text-slate-400 block">
+                            Total Audited Sales Today
+                          </span>
+                          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight block mt-1.5">
+                            ₦{Number(report.totalSales).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="mt-5 sm:mt-6 pt-3 border-t border-slate-800/60 flex items-start gap-1.5 text-[10px] sm:text-[11px] text-slate-500 leading-normal">
+                          <AlertCircle size={12} className="text-slate-600 shrink-0 mt-0.5" />
+                          <span>
+                            Captured directly from system reports matching current transaction counts.
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action Row */}
+                      <div className="col-span-1 md:col-span-12 pt-4 border-t border-slate-800/60 flex items-center justify-end gap-3">
+                        <div className="w-full grid grid-cols-2 gap-3 sm:flex sm:w-auto sm:gap-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatusUpdate(report.id, "declined");
+                            }}
+                            disabled={processingId !== null}
+                            className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-transparent border border-slate-700 hover:border-rose-500 active:border-rose-500 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-400 active:text-rose-400 transition-all duration-150 disabled:opacity-50"
+                          >
+                            <X size={13} />
+                            Decline Report
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatusUpdate(report.id, "approved");
+                            }}
+                            disabled={processingId !== null}
+                            className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-900/20 hover:shadow-lg transition-all duration-150 disabled:opacity-50"
+                          >
+                            <Check size={13} />
+                            Approve & Log
+                          </button>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
