@@ -198,7 +198,7 @@ export default async function OwnerDashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="Today's Sales" value={`₦${todaySalesRevenue.toLocaleString()}`} sub="Since midnight" icon={<Banknote size={17} />} accent="emerald" />
+            <StatCard title="Total Sales" value={`₦${todaySalesRevenue.toLocaleString()}`} sub="Today" icon={<Banknote size={17} />} accent="emerald" />
             <StatCard title="Orders Today" value={ordersToday.toString()} sub="Transactions today" icon={<TrendingUp size={17} />} accent="blue" />
             <StatCard title="Active Products" value={activeProducts.toString()} sub="In inventory" icon={<Package size={17} />} accent="violet" />
             <StatCard title="Total Sales" value={`₦${totalSales.toLocaleString()}`} sub="Last 90 days gross" icon={<ShoppingCart size={17} />} accent="blue" />
@@ -211,7 +211,7 @@ export default async function OwnerDashboardPage() {
               </div>
 
               <div className="p-6 sm:p-8 rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl">
-                <h2 className="text-base font-semibold text-white mb-5">Recent Activity</h2>
+                <h2 className="text-base font-semibold text-white mb-1">Recent Activity</h2>
                 <div className="space-y-3">
                   {activityFeed.length > 0 ? (
                     activityFeed.map((item) => <ActivityRow key={item.id} item={item} />)
@@ -278,68 +278,55 @@ export default async function OwnerDashboardPage() {
 }
 
 function ActivityRow({ item }: { item: ActivityItem }) {
-  if (item.type === "sale") {
-    return (
-      <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-            <ShoppingCart size={14} className="text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-200">Sale confirmed</p>
-            <p className="text-[11px] text-slate-500 truncate">by {item.staffName}</p>
-          </div>
-        </div>
-        <p className="text-sm font-bold text-emerald-400 shrink-0">₦{item.amount.toLocaleString()}</p>
-      </div>
-    );
-  }
+  // 1. Define the base themes for items that don't need conditional logic
+  const getTheme = () => {
+    switch (item.type) {
+      case "sale":
+        return { accent: "border-emerald-500", bg: "bg-emerald-950/20", text: "text-emerald-400", label: "SALE" };
+      case "report":
+        return { accent: "border-blue-500", bg: "bg-blue-950/20", text: "text-blue-400", label: "REPORT" };
+      case "restock":
+        return { accent: "border-indigo-500", bg: "bg-indigo-950/20", text: "text-indigo-400", label: "RESTOCK" };
+      case "alert":
+        // 2. Safely access properties for the alert type
+        const isOutOfStock = "isOutOfStock" in item && item.isOutOfStock;
+        return {
+          accent: isOutOfStock ? "border-rose-500" : "border-amber-500",
+          bg: isOutOfStock ? "bg-rose-950/20" : "bg-amber-950/20",
+          text: isOutOfStock ? "text-rose-400" : "text-amber-400",
+          label: isOutOfStock ? "CRITICAL" : "LOW STOCK"
+        };
+      default:
+        return { accent: "border-slate-500", bg: "bg-slate-950/20", text: "text-slate-400", label: "INFO" };
+    }
+  };
 
-  if (item.type === "report") {
-    return (
-      <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-            <ClipboardList size={14} className="text-amber-400" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-200">Report submitted</p>
-            <p className="text-[11px] text-slate-500 truncate">by {item.authorName} — {item.snippet}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const t = getTheme();
 
-  if (item.type === "restock") {
-    return (
-      <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-            <PackageCheck size={14} className="text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
-            <p className="text-[11px] text-emerald-400 truncate">Restocked — {item.quantity} in stock</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // alert
   return (
-    <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-950/60 border border-slate-800/60">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${item.isOutOfStock ? "bg-rose-500/10" : "bg-amber-500/10"}`}>
-          <AlertTriangle size={14} className={item.isOutOfStock ? "text-rose-400" : "text-amber-400"} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
-          <p className={`text-[11px] truncate ${item.isOutOfStock ? "text-rose-400" : "text-amber-400"}`}>
-            {item.isOutOfStock ? "Out of stock" : `Low stock — ${item.quantity} left`}
-          </p>
-        </div>
+    <div className={`relative flex items-center justify-between py-3 pl-4 border-l-4 ${t.accent} ${t.bg} hover:brightness-125 transition-all duration-300`}>
+      <div className="flex flex-col gap-0.5">
+        <span className={`text-[9px] font-bold tracking-[0.2em] ${t.text} uppercase`}>
+          {t.label}
+        </span>
+        <span className="text-sm font-bold text-slate-100 tracking-tight">
+          {item.type === "sale" && item.staffName}
+          {item.type === "report" && item.authorName}
+          {item.type === "restock" && item.itemName}
+          {item.type === "alert" && item.itemName}
+        </span>
+      </div>
+
+      <div className="pr-4 text-right">
+        <span className={`block font-mono text-xs font-bold ${t.text}`}>
+          {item.type === "sale" ? `+₦${item.amount.toLocaleString()}` : 
+           item.type === "alert" && "isOutOfStock" in item ? (item.isOutOfStock ? "EMPTY" : `${item.quantity} UNITS`) :
+           item.type === "restock" ? `${item.quantity} UNITS` :
+           "REVIEW"}
+        </span>
+        <span className="text-[9px] font-mono text-slate-500 uppercase tracking-tighter">
+          {item.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
       </div>
     </div>
   );
