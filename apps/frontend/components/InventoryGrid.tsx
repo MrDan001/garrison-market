@@ -77,6 +77,15 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
       
       {/* Slimmer Compact Header Block */}
       <div className="sticky top-0 z-20 bg-[#0A0C10]/80 backdrop-blur-xl border-b border-slate-800/50 px-4 py-2.5">
+        
+        {/* Back Button */}
+        <Link 
+          href="/owner/dashboard" 
+          className="inline-flex items-center text-[10px] text-slate-500 hover:text-white transition-colors mb-2"
+        >
+          ← Back to Dashboard
+        </Link>
+
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-lg font-bold text-white">Inventory</h1>
           <Link href="/owner/inventory/add" className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-full text-[11px] font-semibold">
