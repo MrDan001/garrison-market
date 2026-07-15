@@ -3,6 +3,7 @@ import {
   ChevronRight, Store, LayoutDashboard,
   Activity, CreditCard, Users, Receipt,
   Settings, LogOut, ArrowLeft, History,
+  MessageSquare, // <-- Imported Support/Threads Icon
 } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -91,10 +92,20 @@ export default async function MorePage() {
               </div>
               <ChevronRight size={18} className="text-slate-600" />
             </a>
+            
             <a href="/owner/staff" className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
               <div className="flex items-center gap-3">
                 <LayoutDashboard size={18} className="text-slate-400" />
                 <span className="text-sm font-medium">Staff</span>
+              </div>
+              <ChevronRight size={18} className="text-slate-600" />
+            </a>
+
+            {/* Support Link */}
+            <a href="/owner/support" className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
+              <div className="flex items-center gap-3">
+                <MessageSquare size={18} className="text-slate-400" />
+                <span className="text-sm font-medium">Support</span>
               </div>
               <ChevronRight size={18} className="text-slate-600" />
             </a>

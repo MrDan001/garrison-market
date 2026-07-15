@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import { ThemeAntiFlashScript } from './theme-anti-flash';
-import AppSplash from '@/components/AppSplash';
 import "./styles.css";
 
 export const metadata: Metadata = {
@@ -35,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className="antialiased bg-[#F1EEE3] text-[#16233D] dark:bg-[#0a0c12] dark:text-slate-200 transition-colors duration-200"
         suppressHydrationWarning={true}
       >
-        <AppSplash>{children}</AppSplash>
+        {children}
       </body>
     </html>
   );

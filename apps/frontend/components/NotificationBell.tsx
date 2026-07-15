@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Bell, X, ClipboardCheck, ClipboardX, PackageX,
-  PackageCheck as PackageCheckIcon, Sparkles, Megaphone, Inbox, CheckCheck,
+  Bell, ClipboardCheck, PackageX,
+  Sparkles, Megaphone, Inbox, CheckCheck,
 } from "lucide-react";
 import { getNotificationsForStaff, markAllNotificationsRead } from "@/lib/notification.actions";
 
@@ -39,17 +39,37 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  const containerRef = useRef<HTMLDivElement>(null);
   const prevUnreadRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const customAudioRef = useRef<HTMLAudioElement | null>(null);
+  const notificationsEnabledRef = useRef(notificationsEnabled);
+
+  useEffect(() => {
+    notificationsEnabledRef.current = notificationsEnabled;
+  }, [notificationsEnabled]);
 
   useEffect(() => {
     customAudioRef.current = new Audio("/notification-sound.mp3");
     customAudioRef.current.volume = 1.0;
   }, []);
 
+  // Handle clicks outside to close the floating dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
   const playAlarm = () => {
-    if (!notificationsEnabled) return;
+    if (!notificationsEnabledRef.current) return;
     const custom = customAudioRef.current;
     if (custom) {
       custom.currentTime = 0;
@@ -99,9 +119,11 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
     return () => clearInterval(interval);
   }, []);
 
-  const handleOpen = async () => {
-    setOpen(true);
-    if (unreadCount > 0) {
+  const handleToggleOpen = async () => {
+    const nextOpenState = !open;
+    setOpen(nextOpenState);
+    
+    if (nextOpenState && unreadCount > 0) {
       await markAllNotificationsRead();
       prevUnreadRef.current = 0;
       setUnreadCount(0);
@@ -113,11 +135,13 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
   const earlierNotifs = notifications.filter((n) => !isToday(n.createdAt));
 
   return (
-    <>
+    <div className="relative inline-block" ref={containerRef}>
+      {/* Trigger Button */}
       <button
-        onClick={handleOpen}
+        onClick={handleToggleOpen}
         className="relative flex items-center justify-center h-8 w-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
         aria-label="Notifications"
+        aria-expanded={open}
       >
         <Bell size={16} />
         {unreadCount > 0 && (
@@ -127,105 +151,116 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
         )}
       </button>
 
+      {/* Floating Dropdown Panel */}
       {open && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center sm:justify-center">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
-
-          <div className="relative w-full sm:max-w-md sm:mx-4 bg-[#0d0f18] border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl z-10 max-h-[85vh] sm:max-h-[80vh] flex flex-col shadow-2xl">
-            {/* Drag handle — mobile only */}
-            <div className="flex justify-center pt-3 pb-1 sm:hidden">
-              <div className="h-1 w-10 rounded-full bg-slate-700" />
-            </div>
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800/60">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                  <Bell size={16} className="text-blue-400" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-white">Notifications</h2>
-                  <p className="text-[11px] text-slate-500">
-                    {notifications.length === 0 ? "You're all caught up" : `${notifications.length} recent update${notifications.length !== 1 ? "s" : ""}`}
-                  </p>
-                </div>
+        <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 mt-2 w-auto sm:w-96 bg-[#0d0f18] border border-slate-800/80 rounded-2xl z-50 flex flex-col shadow-2xl origin-top sm:origin-top-right transition-all">
+          
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Bell size={14} className="text-blue-400" />
               </div>
-              <button onClick={() => setOpen(false)} className="h-8 w-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-                <X size={16} />
-              </button>
+              <div>
+                <h2 className="text-xs font-bold text-white">Notifications</h2>
+                <p className="text-[10px] text-slate-500">
+                  {notifications.length === 0 ? "All caught up" : `${notifications.length} recent update${notifications.length !== 1 ? "s" : ""}`}
+                </p>
+              </div>
             </div>
+          </div>
 
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-              {loading ? (
-                <div className="flex items-center justify-center py-16">
-                  <div className="h-6 w-6 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
+          {/* Body */}
+          <div className="max-h-80 overflow-y-auto px-3 py-3 space-y-3">
+            {loading ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="h-5 w-5 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="h-12 w-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-3">
+                  <Inbox size={20} className="text-slate-700" />
                 </div>
-              ) : notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="h-16 w-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-4">
-                    <Inbox size={28} className="text-slate-700" />
+                <p className="text-xs font-semibold text-slate-300">Nothing here yet</p>
+                <p className="text-[10px] text-slate-600 mt-1 max-w-[180px]">
+                  Updates and alerts will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {todayNotifs.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider px-1">Today</p>
+                    <div className="space-y-1.5">
+                      {todayNotifs.map((n) => (
+                        <NotificationCard key={n.id} notification={n} />
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-sm font-semibold text-slate-300">Nothing here yet</p>
-                  <p className="text-xs text-slate-600 mt-1 max-w-[220px]">
-                    Report updates, stock alerts, and announcements will show up here.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {todayNotifs.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Today</p>
-                      <div className="space-y-2">
-                        {todayNotifs.map((n) => (
-                          <NotificationCard key={n.id} notification={n} />
-                        ))}
-                      </div>
+                )}
+                {earlierNotifs.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider px-1">Earlier</p>
+                    <div className="space-y-1.5">
+                      {earlierNotifs.map((n) => (
+                        <NotificationCard key={n.id} notification={n} />
+                      ))}
                     </div>
-                  )}
-                  {earlierNotifs.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Earlier</p>
-                      <div className="space-y-2">
-                        {earlierNotifs.map((n) => (
-                          <NotificationCard key={n.id} notification={n} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            {notifications.length > 0 && (
-              <div className="px-5 py-3 border-t border-slate-800/60 flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
-                <CheckCheck size={13} className="text-emerald-500" />
-                All notifications marked as read
+                  </div>
+                )}
               </div>
             )}
           </div>
+
+          {/* Footer */}
+          {notifications.length > 0 && (
+            <div className="px-4 py-2 border-t border-slate-800/60 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 bg-slate-950/40 rounded-b-2xl">
+              <CheckCheck size={11} className="text-emerald-500" />
+              All caught up
+            </div>
+          )}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
 function NotificationCard({ notification }: { notification: any }) {
   const config = typeConfig[notification.type as NotifType] ?? typeConfig.announcement;
   const Icon = config.icon;
+  const isUnread = !notification.read;
 
   const content = (
-    <div className="flex gap-3 p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 transition-colors">
-      <div className={`h-10 w-10 rounded-xl ${config.bg} flex items-center justify-center shrink-0`}>
-        <Icon size={17} className={config.text} />
+    <div 
+      className={`relative flex gap-3 p-3 rounded-xl transition-all duration-150 group
+        ${isUnread 
+          ? "bg-slate-900/90 border border-slate-700/80 hover:bg-slate-900 shadow-sm" 
+          : "bg-slate-900/30 border border-slate-900/80 hover:border-slate-800 hover:bg-slate-900/50"
+        }
+      `}
+    >
+      {/* Unread dot indicator */}
+      {isUnread && (
+        <span className="absolute top-3.5 right-3 h-1.5 w-1.5 rounded-full bg-blue-400" />
+      )}
+
+      {/* Icon frame */}
+      <div className={`h-9 w-9 rounded-lg ${config.bg} flex items-center justify-center shrink-0`}>
+        <Icon size={15} className={config.text} />
       </div>
-      <div className="min-w-0 flex-1">
+
+      <div className="min-w-0 flex-1 pr-2">
         <div className="flex items-center justify-between gap-2">
-          <span className={`text-[10px] font-bold uppercase tracking-wide ${config.text}`}>{config.label}</span>
-          <span className="text-[10px] text-slate-600 shrink-0">{timeAgo(notification.createdAt)}</span>
+          <span className={`text-[9px] font-bold uppercase tracking-wide ${config.text}`}>
+            {config.label}
+          </span>
+          <span className="text-[9px] text-slate-600 shrink-0">
+            {timeAgo(notification.createdAt)}
+          </span>
         </div>
-        <p className="text-xs text-slate-200 leading-snug mt-1">{notification.message}</p>
+        <p className={`text-xs leading-normal mt-1 ${isUnread ? "text-white font-medium" : "text-slate-400"}`}>
+          {notification.message}
+        </p>
       </div>
     </div>
   );

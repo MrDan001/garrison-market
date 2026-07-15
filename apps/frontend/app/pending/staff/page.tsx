@@ -32,7 +32,7 @@ export default async function StaffPendingPage() {
         
         {/* Main Content Description */}
         <div className="text-slate-400 text-sm max-w-xs leading-relaxed mb-8">
-          Your access has been restricted. Please contact support at 
+          Your access has been restricted. Please contact your store Owner at 
           <a href="mailto:support@garrison.com" className="text-rose-500 hover:underline font-semibold ml-1">
             support@garrison.com
           </a>{" "}
