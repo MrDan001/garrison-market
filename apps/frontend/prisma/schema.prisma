@@ -22,6 +22,8 @@ model User {
   ownerId            Int?
   ownerNotifications     Notification[] @relation("OwnerNotifications")
   recipientNotifications Notification[] @relation("RecipientNotifications")
+  supportOwnerScope SupportMessage[] @relation("SupportOwnerScope")
+  supportSent       SupportMessage[] @relation("SupportSender")
 
 
   // ── Shop profile details (collected at registration, reviewed by admin) ──
@@ -187,4 +189,19 @@ model ConsignmentItem {
 
   consignment      Consignment @relation(fields: [consignmentId], references: [id])
   inventory        Inventory   @relation(fields: [inventoryId], references: [id])
+}
+
+model SupportMessage {
+  id         Int      @id @default(autoincrement())
+  threadType String   // "staff_owner" | "owner_admin"
+  ownerId    Int       // scope: which store this thread belongs to
+  staffId    Int?      // set only for staff_owner threads — which staff member's conversation
+  senderId   Int
+  senderRole String    // "staff" | "owner" | "admin"
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  owner  User @relation("SupportOwnerScope", fields: [ownerId], references: [id])
+  sender User @relation("SupportSender", fields: [senderId], references: [id])
 }

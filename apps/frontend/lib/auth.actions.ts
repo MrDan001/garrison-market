@@ -77,7 +77,7 @@ export async function loginAction(formData: FormData) {
 
     if (userStatus === "PENDING" || userStatus === "SUSPENDED" || userStatus === "DECLINED") {
       await setSessionCookie();
-      redirectUrl = userRole === "staff" ? "/pending/staff" : "/pending";
+      redirectUrl = userRole === "staff" ? "/pending/staff" : "/pending/staff";
     } else if (userStatus === "APPROVED" || userStatus === "ACTIVE") { // 👈 Fixed: Now catches both uppercase "APPROVED" and "ACTIVE"
       await setSessionCookie();
 

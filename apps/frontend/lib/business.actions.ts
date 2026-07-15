@@ -143,7 +143,7 @@ export async function addItemAction(formData: FormData) {
 
   const imageUrl = (formData.get("imageUrl") as string) || null;
 
-  await prisma.inventory.create({
+  const newItem = await prisma.inventory.create({
     data: {
       name,
       quantity,
@@ -154,6 +154,14 @@ export async function addItemAction(formData: FormData) {
       image: imageUrl,
       ownerId: session.id,
     },
+  });
+
+  await createNotification({
+    ownerId: session.id,
+    recipientId: null,
+    type: "new_item",
+    message: `${newItem.name} was added to inventory.`,
+    link: "/staff/inventory",
   });
 
   revalidatePath("/owner/inventory");
@@ -233,10 +241,31 @@ export async function processSaleAction(cartItems: any[]) {
   });
 
   for (const item of cartItems) {
-    await prisma.inventory.update({
+    const before = await prisma.inventory.findUnique({ where: { id: item.id } });
+
+    const updated = await prisma.inventory.update({
       where: { id: item.id },
       data: { quantity: { decrement: item.qty } }
     });
+
+    // Fire only the moment the item crosses into low/out-of-stock —
+    // not on every sale after it's already low.
+    if (
+      before &&
+      updated.restockLevel != null &&
+      before.quantity > updated.restockLevel &&
+      updated.quantity <= updated.restockLevel
+    ) {
+      await createNotification({
+        ownerId: updated.ownerId,
+        recipientId: null,
+        type: "low_stock",
+        message: updated.quantity <= 0
+          ? `${updated.name} is now out of stock.`
+          : `${updated.name} is running low (${updated.quantity} left).`,
+        link: "/staff/inventory",
+      });
+    }
   }
 
   revalidatePath("/staff/inventory");
@@ -283,10 +312,19 @@ export async function getTodaySales() {
 
 export async function updateReportStatus(reportId: number, status: "approved" | "declined") {
   "use server";
-  await prisma.report.update({
+  const report = await prisma.report.update({
     where: { id: reportId },
     data: { status: status }
   });
+
+  await createNotification({
+    ownerId: report.ownerId,
+    recipientId: report.authorId,
+    type: "report_status",
+    message: `Your report was ${status}.`,
+    link: "/staff/report",
+  });
+
   revalidatePath("/owner/report");
 }
 

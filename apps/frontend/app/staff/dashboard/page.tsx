@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck } from "lucide-react";
 import Link from "next/link";
 import NotificationBell from "@/components/NotificationBell";
+import StaffSupportBubble from "@/components/StaffSupportBubble";
 
 type ActivityItem =
   | { type: "sale"; id: string; date: Date; amount: number }
@@ -302,6 +303,8 @@ export default async function StaffDashboard() {
           </Link>
         </div>
       </div>
+
+      <StaffSupportBubble currentUserId={staff.id} />
     </div>
   );
 }
