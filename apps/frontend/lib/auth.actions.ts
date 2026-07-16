@@ -223,11 +223,29 @@ export async function getStaffData() {
 }
 
 export async function deleteStaff(id: number) {
+  const session = await getSessionUser();
+  if (!session || session.role.toLowerCase() !== "owner") throw new Error("Unauthorized");
+
+  const staff = await prisma.user.findFirst({
+    where: { id, ownerId: session.id, role: "staff" },
+    select: { id: true },
+  });
+  if (!staff) throw new Error("Unauthorized");
+
   await prisma.user.delete({ where: { id } });
   revalidatePath("/owner/staff");
 }
 
 export async function toggleStaffStatus(id: number, currentStatus: string) {
+  const session = await getSessionUser();
+  if (!session || session.role.toLowerCase() !== "owner") throw new Error("Unauthorized");
+
+  const staff = await prisma.user.findFirst({
+    where: { id, ownerId: session.id, role: "staff" },
+    select: { id: true },
+  });
+  if (!staff) throw new Error("Unauthorized");
+
   const newStatus = currentStatus.toLowerCase() === 'active' ? 'suspended' : 'active';
   await prisma.user.update({
     where: { id },

@@ -2,12 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Truck, Calendar, User } from "lucide-react";
+import { ArrowLeft, Truck, Calendar, User, Store } from "lucide-react";
 
 export default function OwnerConsignmentsClient({ consignments }: { consignments: any[] }) {
   const [filter, setFilter] = useState<"all" | "out" | "settled">("all");
+  const [storeFilter, setStoreFilter] = useState<string>("all");
 
-  const filtered = consignments.filter((c) => filter === "all" || c.status === filter);
+  const stores = Array.from(
+    new Map(consignments.filter((c) => c.store).map((c) => [c.store.id, c.store])).values()
+  );
+
+  const filtered = consignments.filter((c) => {
+    const statusMatch = filter === "all" || c.status === filter;
+    const storeMatch = storeFilter === "all" || c.storeId === Number(storeFilter);
+    return statusMatch && storeMatch;
+  });
 
   return (
     <div className="min-h-screen bg-[#0A0C12] text-slate-200">
@@ -35,6 +44,30 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
           ))}
         </div>
 
+        {stores.length > 1 && (
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setStoreFilter("all")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                storeFilter === "all" ? "bg-slate-700 text-white" : "bg-slate-900 text-slate-400 hover:text-white"
+              }`}
+            >
+              All stores
+            </button>
+            {stores.map((s: any) => (
+              <button
+                key={s.id}
+                onClick={() => setStoreFilter(String(s.id))}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  storeFilter === String(s.id) ? "bg-slate-700 text-white" : "bg-slate-900 text-slate-400 hover:text-white"
+                }`}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         {filtered.length === 0 ? (
           <div className="bg-[#11131A] border border-dashed border-slate-800 rounded-2xl p-12 text-center">
             <Truck size={32} className="mx-auto mb-3 text-slate-700" />
@@ -49,6 +82,11 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
               (sum: number, i: any) => sum + Number(i.priceAtTime) * i.quantitySold,
               0
             );
+            // Value of stock still out with the recipient, at price-at-sign-out.
+            const totalOutValue = c.items.reduce(
+              (sum: number, i: any) => sum + Number(i.priceAtTime) * i.quantityOut,
+              0
+            );
 
             return (
               <div key={c.id} className="bg-[#11131A] border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
@@ -59,6 +97,11 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
                     <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
                       <User size={11} /> Signed out by {c.staff?.fullName || "Staff"}
                     </p>
+                    {c.store?.name && (
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <Store size={11} /> {c.store.name}
+                      </p>
+                    )}
                     <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                       <Calendar size={11} /> {new Date(c.createdAt).toLocaleDateString()}
                     </p>
@@ -85,6 +128,13 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
                     </div>
                   ))}
                 </div>
+
+                {c.status === "out" && (
+                  <div className="flex justify-between items-center pt-2 border-t border-slate-800">
+                    <span className="text-xs text-slate-500">Value signed out</span>
+                    <span className="text-sm font-bold text-amber-400">₦{totalOutValue.toLocaleString()}</span>
+                  </div>
+                )}
 
                 {c.status === "settled" && (
                   <div className="flex justify-between items-center pt-2 border-t border-slate-800">

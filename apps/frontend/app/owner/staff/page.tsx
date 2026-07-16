@@ -1,6 +1,7 @@
 import { ArrowLeft, Plus, Shield, UserX, Trash2, Mail, Phone, Store } from "lucide-react";
 import Link from "next/link";
 import { getSessionUser } from "@/lib/auth";
+import { toggleStaffStatus, deleteStaff } from "@/lib/auth.actions";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
@@ -148,18 +149,18 @@ export default async function ManageStaffPage() {
                   </Link>
 
                   <div className="flex items-center gap-1.5">
-                    {/* Suspend Form Button */}
-                    <form action={`/api/staff/${staff.id}/suspend`} method="POST">
+                    {/* Suspend / Activate — bound server action, not an API route */}
+                    <form action={toggleStaffStatus.bind(null, staff.id, staff.status)}>
                       <button 
                         type="submit" 
                         className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-800 text-amber-500/80 hover:bg-amber-500/5 hover:text-amber-400 transition-all cursor-pointer"
                       >
-                        Suspend
+                        {staff.status === "active" ? "Suspend" : "Activate"}
                       </button>
                     </form>
 
-                    {/* Delete Form Button */}
-                    <form action={`/api/staff/${staff.id}/delete`} method="POST">
+                    {/* Delete — bound server action, not an API route */}
+                    <form action={deleteStaff.bind(null, staff.id)}>
                       <button 
                         type="submit" 
                         className="p-1.5 rounded-lg border border-slate-800 text-rose-500/80 hover:bg-rose-500/5 hover:text-rose-400 transition-all cursor-pointer"

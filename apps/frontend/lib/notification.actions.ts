@@ -9,6 +9,7 @@ type NotificationType = "report_status" | "low_stock" | "new_item" | "announceme
 export async function createNotification(params: {
   ownerId: number;
   recipientId?: number | null;
+  storeId?: number | null;
   type: NotificationType;
   message: string;
   link?: string;
@@ -17,6 +18,7 @@ export async function createNotification(params: {
     data: {
       ownerId: params.ownerId,
       recipientId: params.recipientId ?? null,
+      storeId: params.storeId ?? null,
       type: params.type,
       message: params.message,
       link: params.link ?? null,

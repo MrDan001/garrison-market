@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Package, Plus, Minus, X, Truck,
-  User, Phone, FileText, CheckCircle2, Clock,
+  User, Phone, FileText, CheckCircle2, Clock, Store,
 } from "lucide-react";
 import { signOutConsignment, settleConsignment } from "@/lib/consignment.actions";
 
@@ -282,67 +282,83 @@ export default function StaffConsignmentClient({
               <p className="text-sm text-slate-500">No consignments currently out.</p>
             </div>
           ) : (
-            openConsignments.map((c) => (
-              <div key={c.id} className="bg-[#11131A] border border-slate-800 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{c.recipientName}</p>
-                    <p className="text-xs text-slate-500">{c.recipientPhone}</p>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">OUT</span>
-                </div>
-                <div className="space-y-1.5">
-                  {c.items.map((item: any) => (
-                    <div key={item.id} className="flex justify-between text-xs text-slate-400">
-                      <span>{item.inventory?.name}</span>
-                      <span>{item.quantityOut} units · ₦{Number(item.priceAtTime).toLocaleString()} each</span>
+            openConsignments.map((c) => {
+              const totalOutValue = c.items.reduce(
+                (sum: number, i: any) => sum + Number(i.priceAtTime) * i.quantityOut,
+                0
+              );
+
+              return (
+                <div key={c.id} className="bg-[#11131A] border border-slate-800 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{c.recipientName}</p>
+                      <p className="text-xs text-slate-500">{c.recipientPhone}</p>
+                      {c.store?.name && (
+                        <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                          <Store size={11} /> {c.store.name}
+                        </p>
+                      )}
                     </div>
-                  ))}
-                </div>
-                {settlingId === c.id ? (
-                  <div className="space-y-3 pt-2 border-t border-slate-800">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">OUT</span>
+                  </div>
+                  <div className="space-y-1.5">
                     {c.items.map((item: any) => (
-                      <div key={item.id} className="flex items-center justify-between gap-3">
-                        <span className="text-xs text-slate-300 flex-1 truncate">{item.inventory?.name}</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={item.quantityOut}
-                          value={settleValues[item.id] ?? 0}
-                          onChange={(e) =>
-                            setSettleValues((prev) => ({
-                              ...prev,
-                              [item.id]: Math.max(0, Math.min(item.quantityOut, Number(e.target.value))),
-                            }))
-                          }
-                          className="w-16 bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2 text-sm text-white text-center outline-none focus:border-blue-600"
-                        />
-                        <span className="text-[10px] text-slate-500 shrink-0">sold of {item.quantityOut}</span>
+                      <div key={item.id} className="flex justify-between text-xs text-slate-400">
+                        <span>{item.inventory?.name}</span>
+                        <span>{item.quantityOut} units · ₦{Number(item.priceAtTime).toLocaleString()} each</span>
                       </div>
                     ))}
-                    <div className="flex gap-2">
-                      <button onClick={() => setSettlingId(null)} className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold">
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => handleSettle(c)}
-                        disabled={settling}
-                        className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white text-xs font-semibold"
-                      >
-                        {settling ? "Settling..." : "Confirm Settlement"}
-                      </button>
-                    </div>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => openSettle(c)}
-                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
-                  >
-                    Settle
-                  </button>
-                )}
-              </div>
-            ))
+                  <div className="flex justify-between items-center pt-2 border-t border-slate-800">
+                    <span className="text-xs text-slate-500">Total value signed out</span>
+                    <span className="text-sm font-bold text-amber-400">₦{totalOutValue.toLocaleString()}</span>
+                  </div>
+                  {settlingId === c.id ? (
+                    <div className="space-y-3 pt-2 border-t border-slate-800">
+                      {c.items.map((item: any) => (
+                        <div key={item.id} className="flex items-center justify-between gap-3">
+                          <span className="text-xs text-slate-300 flex-1 truncate">{item.inventory?.name}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={item.quantityOut}
+                            value={settleValues[item.id] ?? 0}
+                            onChange={(e) =>
+                              setSettleValues((prev) => ({
+                                ...prev,
+                                [item.id]: Math.max(0, Math.min(item.quantityOut, Number(e.target.value))),
+                              }))
+                            }
+                            className="w-16 bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2 text-sm text-white text-center outline-none focus:border-blue-600"
+                          />
+                          <span className="text-[10px] text-slate-500 shrink-0">sold of {item.quantityOut}</span>
+                        </div>
+                      ))}
+                      <div className="flex gap-2">
+                        <button onClick={() => setSettlingId(null)} className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold">
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleSettle(c)}
+                          disabled={settling}
+                          className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white text-xs font-semibold"
+                        >
+                          {settling ? "Settling..." : "Confirm Settlement"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => openSettle(c)}
+                      className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+                    >
+                      Settle
+                    </button>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       )}
@@ -356,7 +372,14 @@ export default function StaffConsignmentClient({
             history.map((c) => (
               <div key={c.id} className="bg-[#11131A] border border-slate-800 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold text-white">{c.recipientName}</p>
+                  <div>
+                    <p className="text-sm font-semibold text-white">{c.recipientName}</p>
+                    {c.store?.name && (
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <Store size={11} /> {c.store.name}
+                      </p>
+                    )}
+                  </div>
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
                     <Clock size={10} /> SETTLED
                   </span>

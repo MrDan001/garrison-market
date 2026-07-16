@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "./auth.actions";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "./notification.actions";
+import { getActiveStoreId } from "./store-context";
 
 type SignOutItem = { inventoryId: number; quantityOut: number };
 
@@ -45,9 +46,17 @@ export async function signOutConsignment(params: {
   }
   if (params.items.length === 0) throw new Error("Add at least one item");
 
-  // Validate stock before touching anything
+  // For staff, this resolves their assigned staffStoreId. For an owner, it
+  // resolves whichever store they've switched into (cookie), same as
+  // getInventoryForStaff / addItemAction in business.actions.ts.
+  const storeId = await getActiveStoreId();
+
   const inventoryRows = await prisma.inventory.findMany({
-    where: { id: { in: params.items.map((i) => i.inventoryId) }, ownerId },
+    where: {
+      id: { in: params.items.map((i) => i.inventoryId) },
+      ownerId,
+      ...(storeId ? { storeId } : {}),
+    },
   });
 
   for (const item of params.items) {
@@ -62,6 +71,7 @@ export async function signOutConsignment(params: {
     data: {
       ownerId,
       staffId: session.id,
+      storeId: storeId ?? undefined,
       recipientName: params.recipientName.trim(),
       recipientPhone: params.recipientPhone.trim(),
       recipientNote: params.recipientNote?.trim() || null,
@@ -97,7 +107,10 @@ export async function getOpenConsignmentsForStaff() {
 
   return prisma.consignment.findMany({
     where: { staffId: session.id, status: "out" },
-    include: { items: { include: { inventory: true } } },
+    include: {
+      store: { select: { id: true, name: true } },
+      items: { include: { inventory: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 }
@@ -108,7 +121,10 @@ export async function getConsignmentHistoryForStaff() {
 
   return prisma.consignment.findMany({
     where: { staffId: session.id, status: "settled" },
-    include: { items: { include: { inventory: true } } },
+    include: {
+      store: { select: { id: true, name: true } },
+      items: { include: { inventory: true } },
+    },
     orderBy: { settledAt: "desc" },
     take: 20,
   });
@@ -152,6 +168,7 @@ export async function settleConsignment(
         total,
         ownerId: consignment.ownerId,
         staffId: consignment.staffId,
+        storeId: consignment.storeId,
         consignmentId: consignment.id,
         items: {
           create: soldItems.map((s) => {
@@ -191,6 +208,7 @@ export async function settleConsignment(
   await createNotification({
     ownerId: consignment.ownerId,
     recipientId: null,
+    storeId: consignment.storeId,
     type: "announcement",
     message: `Consignment with ${consignment.recipientName} was settled — ₦${total.toLocaleString()} in sales.`,
     link: "/owner/consignments",
@@ -201,14 +219,18 @@ export async function settleConsignment(
   return { success: true };
 }
 
-export async function getConsignmentsForOwner() {
+export async function getConsignmentsForOwner(storeId?: number) {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") throw new Error("Unauthorized");
 
   return prisma.consignment.findMany({
-    where: { ownerId: session.id },
+    where: {
+      ownerId: session.id,
+      ...(storeId ? { storeId } : {}),
+    },
     include: {
       staff: { select: { fullName: true } },
+      store: { select: { id: true, name: true } },
       items: { include: { inventory: true } },
     },
     orderBy: { createdAt: "desc" },
