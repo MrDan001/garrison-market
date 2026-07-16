@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth.actions";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { getActiveStoreId } from "@/lib/store-context";
 import InventoryGrid from "@/components/InventoryGrid";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +11,13 @@ export default async function OwnerInventoryPage() {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") redirect("/login");
 
-  // 1. Fetch inventory items
+  const storeId = await getActiveStoreId();
+
   const items = await prisma.inventory.findMany({
-    where: { ownerId: session.id },
+    where: {
+      ownerId: session.id,
+      ...(storeId ? { storeId } : {}),
+    },
     select: {
       id: true,
       name: true,
@@ -27,25 +32,24 @@ export default async function OwnerInventoryPage() {
     orderBy: { name: "asc" },
   });
 
-  // 2. Fetch sales counts for each item under this owner
-  // (Adjust the table name 'orderItem' or 'sales' to match your schema)
   const salesCounts = await prisma.orderItem.groupBy({
     by: ["inventoryId"],
     where: {
-      inventory: { ownerId: session.id },
+      inventory: {
+        ownerId: session.id,
+        ...(storeId ? { storeId } : {}),
+      },
     },
     _sum: {
-      quantity: true, // Sums up total quantity sold per product
+      quantity: true,
     },
   });
 
-  // Create a quick lookup map of { inventoryId: totalSoldQuantity }
   const salesMap = new Map<string | number, number>();
   salesCounts.forEach((s) => {
     salesMap.set(s.inventoryId, s._sum.quantity ?? 0);
   });
 
-  // 3. Serialize and attach the salesCount to each item
   const serialized = items.map((item) => ({
     id: item.id,
     name: item.name,
@@ -55,7 +59,7 @@ export default async function OwnerInventoryPage() {
     category: item.category,
     restockLevel: item.restockLevel,
     image: item.image,
-    salesCount: salesMap.get(item.id) ?? 0, // Injected into our component!
+    salesCount: salesMap.get(item.id) ?? 0,
   }));
 
   return (

@@ -77,7 +77,7 @@ export default async function ManageStaffPage() {
 
           {/* Add Staff Button - Links to a registration page pre-filled or configured for this store */}
           <Link 
-            href={`/owner/staff/create?storeId=${activeStoreId}`} 
+            href={`/owner/staff/register?storeId=${activeStoreId}`} 
             className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/10 transition-colors w-full sm:w-auto"
           >
             <Plus size={14} /> Add New Staff Member
@@ -93,7 +93,7 @@ export default async function ManageStaffPage() {
               Staff registration will assign newly invited accounts directly to <span className="text-slate-400">{activeStore.name}</span>.
             </p>
             <Link 
-              href={`/owner/staff/create?storeId=${activeStoreId}`}
+              href={`/owner/staff/register?storeId=${activeStoreId}`}
               className="inline-block mt-4 text-xs font-semibold text-blue-400 hover:text-blue-300 underline"
             >
               Add first staff member

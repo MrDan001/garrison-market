@@ -3,19 +3,34 @@ import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import StaffRegistrationForm from "@/components/StaffRegistrationForm";
 
-export default async function AddStaffPage() {
+export default async function AddStaffPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ storeId?: string }>;
+}) {
   const session = await getSessionUser();
   if (!session) redirect("/login");
 
-  // Fetch owner data to get the store name
   const owner = await prisma.user.findUnique({
     where: { email: session.email },
-    select: { storeName: true, role: true }
+    select: { id: true, storeName: true, role: true }
   });
 
-  // Only allow if they are the owner (assuming a 'role' field exists)
   if (!owner || owner.role !== "owner") {
     redirect("/dashboard");
+  }
+
+  const { storeId: storeIdParam } = await searchParams;
+  const storeId = storeIdParam ? parseInt(storeIdParam, 10) : null;
+
+  // Confirm the store actually belongs to this owner, and get its display name
+  let storeName = owner.storeName ?? "your store";
+  if (storeId && !isNaN(storeId)) {
+    const store = await prisma.store.findFirst({
+      where: { id: storeId, ownerId: owner.id },
+      select: { name: true },
+    });
+    if (store) storeName = store.name;
   }
 
   return (
@@ -24,11 +39,11 @@ export default async function AddStaffPage() {
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-semibold text-white">Add Staff</h1>
           <p className="text-sm text-slate-500 mt-2">
-            Register a new team member for <span className="text-blue-400 font-medium">{owner.storeName}</span>
+            Register a new team member for <span className="text-blue-400 font-medium">{storeName}</span>
           </p>
         </div>
-        
-        <StaffRegistrationForm />
+
+        <StaffRegistrationForm storeId={storeId} />
       </div>
     </div>
   );

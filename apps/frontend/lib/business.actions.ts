@@ -6,6 +6,7 @@ import { getSessionUser } from "./auth.actions";
 import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { createNotification } from "./notification.actions";
+import { getActiveStoreId } from "./store-context";
 
 export async function submitDailyReport(authorId: number, content: string) {
   const session = await getSessionUser();
@@ -98,8 +99,13 @@ export async function getInventoryForStaff() {
   const targetOwnerId = session?.ownerId || (session?.role === 'owner' ? session.id : null);
   if (!targetOwnerId) throw new Error("Unauthorized");
 
+  const storeId = await getActiveStoreId();
+
   return await prisma.inventory.findMany({
-    where: { ownerId: targetOwnerId },
+    where: {
+      ownerId: targetOwnerId,
+      ...(storeId ? { storeId } : {}),
+    },
     select: {
       id: true,
       name: true,
@@ -142,6 +148,7 @@ export async function addItemAction(formData: FormData) {
   const restockLevel = parseInt(formData.get("restockLevel") as string, 10);
 
   const imageUrl = (formData.get("imageUrl") as string) || null;
+  const storeId = await getActiveStoreId();
 
   const newItem = await prisma.inventory.create({
     data: {
@@ -153,6 +160,7 @@ export async function addItemAction(formData: FormData) {
       restockLevel,
       image: imageUrl,
       ownerId: session.id,
+      storeId: storeId ?? undefined,
     },
   });
 

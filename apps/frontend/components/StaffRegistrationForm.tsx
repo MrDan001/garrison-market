@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, Mail, Lock, Eye, EyeOff, Loader2, CheckCircle2, Phone, ArrowLeft } from "lucide-react"; // 1. Import ArrowLeft
-import { registerStaffAction } from "@/lib/auth.actions"; 
+import { User, Mail, Lock, Eye, EyeOff, Loader2, CheckCircle2, Phone, ArrowLeft } from "lucide-react";
+import { registerStaffAction } from "@/lib/auth.actions";
 
-export default function StaffRegistrationForm() {
+export default function StaffRegistrationForm({ storeId }: { storeId?: number | null }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -18,7 +18,7 @@ export default function StaffRegistrationForm() {
     if (result?.success) {
       setIsSuccess(true);
       setTimeout(() => {
-        router.push("/owner/staff"); 
+        router.push("/owner/staff");
       }, 2000);
     } else {
       setIsLoading(false);
@@ -42,6 +42,10 @@ export default function StaffRegistrationForm() {
     <div className="space-y-6">
 
       <form action={handleSubmit} className="space-y-6">
+        {storeId != null && (
+          <input type="hidden" name="storeId" value={storeId} />
+        )}
+
         <div className="relative">
           <User className="absolute left-4 top-3.5 h-5 w-5 text-slate-600" />
           <input name="fullName" placeholder="Staff Full Name" required className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 py-3 pl-12 pr-4 outline-none focus:border-blue-500 text-slate-200" />
@@ -66,24 +70,22 @@ export default function StaffRegistrationForm() {
         </div>
 
         <div className="flex gap-4">
-  {/* Back Button - Smaller flex ratio and padding */}
-  <button 
-    type="button" 
-    onClick={() => router.back()} 
-    className="flex-[0.5] py-2 bg-white text-slate-950 font-bold rounded-2xl hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
-  >
-    <ArrowLeft size={18} /> Back
-  </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="flex-[0.5] py-2 bg-white text-slate-950 font-bold rounded-2xl hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+          >
+            <ArrowLeft size={18} /> Back
+          </button>
 
-  {/* Register Button - Standard flex ratio, reduced padding */}
-  <button 
-    type="submit" 
-    disabled={isLoading} 
-    className="flex-1 py-2 bg-white text-slate-950 font-bold rounded-2xl hover:bg-slate-200 transition-all disabled:opacity-50"
-  >
-    {isLoading ? <Loader2 className="animate-spin mx-auto" /> : "Register Staff Member"}
-  </button>
-</div>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="flex-1 py-2 bg-white text-slate-950 font-bold rounded-2xl hover:bg-slate-200 transition-all disabled:opacity-50"
+          >
+            {isLoading ? <Loader2 className="animate-spin mx-auto" /> : "Register Staff Member"}
+          </button>
+        </div>
       </form>
     </div>
   );

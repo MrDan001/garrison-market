@@ -161,9 +161,23 @@ export async function registerStaffAction(formData: FormData) {
   const email = formData.get("email") as string;
   const tempPassword = formData.get("tempPassword") as string;
   const phoneNumber = formData.get("phoneNumber") as string;
+  const storeIdRaw = formData.get("storeId") as string | null;
+  const storeId = storeIdRaw ? parseInt(storeIdRaw, 10) : null;
 
   if (!email || !tempPassword) {
     return { success: false, error: "Email and password are required." };
+  }
+
+  // If a storeId was provided, confirm it actually belongs to this owner
+  // before assigning staff to it — prevents cross-owner store assignment.
+  if (storeId && !isNaN(storeId)) {
+    const store = await prisma.store.findFirst({
+      where: { id: storeId, ownerId: session.id },
+      select: { id: true },
+    });
+    if (!store) {
+      return { success: false, error: "Invalid store selected." };
+    }
   }
 
   try {
@@ -178,6 +192,7 @@ export async function registerStaffAction(formData: FormData) {
         role: "staff",
         status: "active",
         ownerId: session.id,
+        staffStoreId: storeId && !isNaN(storeId) ? storeId : null,
       },
     });
 
