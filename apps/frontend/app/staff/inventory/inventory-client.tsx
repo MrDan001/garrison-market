@@ -1,10 +1,10 @@
 "use client";
 // app/staff/inventory/inventory-client.tsx
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   ArrowLeft, Search, ShoppingCart, Plus, Minus,
-  X, Package, Tag, ChevronRight, AlertCircle,
+  X, Package, Tag, ChevronRight, AlertCircle, Flame,
 } from "lucide-react";
 import Link from "next/link";
 import { processSaleAction } from "@/lib/business.actions";
@@ -17,6 +17,8 @@ interface InventoryItem {
   costPrice?: number;
   category?: string;
   image?: string;
+  restockLevel?: number; // Added to support Low Stock detection
+  salesCount?: number;    // Added to support Top Selling logic
 }
 
 interface CartItem extends InventoryItem {
@@ -26,6 +28,8 @@ interface CartItem extends InventoryItem {
   discountType?: "percent" | "flat";
   discountReason?: string;
 }
+
+type Tab = "all" | "low-stock" | "out-of-stock" | "top-selling";
 
 const DISCOUNT_REASONS = [
   "Loyalty customer",
@@ -44,6 +48,7 @@ export default function InventoryClient({
   initialItems: InventoryItem[];
   discountEnabled: boolean;
 }) {
+  const [tab, setTab] = useState<Tab>("all");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCart, setShowCart] = useState(false);
@@ -55,9 +60,39 @@ export default function InventoryClient({
   const [discountType, setDiscountType] = useState<"percent" | "flat">("percent");
   const [discountReason, setDiscountReason] = useState(DISCOUNT_REASONS[0]);
 
-  const filteredItems = initialItems.filter((item) =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Derived filter categories
+  const outOfStockItems = useMemo(() => {
+    return initialItems.filter((i) => i.quantity <= 0);
+  }, [initialItems]);
+  
+  const lowStockItems = useMemo(() => {
+    return initialItems.filter((i) => i.quantity > 0 && i.restockLevel != null && i.quantity <= i.restockLevel);
+  }, [initialItems]);
+
+  const topSellingItems = useMemo(() => {
+    return [...initialItems].sort((a, b) => (b.salesCount ?? 0) - (a.salesCount ?? 0));
+  }, [initialItems]);
+
+  // Determine active list based on selected tab
+  const tabFiltered = useMemo(() => {
+    switch (tab) {
+      case "low-stock":
+        return lowStockItems;
+      case "out-of-stock":
+        return outOfStockItems;
+      case "top-selling":
+        return topSellingItems;
+      case "all":
+      default:
+        return initialItems;
+    }
+  }, [tab, initialItems, lowStockItems, outOfStockItems, topSellingItems]);
+
+  const filteredItems = useMemo(() => {
+    return tabFiltered.filter((item) =>
+      item.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [tabFiltered, searchQuery]);
 
   const addToCart = (
     item: InventoryItem,
@@ -138,35 +173,66 @@ export default function InventoryClient({
   const closeDrawer = () => { setDrawerItem(null); setShowDiscount(false); setDiscountInput(""); };
   const drawerCartItem = drawerItem ? cart.find((c) => c.id === drawerItem.id) : null;
 
+  // Tabs configuration
+  const tabs: { key: Tab; label: string; count?: number; icon?: React.ReactNode }[] = [
+    { key: "all", label: "All", count: initialItems.length },
+    { key: "low-stock", label: "Low Stock", count: lowStockItems.length },
+    { key: "out-of-stock", label: "Out of Stock", count: outOfStockItems.length },
+    { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> },
+  ];
+
   return (
     <div className="min-h-screen bg-[#0a0c10] text-slate-200 pb-32">
 
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-[#0a0c10]/90 backdrop-blur-xl border-b border-slate-800/50 px-4 py-3.5 flex items-center gap-3">
-        <Link href="/staff/dashboard" className="flex items-center justify-center h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors shrink-0">
-          <ArrowLeft size={16} />
-        </Link>
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-          <input
-            type="text"
-            placeholder="Search items..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 pl-9 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
-          />
+      <div className="sticky top-0 z-30 bg-[#0a0c10]/95 backdrop-blur-xl border-b border-slate-800/50 px-4 py-3 space-y-3">
+        <div className="flex items-center gap-3">
+          <Link href="/staff/dashboard" className="flex items-center justify-center h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors shrink-0">
+            <ArrowLeft size={16} />
+          </Link>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+            <input
+              type="text"
+              placeholder="Search items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 pl-9 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+          <button
+            onClick={() => cart.length > 0 && setShowCart(true)}
+            className="relative flex items-center justify-center h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors shrink-0"
+          >
+            <ShoppingCart size={16} />
+            {cartCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center z-10">
+                {cartCount}
+              </span>
+            )}
+          </button>
         </div>
-        <button
-          onClick={() => cart.length > 0 && setShowCart(true)}
-          className="relative flex items-center justify-center h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors shrink-0"
-        >
-          <ShoppingCart size={16} />
-          {cartCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center z-10">
-              {cartCount}
-            </span>
-          )}
-        </button>
+
+        {/* Tab Selection Row (Horizontal Scroll on Mobile) */}
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 -mx-1 px-1">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1 shrink-0 ${
+                tab === t.key
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800/85"
+              }`}
+            >
+              {t.icon}
+              <span>{t.label}</span>
+              {t.count !== undefined && (
+                <span className="opacity-60 text-[10px]">({t.count})</span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Title */}
@@ -185,7 +251,7 @@ export default function InventoryClient({
           <div className="py-16 text-center">
             <Package size={36} className="mx-auto mb-3 text-slate-700" />
             <p className="text-slate-500 text-sm">
-              {searchQuery ? `No items match "${searchQuery}"` : "No items in inventory"}
+              {searchQuery ? `No items match "${searchQuery}"` : `No items in ${tab.replace("-", " ")}`}
             </p>
           </div>
         ) : (
@@ -193,6 +259,7 @@ export default function InventoryClient({
             {filteredItems.map((item) => {
               const cartItem = cart.find((c) => c.id === item.id);
               const isOutOfStock = item.quantity <= 0;
+              const isLowStock = !isOutOfStock && item.restockLevel != null && item.quantity <= item.restockLevel;
               const qtyInCart = cartItem?.qty || 0;
 
               if (!discountEnabled) {
@@ -202,8 +269,10 @@ export default function InventoryClient({
                     item={item}
                     qtyInCart={qtyInCart}
                     isOutOfStock={isOutOfStock}
+                    isLowStock={isLowStock}
                     onAdd={() => addToCart(item)}
                     onRemove={() => removeFromCart(item.id)}
+                    tab={tab}
                   />
                 );
               }
@@ -228,19 +297,37 @@ export default function InventoryClient({
                         <Package size={24} className="text-slate-500" />
                       </div>
                     )}
+                    
                     {isOutOfStock && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
                         <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded-full">OUT OF STOCK</span>
                       </div>
                     )}
+
+                    {isLowStock && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+                          Low Stock
+                        </span>
+                      </div>
+                    )}
+
                     {qtyInCart > 0 && (
                       <div className="absolute top-2 left-2 h-5 w-5 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center z-10">
                         {qtyInCart}
                       </div>
                     )}
+
                     {hasDiscount && (
                       <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-emerald-500 text-white flex items-center justify-center z-10">
                         <Tag size={10} />
+                      </div>
+                    )}
+
+                    {/* Flame Hot Badge for Top Selling items */}
+                    {tab === "top-selling" && (
+                      <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500 text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
+                        <Flame size={10} fill="currentColor" /> {item.salesCount ?? 0} sold
                       </div>
                     )}
                   </div>
@@ -517,6 +604,17 @@ export default function InventoryClient({
           </div>
         </div>
       )}
+
+      {/* Small global utility style to hide horizontal scroll scrollbar */}
+      <style jsx global>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
 }
@@ -534,14 +632,18 @@ function SimpleCard({
   item,
   qtyInCart,
   isOutOfStock,
+  isLowStock,
   onAdd,
   onRemove,
+  tab,
 }: {
   item: InventoryItem;
   qtyInCart: number;
   isOutOfStock: boolean;
+  isLowStock: boolean;
   onAdd: () => void;
   onRemove: () => void;
+  tab: Tab;
 }) {
   return (
     <div
@@ -559,9 +661,25 @@ function SimpleCard({
             <Package size={24} className="text-slate-500" />
           </div>
         )}
+        
         {isOutOfStock && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
             <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded-full">OUT OF STOCK</span>
+          </div>
+        )}
+
+        {isLowStock && (
+          <div className="absolute top-2 left-2 z-10">
+            <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+              Low Stock
+            </span>
+          </div>
+        )}
+
+        {/* Flame Hot Badge for Top Selling items */}
+        {tab === "top-selling" && (
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500 text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
+            <Flame size={10} fill="currentColor" /> {item.salesCount ?? 0} sold
           </div>
         )}
 

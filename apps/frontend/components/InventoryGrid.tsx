@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp } from "lucide-react";
+import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Flame } from "lucide-react";
 import Link from "next/link";
 
 interface InventoryItem {
@@ -14,9 +14,10 @@ interface InventoryItem {
   category: string | null;
   restockLevel: number | null;
   image: string | null;
+  salesCount?: number; // Added to handle Top Selling logic
 }
 
-type Tab = "all" | "in-stock" | "out-of-stock";
+type Tab = "all" | "low-stock" | "out-of-stock" | "top-selling";
 
 export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
   const [tab, setTab] = useState<Tab>("all");
@@ -40,12 +41,35 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
     return () => clearTimeout(timer);
   }, [status]);
 
-  const outOfStockItems = items.filter((i) => i.quantity <= 0);
-  const inStockItems = items.filter((i) => i.quantity > 0);
+  // Derived filter categories
+  const outOfStockItems = useMemo(() => items.filter((i) => i.quantity <= 0), [items]);
+  
+  const lowStockItems = useMemo(() => {
+    return items.filter((i) => i.quantity > 0 && i.restockLevel != null && i.quantity <= i.restockLevel);
+  }, [items]);
+
+  const topSellingItems = useMemo(() => {
+    // Sort items by salesCount descending (or fallback to items with higher margins/prices if salesCount doesn't exist)
+    return [...items].sort((a, b) => (b.salesCount ?? 0) - (a.salesCount ?? 0));
+  }, [items]);
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  const tabFiltered = tab === "in-stock" ? inStockItems : tab === "out-of-stock" ? outOfStockItems : items;
+  // Determine which list to render based on active tab
+  const tabFiltered = useMemo(() => {
+    switch (tab) {
+      case "low-stock":
+        return lowStockItems;
+      case "out-of-stock":
+        return outOfStockItems;
+      case "top-selling":
+        return topSellingItems;
+      case "all":
+      default:
+        return items;
+    }
+  }, [tab, items, lowStockItems, outOfStockItems, topSellingItems]);
+
   const visibleItems = searchQuery.trim()
     ? tabFiltered.filter((i) => i.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : tabFiltered;
@@ -60,10 +84,12 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
     return { totalCost: cost, totalSelling: selling, totalProfit: selling - cost };
   }, [items]);
 
-  const tabs: { key: Tab; label: string; count: number }[] = [
+  // Configuration for your new tab bar
+  const tabs: { key: Tab; label: string; count?: number; icon?: React.ReactNode }[] = [
     { key: "all", label: "All", count: items.length },
-    { key: "in-stock", label: "In Stock", count: inStockItems.length },
+    { key: "low-stock", label: "Low Stock", count: lowStockItems.length },
     { key: "out-of-stock", label: "Out of Stock", count: outOfStockItems.length },
+    { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> },
   ];
 
   return (
@@ -148,19 +174,23 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
           />
         </div>
 
-        {/* Tiny Row Selection Tabs */}
-        <div className="flex gap-1.5">
+        {/* Tab Selection Row (Horizontal Scroll on Mobile) */}
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 -mx-1 px-1">
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1 shrink-0 ${
                 tab === t.key
                   ? "bg-blue-600 text-white"
                   : "bg-[#1a1d24] text-slate-400 hover:text-slate-200 border border-slate-800"
               }`}
             >
-              {t.label} <span className="opacity-60 text-[10px]">({t.count})</span>
+              {t.icon}
+              <span>{t.label}</span>
+              {t.count !== undefined && (
+                <span className="opacity-60 text-[10px]">({t.count})</span>
+              )}
             </button>
           ))}
         </div>
@@ -216,6 +246,13 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
                   </div>
                 )}
 
+                {/* Hot badge for items rendered in Top Selling list */}
+                {tab === "top-selling" && item.salesCount && item.salesCount > 0 && (
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500/90 text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
+                    <Flame size={10} fill="currentColor" /> {item.salesCount} sold
+                  </div>
+                )}
+
                 <div className="absolute top-2 right-2 p-1.5 bg-slate-900/80 backdrop-blur border border-slate-800 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10">
                   <Edit2 size={12} className="text-blue-400" />
                 </div>
@@ -257,8 +294,10 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
           <p>
             {tab === "out-of-stock"
               ? "No out-of-stock items right now."
-              : tab === "in-stock"
-              ? "No in-stock items yet."
+              : tab === "low-stock"
+              ? "No low stock items right now."
+              : tab === "top-selling"
+              ? "No top-selling history found."
               : "No inventory items found. Add your first product to get started."}
           </p>
         </div>
@@ -290,6 +329,17 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
           <span className="text-[10px]">Profile</span>
         </Link>
       </nav>
+      
+      {/* Small custom style to hide scrollbar on horizontal scroll tabs */}
+      <style jsx global>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
 }

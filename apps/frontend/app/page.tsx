@@ -1,6 +1,7 @@
-export const revalidate = 3600;
+"use client";
 
 import Link from "next/link";
+import { useState, useEffect, useRef } from "react";
 import { Oswald, Inter, IBM_Plex_Mono } from "next/font/google";
 import {
   Boxes,
@@ -111,41 +112,116 @@ const faqs = [
   },
 ];
 
+// --- 1. Layout-Stable Typewriter Component ---
+function Typewriter({ text, speed = 15, active = false }: { text: string; speed?: number; active: boolean }) {
+  const [currentText, setCurrentText] = useState("");
+
+  useEffect(() => {
+    if (!active) {
+      // Clear text when inactive so it can re-type next time
+      setCurrentText("");
+      return;
+    }
+    
+    let i = 0;
+    setCurrentText("");
+    const timer = setInterval(() => {
+      setCurrentText((prev) => text.substring(0, i + 1));
+      i++;
+      if (i >= text.length) {
+        clearInterval(timer);
+      }
+    }, speed);
+    return () => clearInterval(timer);
+  }, [active, text, speed]);
+
+  return (
+    <span className="relative inline-block w-full">
+      {/* Invisible text reserves exact space so layout never shifts */}
+      <span className="invisible select-none pointer-events-none block">{text}</span>
+      {/* Visible typing text */}
+      <span className="absolute left-0 top-0 w-full block">{currentText}</span>
+    </span>
+  );
+}
+
+// --- 2. Scroll-driven Unfurl Wrapper with Repeatability ---
+function ScrollUnfurl({ children, className = "" }: { children: (active: boolean) => React.ReactNode; className?: string }) {
+  const [hasEntered, setHasEntered] = useState(false);
+  const elementRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // Sets active to true when entering viewport, and false when it rolls completely out
+        setHasEntered(entry.isIntersecting);
+      },
+      {
+        threshold: 0.1, 
+        rootMargin: "0px 0px -10% 0px", // Trigger when 10% of the element is within view
+      }
+    );
+
+    if (elementRef.current) {
+      observer.observe(elementRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={elementRef}
+      className={`${className} scroll-unfurl-element ${hasEntered ? "unrolled" : "rolled"}`}
+    >
+      {children(hasEntered)}
+    </div>
+  );
+}
+
 export default function HomePage() {
   return (
     <div
-      className={`${display.variable} ${body.variable} ${mono.variable} min-h-screen bg-[#0D1527] text-[#F1EEE3] overflow-x-hidden`}
+      className={`${display.variable} ${body.variable} ${mono.variable} min-h-screen bg-[#0A0F1D] text-[#F1EEE3] overflow-x-hidden relative perspective-container`}
       style={{ fontFamily: "var(--font-body)" }}
     >
+      {/* Ambient background glows */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-red-900/10 rounded-full blur-[120px] mix-blend-screen" />
+        <div className="absolute top-[40%] right-10 w-[600px] h-[600px] bg-indigo-950/20 rounded-full blur-[140px] mix-blend-screen" />
+        <div className="absolute bottom-[10%] left-10 w-[500px] h-[500px] bg-red-950/10 rounded-full blur-[130px] mix-blend-screen" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-30" />
+      </div>
+
       {/* Ticker */}
-      <div className="bg-[#E55345] text-[#0D1527] overflow-hidden whitespace-nowrap py-2 relative z-40">
-        <div className="inline-flex animate-[scroll_22s_linear_infinite]">
+      <div className="bg-[#E55345] text-[#0A0F1D] overflow-hidden whitespace-nowrap py-2 relative z-40 border-b border-[#0A0F1D]/20 shadow-[0_4px_20px_rgba(229,83,69,0.2)]">
+        <div className="inline-flex animate-[scroll_18s_linear_infinite] hover:[animation-play-state:paused]">
           {[...tickerItems, ...tickerItems, ...tickerItems].map((item, i) => (
-            <span key={i} className="mx-6 text-xs font-bold tracking-widest" style={{ fontFamily: "var(--font-mono)" }}>
-              {item} •
+            <span key={i} className="mx-6 text-xs font-black tracking-widest uppercase flex items-center gap-2" style={{ fontFamily: "var(--font-mono)" }}>
+              <span className="h-1.5 w-1.5 rounded-full bg-[#0A0F1D] inline-block" /> {item}
             </span>
           ))}
         </div>
       </div>
 
       {/* Navbar */}
-      <nav className="sticky top-0 w-full z-50 border-b border-[#F1EEE3]/10 bg-[#0D1527]/90 backdrop-blur-md">
+      <nav className="sticky top-0 w-full z-50 border-b border-[#F1EEE3]/10 bg-[#0A0F1D]/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-sm bg-[#F1EEE3] flex items-center justify-center">
-              <span className="text-[#0D1527] font-bold text-sm" style={{ fontFamily: "var(--font-display)" }}>G</span>
+          <div className="flex items-center gap-2 group cursor-pointer">
+            <div className="h-8 w-8 rounded-sm bg-[#F1EEE3] flex items-center justify-center transition-all duration-300 group-hover:bg-[#E55345] group-hover:rotate-12 group-hover:scale-110">
+              <span className="text-[#0D1527] font-extrabold text-sm group-hover:text-white" style={{ fontFamily: "var(--font-display)" }}>G</span>
             </div>
-            <span className="font-bold tracking-tight text-[#F1EEE3]" style={{ fontFamily: "var(--font-display)" }}>
+            <span className="font-extrabold tracking-tight text-[#F1EEE3] group-hover:text-[#E55345] transition-colors" style={{ fontFamily: "var(--font-display)" }}>
               GARRISON MARKET
             </span>
           </div>
           <div className="flex items-center gap-3 sm:gap-6">
-            <Link href="/login" className="text-sm font-medium text-[#F1EEE3]/80 hover:text-[#F1EEE3] transition hidden sm:block">
+            <Link href="/login" className="text-sm font-semibold text-[#F1EEE3]/80 hover:text-white transition-all hover:scale-105">
               Sign in
             </Link>
             <Link
               href="/register"
-              className="text-xs sm:text-sm font-semibold bg-[#F1EEE3] text-[#0D1527] px-3 sm:px-4 py-2 rounded-sm hover:bg-[#E2DDD0] transition"
+              className="text-xs sm:text-sm font-black uppercase tracking-wider bg-[#F1EEE3] text-[#0D1527] px-4 py-2 rounded-none border border-transparent hover:border-[#E55345] hover:bg-transparent hover:text-[#E55345] shadow-[0_4px_12px_rgba(241,238,227,0.1)] hover:shadow-[0_4px_20px_rgba(229,83,69,0.3)] transition-all duration-300"
             >
               Get started
             </Link>
@@ -153,332 +229,445 @@ export default function HomePage() {
         </div>
       </nav>
 
-      <main className="px-6 max-w-6xl mx-auto">
-        {/* Hero */}
-        <section className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center py-16 sm:py-24">
-          <div>
-            <div
-              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#E55345] mb-6"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
-              <Zap size={14} /> Built for shop owners, not IT departments
-            </div>
-            <h1
-              className="text-[2.6rem] sm:text-[3.6rem] lg:text-[4.2rem] leading-[0.95] font-bold text-[#F1EEE3] mb-8 tracking-tight uppercase"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              STOP RUNNING YOUR SHOP <span className="text-[#E55345]">BLIND.</span>
-            </h1>
-            <p className="text-[#F1EEE3]/70 text-lg max-w-md mb-10 leading-relaxed">
-              Garrison Market gives you one dashboard for stock, staff, and daily sales —
-              so you know exactly what sold, who sold it, and what's running low, before
-              it costs you a sale.
-            </p>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center gap-2 bg-[#F1EEE3] text-[#0D1527] px-7 py-4 rounded-sm font-semibold hover:bg-[#E2DDD0] transition w-full sm:w-auto"
-              >
-                Start managing your shop <ArrowUpRight size={18} />
-              </Link>
-              <Link href="/login" className="text-sm font-semibold text-[#F1EEE3] underline underline-offset-4 hover:text-[#E2DDD0] transition">
-                I already have an account
-              </Link>
-            </div>
-          </div>
-
-          {/* Signature element: live receipt */}
-          <div className="relative mx-auto max-w-sm w-full">
-            <div className="bg-[#16233D] rounded-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] px-6 pt-6 pb-8 relative overflow-hidden border border-[#F1EEE3]/10">
-              <div className="text-center mb-4 pb-4 border-b border-dashed border-[#F1EEE3]/20">
-                <p className="text-xs tracking-[0.3em] text-[#F1EEE3]/50" style={{ fontFamily: "var(--font-mono)" }}>
-                  DAILY ACTIVITY
-                </p>
-              </div>
-              <div className="space-y-3">
-                {receiptLines.map((line, i) => (
-                  <p
-                    key={i}
-                    className={`text-xs leading-relaxed opacity-0 animate-[fadeIn_0.6s_ease-out_forwards] ${
-                      line.warn ? "text-[#E55345] font-semibold" : line.muted ? "text-[#F1EEE3]/40" : "text-[#F1EEE3]/80"
-                    }`}
-                    style={{ fontFamily: "var(--font-mono)", animationDelay: `${i * 0.35 + 0.2}s` }}
-                  >
-                    {line.text}
-                  </p>
-                ))}
-              </div>
-              <div className="mt-6 pt-4 border-t border-dashed border-[#F1EEE3]/20 flex justify-center gap-1">
-                {Array.from({ length: 24 }).map((_, i) => (
-                  <div key={i} className="w-[3px] h-6 bg-[#F1EEE3]/70" style={{ opacity: i % 3 === 0 ? 1 : 0.2 }} />
-                ))}
-              </div>
-            </div>
-            <div
-              className="h-4 -mt-1"
-              style={{
-                backgroundImage:
-                  "linear-gradient(135deg, transparent 8px, #16233D 8px), linear-gradient(-135deg, transparent 8px, #16233D 8px)",
-                backgroundPosition: "0 0, 0 0",
-                backgroundSize: "16px 16px, 16px 16px",
-                backgroundRepeat: "repeat-x, repeat-x",
-              }}
-            />
-          </div>
-        </section>
-
-        {/* Agitation: problem vs solution */}
-        <section className="py-16 sm:py-24 border-t border-[#F1EEE3]/10">
-          <div className="text-center mb-14">
-            <div
-              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#E55345] mb-4"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
-              <TrendingDown size={14} /> The real cost of guessing
-            </div>
-            <h2
-              className="text-3xl sm:text-4xl font-bold text-[#F1EEE3] tracking-tight uppercase"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Every notebook has a blind spot.
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-[#16233D] border border-[#E55345]/20 rounded-sm p-8">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-[#E55345] mb-6" style={{ fontFamily: "var(--font-mono)" }}>
-                The old way
-              </h3>
-              <ul className="space-y-4">
-                {painPoints.map((p) => (
-                  <li key={p} className="flex items-start gap-3 text-sm text-[#F1EEE3]/70">
-                    <X size={16} className="text-[#E55345] shrink-0 mt-0.5" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="bg-[#16233D] border border-emerald-500/20 rounded-sm p-8">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-6" style={{ fontFamily: "var(--font-mono)" }}>
-                With Garrison Market
-              </h3>
-              <ul className="space-y-4">
-                {withGarrison.map((p) => (
-                  <li key={p} className="flex items-start gap-3 text-sm text-[#F1EEE3]/70">
-                    <Check size={16} className="text-emerald-400 shrink-0 mt-0.5" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* Deep feature sections, alternating */}
-        <section className="py-16 sm:py-24 border-t border-[#F1EEE3]/10 space-y-20">
-          {deepFeatures.map((f, i) => (
-            <div key={f.title} className={`grid md:grid-cols-2 gap-10 items-center ${i % 2 === 1 ? "md:[&>*:first-child]:order-2" : ""}`}>
+      {/* Main Content with Scroll-driven Unfurl Wrappers */}
+      <main className="px-6 max-w-6xl mx-auto relative z-10">
+        
+        {/* Section 1: Hero */}
+        <ScrollUnfurl>
+          {(active) => (
+            <section className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center py-16 sm:py-28">
               <div>
-                <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#E55345] mb-4"
-                     style={{ fontFamily: "var(--font-mono)" }}>
-                  <f.icon size={14} /> {f.tag}
+                <div
+                  className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#E55345] mb-6 bg-[#E55345]/10 px-3 py-1 rounded-sm border border-[#E55345]/30"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  <Zap size={14} /> Built for shop owners, not IT departments
                 </div>
-                <h3 className="text-2xl sm:text-3xl font-bold text-[#F1EEE3] mb-4 tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
-                  {f.title}
-                </h3>
-                <p className="text-[#F1EEE3]/70 leading-relaxed max-w-md">{f.desc}</p>
+                <h1
+                  className="text-[2.8rem] sm:text-[4rem] lg:text-[4.6rem] leading-[0.9] font-black text-[#F1EEE3] mb-8 tracking-tight uppercase"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  STOP RUNNING <br />YOUR SHOP <span className="text-[#E55345] relative inline-block hover-glitch shadow-[#E55345]/10">BLIND.</span>
+                </h1>
+                <p className="text-[#F1EEE3]/70 text-lg max-w-md mb-10 leading-relaxed font-medium">
+                  <Typewriter 
+                    text="Garrison Market gives you one dashboard for stock, staff, and daily sales — so you know exactly what sold, who sold it, and what's running low, before it costs you a business day." 
+                    active={active} 
+                    speed={12}
+                  />
+                </p>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center justify-center gap-3 bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] px-8 py-5 rounded-none font-bold uppercase tracking-wider hover:translate-x-1 hover:-translate-y-1 hover:shadow-[-5px_5px_0px_0px_rgba(241,238,227,0.9)] transition-all duration-300 w-full sm:w-auto text-sm"
+                  >
+                    Start managing your shop <ArrowUpRight size={18} />
+                  </Link>
+                  <Link href="/login" className="text-sm font-bold text-[#F1EEE3] underline underline-offset-8 decoration-2 decoration-[#E55345]/50 hover:decoration-[#E55345] hover:text-white transition text-center sm:text-left py-2">
+                    I already have an account
+                  </Link>
+                </div>
               </div>
-              <div className="bg-[#16233D] border border-[#F1EEE3]/10 rounded-sm p-6">
-                <div className="space-y-3">
-                  {f.mock.map((row) => (
-                    <div
-                      key={row.label}
-                      className="flex justify-between items-center px-4 py-3 rounded-sm bg-[#0D1527]/60 border border-[#F1EEE3]/5"
-                    >
-                      <span className="text-xs text-[#F1EEE3]/70">{row.label}</span>
-                      <span
-                        className={`text-xs font-bold ${
-                          row.tone === "danger" ? "text-[#E55345]" : row.tone === "warn" ? "text-amber-400" : "text-emerald-400"
-                        }`}
-                        style={{ fontFamily: "var(--font-mono)" }}
+
+              {/* Signature Live Receipt Widget */}
+              <div className="relative mx-auto max-w-sm w-full">
+                <div className="absolute -inset-1 bg-gradient-to-r from-[#E55345]/30 to-[#4f46e5]/30 rounded-lg blur-md opacity-75 animate-pulse" />
+                <div className="relative bg-[#11192E] rounded-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] px-6 pt-6 pb-8 border border-[#F1EEE3]/15">
+                  <div className="text-center mb-4 pb-4 border-b border-dashed border-[#F1EEE3]/20">
+                    <p className="text-xs tracking-[0.3em] font-extrabold text-[#E55345]" style={{ fontFamily: "var(--font-mono)" }}>
+                      LIVE ACTIVITY STREAM
+                    </p>
+                  </div>
+                  <div className="space-y-3.5">
+                    {receiptLines.map((line, i) => (
+                      <p
+                        key={i}
+                        className={`text-xs leading-relaxed opacity-0 animate-[fadeIn_0.5s_ease-out_forwards] ${
+                          line.warn ? "text-[#E55345] font-bold tracking-wide" : line.muted ? "text-[#F1EEE3]/40" : "text-[#F1EEE3]/80"
+                    }`}
+                        style={{ fontFamily: "var(--font-mono)", animationDelay: `${i * 0.25 + 0.1}s` }}
                       >
-                        {row.value}
-                      </span>
+                        {line.text}
+                      </p>
+                    ))}
+                  </div>
+                  <div className="mt-6 pt-4 border-t border-dashed border-[#F1EEE3]/20 flex justify-between px-1">
+                    {Array.from({ length: 26 }).map((_, i) => (
+                      <div key={i} className="w-[2px] h-6 bg-[#F1EEE3]/40" style={{ opacity: i % 3 === 0 ? 1 : 0.2 }} />
+                    ))}
+                  </div>
+                </div>
+                <div
+                  className="h-4 -mt-1 relative z-10"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(135deg, transparent 8px, #11192E 8px), linear-gradient(-135deg, transparent 8px, #11192E 8px)",
+                    backgroundPosition: "0 0, 0 0",
+                    backgroundSize: "16px 16px, 16px 16px",
+                    backgroundRepeat: "repeat-x, repeat-x",
+                  }}
+                />
+              </div>
+            </section>
+          )}
+        </ScrollUnfurl>
+
+        {/* Section 2: Agitation (Problem vs Solution) */}
+        <ScrollUnfurl>
+          {(active) => (
+            <section className="py-20 sm:py-28 border-t border-[#F1EEE3]/10 relative">
+              <div className="text-center mb-16">
+                <div
+                  className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#E55345] mb-4 bg-[#E55345]/10 px-3 py-1 border border-[#E55345]/20"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  <TrendingDown size={14} /> The real cost of guessing
+                </div>
+                <h2
+                  className="text-4xl sm:text-5xl font-black text-[#F1EEE3] tracking-tight uppercase"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Every notebook has a <span className="text-[#E55345] hover-glitch">blind spot.</span>
+                </h2>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="bg-[#121A30]/80 backdrop-blur-sm border border-[#E55345]/30 rounded-none p-8 hover:border-[#E55345]/80 hover:shadow-[0_10px_30px_rgba(229,83,69,0.05)] transition-all duration-300 transform hover:-translate-y-1">
+                  <h3 className="text-xs font-black uppercase tracking-[0.25em] text-[#E55345] mb-6 flex items-center gap-2" style={{ fontFamily: "var(--font-mono)" }}>
+                    <span className="h-2 w-2 rounded-full bg-[#E55345]" /> The old way
+                  </h3>
+                  <ul className="space-y-5">
+                    {painPoints.map((p, index) => (
+                      <li key={p} className="flex items-start gap-3.5 text-sm text-[#F1EEE3]/70 group">
+                        <div className="p-1 rounded-sm bg-[#E55345]/10 group-hover:bg-[#E55345]/20 transition-colors">
+                          <X size={14} className="text-[#E55345] shrink-0" />
+                        </div>
+                        <span className="group-hover:text-[#F1EEE3] transition-colors">
+                          <Typewriter text={p} active={active} speed={10 + index * 2} />
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="bg-[#121A30]/80 backdrop-blur-sm border border-emerald-500/30 rounded-none p-8 hover:border-emerald-500/80 hover:shadow-[0_10px_30px_rgba(16,185,129,0.05)] transition-all duration-300 transform hover:-translate-y-1">
+                  <h3 className="text-xs font-black uppercase tracking-[0.25em] text-emerald-400 mb-6 flex items-center gap-2" style={{ fontFamily: "var(--font-mono)" }}>
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" /> With Garrison Market
+                  </h3>
+                  <ul className="space-y-5">
+                    {withGarrison.map((p, index) => (
+                      <li key={p} className="flex items-start gap-3.5 text-sm text-[#F1EEE3]/70 group">
+                        <div className="p-1 rounded-sm bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
+                          <Check size={14} className="text-emerald-400 shrink-0" />
+                        </div>
+                        <span className="group-hover:text-white transition-colors">
+                          <Typewriter text={p} active={active} speed={10 + index * 2} />
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </section>
+          )}
+        </ScrollUnfurl>
+
+        {/* Section 3: Deep Features */}
+        <section className="py-16 sm:py-24 border-t border-[#F1EEE3]/10 space-y-24">
+          {deepFeatures.map((f, i) => (
+            <ScrollUnfurl key={f.title}>
+              {(active) => (
+                <div className={`grid md:grid-cols-2 gap-12 items-center ${i % 2 === 1 ? "md:[&>*:first-child]:order-2" : ""}`}>
+                  <div className="space-y-5">
+                    <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.2em] text-[#E55345] bg-[#E55345]/10 px-3 py-1.5"
+                         style={{ fontFamily: "var(--font-mono)" }}>
+                      <f.icon size={14} /> {f.tag}
+                    </div>
+                    <h3 className="text-3xl sm:text-4xl font-extrabold text-[#F1EEE3] tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
+                      {f.title}
+                    </h3>
+                    <p className="text-[#F1EEE3]/70 leading-relaxed text-base">
+                      <Typewriter text={f.desc} active={active} speed={12} />
+                    </p>
+                  </div>
+                  
+                  <div className="bg-[#121A30] border border-[#F1EEE3]/10 rounded-none p-6 shadow-2xl relative overflow-hidden group hover:border-[#E55345]/30 transition-all duration-300">
+                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#E55345]/40 to-transparent animate-[scroll_4s_linear_infinite]" />
+                    <div className="space-y-3.5">
+                      {f.mock.map((row) => (
+                        <div
+                          key={row.label}
+                          className="flex justify-between items-center px-4 py-3.5 rounded-none bg-[#0A0F1D]/80 border border-[#F1EEE3]/5 hover:border-[#F1EEE3]/15 transition-all duration-200"
+                        >
+                          <span className="text-xs font-bold text-[#F1EEE3]/70">{row.label}</span>
+                          <span
+                            className={`text-xs font-black uppercase tracking-wider ${
+                              row.tone === "danger" 
+                              ? "text-[#E55345] animate-pulse" 
+                              : row.tone === "warn" 
+                              ? "text-amber-400 font-bold" 
+                              : "text-emerald-400"
+                            }`}
+                            style={{ fontFamily: "var(--font-mono)" }}
+                          >
+                            {row.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </ScrollUnfurl>
+          ))}
+        </section>
+
+        {/* Section 4: Process Steps */}
+        <ScrollUnfurl>
+          {(active) => (
+            <section className="py-20 sm:py-28 border-t border-[#F1EEE3]/10 relative">
+              <h2
+                className="text-4xl sm:text-5xl font-black text-[#F1EEE3] mb-16 text-center tracking-tight uppercase"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Three steps. That's it.
+              </h2>
+              <div className="grid md:grid-cols-3 gap-10">
+                {steps.map((s, idx) => (
+                  <div key={s.n} className="relative group p-6 border border-transparent hover:border-[#F1EEE3]/5 transition-all duration-300 hover:bg-[#121A30]/30">
+                    <div
+                      className="text-7xl font-black text-[#F1EEE3]/5 group-hover:text-[#E55345]/15 mb-4 transition-colors select-none"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {s.n}
+                    </div>
+                    <h3 className="text-xl font-bold text-[#F1EEE3] mb-3 group-hover:text-white transition-colors">{s.title}</h3>
+                    <p className="text-sm text-[#F1EEE3]/60 leading-relaxed min-h-[50px]">
+                      <Typewriter text={s.desc} active={active} speed={15 + idx * 3} />
+                    </p>
+                    <div className="absolute bottom-0 left-0 w-0 h-[2px] bg-[#E55345] group-hover:w-full transition-all duration-500" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </ScrollUnfurl>
+
+        {/* Section 5: Pricing */}
+        <ScrollUnfurl>
+          {() => (
+            <section className="py-20 sm:py-28 border-t border-[#F1EEE3]/10">
+              <div className="border border-[#F1EEE3]/15 rounded-none p-8 md:p-16 bg-[#11192E] shadow-2xl relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#E55345]/5 via-transparent to-transparent pointer-events-none" />
+                <h2
+                  className="text-4xl sm:text-5xl font-black text-[#F1EEE3] mb-4 text-center tracking-tight uppercase"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Stop losing money guessing.
+                </h2>
+                <p className="text-center text-[#F1EEE3]/50 mb-14 text-sm font-semibold uppercase tracking-wider">Cancel anytime. No card required to start.</p>
+
+                <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
+                  {[
+                    {
+                      title: "Standard",
+                      price: "₦---",
+                      features: ["Up to 10 inventory items", "1 staff account", "Daily sales dashboard"],
+                      plan: "standard",
+                    },
+                    {
+                      title: "Pro",
+                      price: "₦---",
+                      features: ["Up to 20 inventory items", "2 staff accounts", "Full staff management"],
+                      plan: "pro",
+                      popular: true,
+                    },
+                  ].map((plan) => (
+                    <div key={plan.title} className={`bg-[#0A0F1D] p-8 rounded-none border ${plan.popular ? 'border-[#E55345]' : 'border-[#F1EEE3]/10'} flex flex-col gap-8 relative`}>
+                      {plan.popular && (
+                        <span className="absolute -top-3.5 right-6 bg-[#E55345] text-[#F1EEE3] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md">
+                          POPULAR CHOICE
+                        </span>
+                      )}
+                      <div>
+                        <div className="text-[#F1EEE3]/50 text-xs font-bold uppercase tracking-widest mb-1.5">{plan.title}</div>
+                        <div className="text-5xl font-black text-[#F1EEE3]" style={{ fontFamily: "var(--font-display)" }}>
+                          {plan.price}
+                          <span className="text-sm font-normal text-[#F1EEE3]/50">/mo</span>
+                        </div>
+                      </div>
+                      <ul className="space-y-4 flex-1">
+                        {plan.features.map((f) => (
+                          <li key={f} className="text-sm flex items-start gap-2.5 text-[#F1EEE3]/80">
+                            <span className="text-[#E55345] mt-0.5 font-black">—</span> {f}
+                          </li>
+                        ))}
+                      </ul>
+                      <Link
+                        href={`/login?plan=${plan.plan}`}
+                        className={`w-full text-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 ${
+                          plan.popular 
+                          ? 'bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] shadow-[0_4px_15px_rgba(229,83,69,0.3)]' 
+                          : 'bg-[#F1EEE3] text-[#0D1527] hover:bg-[#E2DDD0]'
+                        }`}
+                      >
+                        Choose {plan.title}
+                      </Link>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
-          ))}
-        </section>
+            </section>
+          )}
+        </ScrollUnfurl>
 
-        {/* How it works */}
-        <section className="py-16 sm:py-24 border-t border-[#F1EEE3]/10">
-          <h2
-            className="text-3xl sm:text-4xl font-bold text-[#F1EEE3] mb-14 text-center tracking-tight uppercase"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            Three steps. That's it.
-          </h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            {steps.map((s) => (
-              <div key={s.n} className="relative">
-                <div
-                  className="text-6xl font-bold text-[#F1EEE3]/10 mb-2"
+        {/* Section 6: FAQ */}
+        <ScrollUnfurl>
+          {() => (
+            <section className="py-16 sm:py-24 border-t border-[#F1EEE3]/10">
+              <h2
+                className="text-4xl sm:text-5xl font-black text-[#F1EEE3] mb-12 text-center tracking-tight uppercase"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Questions, answered.
+              </h2>
+              <div className="max-w-2xl mx-auto space-y-4">
+                {faqs.map((f) => (
+                  <details key={f.q} className="group bg-[#11192E] border border-[#F1EEE3]/10 hover:border-[#F1EEE3]/25 rounded-none px-6 py-5 transition-all duration-300">
+                    <summary className="flex items-center justify-between cursor-pointer list-none text-sm font-bold text-[#F1EEE3] select-none uppercase tracking-wide">
+                      {f.q}
+                      <ChevronDown size={16} className="text-[#F1EEE3]/50 group-open:rotate-180 transition-transform shrink-0 ml-4" />
+                    </summary>
+                    <p className="text-sm text-[#F1EEE3]/60 mt-4 leading-relaxed pl-1 border-l-2 border-[#E55345]">{f.a}</p>
+                  </details>
+                ))}
+              </div>
+            </section>
+          )}
+        </ScrollUnfurl>
+
+        {/* Section 7: Final Call to Action */}
+        <ScrollUnfurl>
+          {(active) => (
+            <section className="py-20 sm:py-28 border-t border-[#F1EEE3]/10">
+              <div className="bg-[#E55345] rounded-none p-10 sm:p-20 text-center relative overflow-hidden shadow-2xl border border-red-500/20">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent opacity-60 pointer-events-none" />
+                <ShieldAlert size={48} className="mx-auto mb-6 text-[#0A0F1D]" />
+                <h2
+                  className="text-4xl sm:text-6xl font-black text-[#0A0F1D] mb-6 tracking-tight uppercase leading-[0.95]"
                   style={{ fontFamily: "var(--font-display)" }}
                 >
-                  {s.n}
-                </div>
-                <h3 className="text-lg font-bold text-[#F1EEE3] mb-2">{s.title}</h3>
-                <p className="text-sm text-[#F1EEE3]/60 leading-relaxed">{s.desc}</p>
+                  Every day on paper<br />is a day you're guessing.
+                </h2>
+                <p className="text-[#0A0F1D]/85 mb-10 max-w-lg mx-auto font-bold text-base sm:text-lg">
+                  <Typewriter text="Set up your shop in minutes. No card required to start." active={active} speed={15} />
+                </p>
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-3 bg-[#0A0F1D] text-[#F1EEE3] px-10 py-5 rounded-none font-black uppercase tracking-wider text-sm hover:bg-[#151f38] hover:shadow-[0_10px_30px_rgba(10,15,29,0.4)] transition-all duration-300"
+                >
+                  Start managing your shop <ArrowUpRight size={18} />
+                </Link>
               </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Pricing */}
-        <section className="py-16 sm:py-24 border-t border-[#F1EEE3]/10">
-          <div className="border border-[#F1EEE3]/10 rounded-sm p-8 md:p-14 bg-[#16233D] shadow-sm">
-            <h2
-              className="text-3xl sm:text-4xl font-bold text-[#F1EEE3] mb-3 text-center tracking-tight uppercase"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Stop losing money guessing.
-            </h2>
-            <p className="text-center text-[#F1EEE3]/60 mb-12 text-sm">Cancel anytime. No card required to start.</p>
-
-            <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
-              {[
-                {
-                  title: "Standard",
-                  price: "₦---",
-                  features: ["Up to 10 inventory items", "1 staff account", "Daily sales dashboard"],
-                  plan: "standard",
-                },
-                {
-                  title: "Pro",
-                  price: "₦---",
-                  features: ["Up to 20 inventory items", "2 staff accounts", "Full staff management"],
-                  plan: "pro",
-                },
-              ].map((plan) => (
-                <div key={plan.title} className="bg-[#0D1527] p-8 rounded-sm border border-[#F1EEE3]/10 flex flex-col gap-6">
-                  <div>
-                    <div className="text-[#F1EEE3]/60 text-sm font-semibold uppercase tracking-wider mb-1">{plan.title}</div>
-                    <div className="text-4xl font-bold text-[#F1EEE3]" style={{ fontFamily: "var(--font-display)" }}>
-                      {plan.price}
-                      <span className="text-sm font-normal text-[#F1EEE3]/50">/mo</span>
-                    </div>
-                  </div>
-                  <ul className="space-y-3 flex-1">
-                    {plan.features.map((f) => (
-                      <li key={f} className="text-sm flex items-start gap-2 text-[#F1EEE3]/80">
-                        <span className="text-[#E55345] mt-0.5">—</span> {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <Link
-                    href={`/login?plan=${plan.plan}`}
-                    className="w-full text-center py-4 rounded-sm bg-[#F1EEE3] text-[#0D1527] font-semibold hover:bg-[#E2DDD0] transition"
-                  >
-                    Choose {plan.title}
-                  </Link>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* FAQ */}
-        <section className="py-16 sm:py-24 border-t border-[#F1EEE3]/10">
-          <h2
-            className="text-3xl sm:text-4xl font-bold text-[#F1EEE3] mb-12 text-center tracking-tight uppercase"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            Questions, answered.
-          </h2>
-          <div className="max-w-2xl mx-auto space-y-3">
-            {faqs.map((f) => (
-              <details key={f.q} className="group bg-[#16233D] border border-[#F1EEE3]/10 rounded-sm px-6 py-4">
-                <summary className="flex items-center justify-between cursor-pointer list-none text-sm font-semibold text-[#F1EEE3]">
-                  {f.q}
-                  <ChevronDown size={16} className="text-[#F1EEE3]/50 group-open:rotate-180 transition-transform shrink-0 ml-4" />
-                </summary>
-                <p className="text-sm text-[#F1EEE3]/60 mt-3 leading-relaxed">{f.a}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        {/* Final aggressive CTA */}
-        <section className="py-16 sm:py-24 border-t border-[#F1EEE3]/10">
-          <div className="bg-[#E55345] rounded-sm p-10 sm:p-16 text-center relative overflow-hidden">
-            <ShieldAlert size={32} className="mx-auto mb-6 text-[#0D1527]" />
-            <h2
-              className="text-3xl sm:text-5xl font-bold text-[#0D1527] mb-6 tracking-tight uppercase leading-tight"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Every day on paper<br />is a day you're guessing.
-            </h2>
-            <p className="text-[#0D1527]/80 mb-8 max-w-lg mx-auto">
-              Set up your shop in minutes. No card required to start.
-            </p>
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 bg-[#0D1527] text-[#F1EEE3] px-8 py-4 rounded-sm font-bold hover:bg-[#16233D] transition"
-            >
-              Start managing your shop <ArrowUpRight size={18} />
-            </Link>
-          </div>
-        </section>
+            </section>
+          )}
+        </ScrollUnfurl>
       </main>
 
-      <footer className="border-t border-[#F1EEE3]/10 py-14 px-6">
-        <div className="max-w-6xl mx-auto grid sm:grid-cols-3 gap-8 mb-10 text-sm">
+      <footer className="border-t border-[#F1EEE3]/10 py-16 px-6 bg-[#070A14] relative z-20">
+        <div className="max-w-6xl mx-auto grid sm:grid-cols-3 gap-10 mb-12 text-sm">
           <div>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-4">
               <div className="h-6 w-6 rounded-sm bg-[#F1EEE3] flex items-center justify-center">
-                <span className="text-[#0D1527] font-bold text-xs" style={{ fontFamily: "var(--font-display)" }}>G</span>
+                <span className="text-[#0D1527] font-extrabold text-xs" style={{ fontFamily: "var(--font-display)" }}>G</span>
               </div>
-              <span className="font-bold text-[#F1EEE3]" style={{ fontFamily: "var(--font-display)" }}>GARRISON MARKET</span>
+              <span className="font-extrabold tracking-tight text-[#F1EEE3]" style={{ fontFamily: "var(--font-display)" }}>GARRISON MARKET</span>
             </div>
-            <p className="text-[#F1EEE3]/50 text-xs leading-relaxed max-w-xs">
+            <p className="text-[#F1EEE3]/40 text-xs leading-relaxed max-w-xs">
               One dashboard for stock, staff, and sales. Built for the shop floor.
             </p>
           </div>
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-widest text-[#F1EEE3]/50 mb-3" style={{ fontFamily: "var(--font-mono)" }}>
+            <h4 className="text-xs font-black uppercase tracking-widest text-[#F1EEE3]/40 mb-4" style={{ fontFamily: "var(--font-mono)" }}>
               Product
             </h4>
-            <ul className="space-y-2 text-[#F1EEE3]/60">
-              <li><Link href="/login" className="hover:text-[#F1EEE3] transition">Sign in</Link></li>
-              <li><Link href="/login?plan=standard" className="hover:text-[#F1EEE3] transition">Standard plan</Link></li>
-              <li><Link href="/login?plan=pro" className="hover:text-[#F1EEE3] transition">Pro plan</Link></li>
+            <ul className="space-y-3 text-[#F1EEE3]/60 font-semibold text-xs">
+              <li><Link href="/login" className="hover:text-white transition">Sign in</Link></li>
+              <li><Link href="/login?plan=standard" className="hover:text-white transition">Standard plan</Link></li>
+              <li><Link href="/login?plan=pro" className="hover:text-white transition">Pro plan</Link></li>
             </ul>
           </div>
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-widest text-[#F1EEE3]/50 mb-3" style={{ fontFamily: "var(--font-mono)" }}>
+            <h4 className="text-xs font-black uppercase tracking-widest text-[#F1EEE3]/40 mb-4" style={{ fontFamily: "var(--font-mono)" }}>
               Contact
             </h4>
-            <p className="text-[#F1EEE3]/60 text-xs">Replace this with your real support email / WhatsApp line.</p>
+            <p className="text-[#F1EEE3]/60 text-xs leading-relaxed font-semibold">Replace this with your real support email / WhatsApp line.</p>
           </div>
         </div>
-        <div className="max-w-6xl mx-auto pt-8 border-t border-[#F1EEE3]/5 text-center text-[#F1EEE3]/40 text-xs">
+        <div className="max-w-6xl mx-auto pt-8 border-t border-[#F1EEE3]/5 text-center text-[#F1EEE3]/30 text-xs font-semibold uppercase tracking-wider">
           &copy; {new Date().getFullYear()} Garrison Market. Built for the shop floor.
         </div>
       </footer>
 
+      {/* Dynamic Scroll-driven physics style adjustments */}
       <style>{`
+        .perspective-container {
+          perspective: 1600px;
+          perspective-origin: 50% 10%;
+        }
+
+        /* Scroll-triggered unrolling physics */
+        .scroll-unfurl-element {
+          transform-origin: top center;
+          transition: transform 1.6s cubic-bezier(0.12, 0.9, 0.28, 1.01), 
+                      opacity 1.4s ease-out, 
+                      filter 1.2s ease-out;
+          will-change: transform, opacity, filter;
+        }
+
+        /* Rolled State (Curled up inside the screen) */
+        .scroll-unfurl-element.rolled {
+          opacity: 0;
+          transform: rotateX(-85deg) translateY(-60px) scaleY(0.4);
+          filter: blur(6px) brightness(0.4);
+        }
+
+        /* Unrolled State (Drapes flat downwards) */
+        .scroll-unfurl-element.unrolled {
+          opacity: 1;
+          transform: rotateX(0deg) translateY(0px) scaleY(1);
+          filter: blur(0px) brightness(1);
+        }
+
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(4px); }
+          from { opacity: 0; transform: translateY(12px); }
           to { opacity: 1; transform: translateY(0); }
         }
         @keyframes scroll {
           from { transform: translateX(0); }
           to { transform: translateX(-33.333%); }
         }
+
+        .hover-glitch:hover {
+          text-shadow: 
+            0.05em 0 0 rgba(229, 83, 69, 0.75),
+            -0.025em -0.05em 0 rgba(0, 255, 200, 0.75),
+            0.025em 0.05em 0 rgba(110, 0, 255, 0.75);
+          animation: glitch 500ms infinite;
+        }
+
+        @keyframes glitch {
+          0% { text-shadow: 0.05em 0 0 rgba(229, 83, 69, 0.75), -0.025em -0.05em 0 rgba(0, 255, 200, 0.75); }
+          50% { text-shadow: -0.05em -0.025em 0 rgba(229, 83, 69, 0.75), 0.025em 0.025em 0 rgba(110, 0, 255, 0.75); }
+          100% { text-shadow: -0.025em 0 0 rgba(229, 83, 69, 0.75), -0.025em -0.05em 0 rgba(0, 255, 200, 0.75); }
+        }
+
         @media (prefers-reduced-motion: reduce) {
-          [style*="animation"] { animation: none !important; opacity: 1 !important; }
+          .scroll-unfurl-element { 
+            transition: none !important;
+            transform: none !important;
+            opacity: 1 !important;
+            filter: none !important;
+          }
         }
       `}</style>
     </div>

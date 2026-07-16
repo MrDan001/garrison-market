@@ -355,6 +355,10 @@ export async function createStoreAction(formData: FormData) {
 
   const name = formData.get("name") as string;
   const phoneNumber = formData.get("phoneNumber") as string;
+  const address = formData.get("address") as string;
+  const city = formData.get("city") as string;
+  const state = formData.get("state") as string;
+  const productsSold = formData.get("productsSold") as string;
 
   if (!name) throw new Error("Store name is required.");
 
@@ -365,6 +369,10 @@ export async function createStoreAction(formData: FormData) {
     data: {
       name,
       phoneNumber: phoneNumber || null,
+      address: address || null,
+      city: city || null,
+      state: state || null,
+      productsSold: productsSold || null,
       ownerId: user.id,
     },
   });

@@ -1,9 +1,10 @@
-import { LayoutDashboard, Package, ShoppingCart, Settings, Activity, LogOut, TrendingUp, Store, Plus, Banknote, ClipboardList, AlertTriangle, PackageCheck } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Settings, Activity, LogOut, TrendingUp, Store, Plus, Banknote } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import SalesChart from "@/components/SalesChart";
 import { logoutAction } from "@/lib/auth.actions";
+import { cookies } from "next/headers";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -26,6 +27,7 @@ export default async function OwnerDashboardPage() {
     const session = await getSessionUser();
     if (!session?.email) redirect("/login");
 
+    // 1. Retrieve the user profile
     const user = await prisma.user.findUnique({
       where: { email: session.email },
       select: {
@@ -34,41 +36,54 @@ export default async function OwnerDashboardPage() {
         storeName: true,
         image: true,
         status: true,
-        orders: {
-          take: 5,
-          orderBy: { date: "desc" },
-          select: {
-            id: true,
-            total: true,
-            date: true,
-            staff: { select: { fullName: true } },
-          },
-        },
       },
     });
 
     if (!user || user.status !== "approved") redirect("/pending");
+
+    // 2. Safely read the active store cookie (Aligned with store.actions.ts)
+    const cookieStore = await cookies();
+    const activeStoreCookie = cookieStore.get("activeStoreId")?.value;
+    const activeStoreId = activeStoreCookie ? parseInt(activeStoreCookie, 10) : null;
+
+    // If no active store is set, send them to select or register one
+    if (!activeStoreId || isNaN(activeStoreId)) {
+      redirect("/owner/stores");
+    }
+
+    // 3. Confirm store belongs to this owner and retrieve its name
+    const activeStore = await prisma.store.findFirst({
+      where: { id: activeStoreId, ownerId: user.id },
+      select: { name: true }
+    });
+
+    if (!activeStore) {
+      // Security measure: if the cookie store doesn't belong to the owner, redirect them back to switch
+      redirect("/owner/stores");
+    }
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const [salesData, activeProducts, todayAgg, recentReports, lowStockItems] = await Promise.all([
+    // 4. Run scoped parallel queries matching your precise Prisma schema fields
+    const [salesData, activeProducts, todayAgg, recentReports, lowStockItems, recentOrders] = await Promise.all([
       prisma.order.findMany({
-        where: { ownerId: user.id, date: { gte: ninetyDaysAgo } },
+        where: { storeId: activeStoreId, date: { gte: ninetyDaysAgo } },
         select: { total: true, date: true },
         orderBy: { date: "asc" },
       }),
-      prisma.inventory.count({ where: { ownerId: user.id } }),
+      prisma.inventory.count({ 
+        where: { storeId: activeStoreId } 
+      }),
       prisma.order.aggregate({
-        where: { ownerId: user.id, date: { gte: todayStart } },
+        where: { storeId: activeStoreId, date: { gte: todayStart } },
         _count: true,
         _sum: { total: true },
       }),
-      // Recent staff report submissions
       prisma.report.findMany({
-        where: { ownerId: user.id },
+        where: { storeId: activeStoreId },
         take: 5,
         orderBy: { date: "desc" },
         select: {
@@ -78,12 +93,21 @@ export default async function OwnerDashboardPage() {
           author: { select: { fullName: true } },
         },
       }),
-      // Items currently low or out of stock — ordered by last update as a
-      // proxy for recency (no dedicated event log exists for this yet)
       prisma.inventory.findMany({
-        where: { ownerId: user.id },
+        where: { storeId: activeStoreId },
         select: { id: true, name: true, quantity: true, restockLevel: true, updatedAt: true, createdAt: true },
         orderBy: { updatedAt: "desc" },
+      }),
+      prisma.order.findMany({
+        where: { storeId: activeStoreId },
+        take: 5,
+        orderBy: { date: "desc" },
+        select: {
+          id: true,
+          total: true,
+          date: true,
+          staff: { select: { fullName: true } },
+        },
       }),
     ]);
 
@@ -98,7 +122,7 @@ export default async function OwnerDashboardPage() {
     const totalSales = serializedSalesData.reduce((acc, curr) => acc + curr.total, 0);
 
     // ── Build the merged activity feed ──
-    const saleItems: ActivityItem[] = user.orders.map((order) => ({
+    const saleItems: ActivityItem[] = recentOrders.map((order) => ({
       type: "sale",
       id: `sale-${order.id}`,
       date: order.date,
@@ -111,7 +135,8 @@ export default async function OwnerDashboardPage() {
       id: `report-${report.id}`,
       date: report.date,
       authorName: report.author?.fullName || "Staff",
-      snippet: (report.notes ?? "").length > 60 ? (report.notes ?? "").slice(0, 60) + "…" : (report.notes ?? "Pending backfill"),    }));
+      snippet: (report.notes ?? "").length > 60 ? (report.notes ?? "").slice(0, 60) + "…" : (report.notes ?? "Pending backfill"),
+    }));
 
     const alertItems: ActivityItem[] = lowStockItems
       .filter((item) => item.restockLevel != null && item.quantity <= item.restockLevel)
@@ -125,12 +150,6 @@ export default async function OwnerDashboardPage() {
         isOutOfStock: item.quantity <= 0,
       }));
 
-    // A "restock" is an EXISTING item (createdAt meaningfully earlier than
-    // updatedAt — at least a minute apart, to exclude items that were just
-    // added) that's now comfortably above its restock threshold. Without a
-    // dedicated stock-change log, this is the best inference available from
-    // current fields — genuinely accurate for real restocks, but can't
-    // distinguish "owner bumped quantity" from "a bulk correction edit."
     const restockItems: ActivityItem[] = lowStockItems
       .filter((item) => {
         const isEstablished = item.updatedAt.getTime() - item.createdAt.getTime() > 60_000;
@@ -164,7 +183,7 @@ export default async function OwnerDashboardPage() {
             </div>
             <div className="min-w-0">
               <p className="text-[11px] text-slate-500 leading-none">Owner Portal</p>
-              <p className="text-sm font-semibold text-white truncate leading-snug">{user.storeName}</p>
+              <p className="text-sm font-semibold text-white truncate leading-snug">{activeStore.name}</p>
             </div>
           </div>
 
@@ -273,12 +292,12 @@ export default async function OwnerDashboardPage() {
     );
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
+    console.error(error);
     return <div className="text-center p-8 text-slate-400">Error loading dashboard.</div>;
   }
 }
 
 function ActivityRow({ item }: { item: ActivityItem }) {
-  // 1. Define the base themes for items that don't need conditional logic
   const getTheme = () => {
     switch (item.type) {
       case "sale":
@@ -288,7 +307,6 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       case "restock":
         return { accent: "border-indigo-500", bg: "bg-indigo-950/20", text: "text-indigo-400", label: "RESTOCK" };
       case "alert":
-        // 2. Safely access properties for the alert type
         const isOutOfStock = "isOutOfStock" in item && item.isOutOfStock;
         return {
           accent: isOutOfStock ? "border-rose-500" : "border-amber-500",

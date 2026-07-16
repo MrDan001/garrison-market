@@ -1,71 +1,179 @@
-import { UserPlus, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus, Shield, UserX, Trash2, Mail, Phone, Store } from "lucide-react";
 import Link from "next/link";
-import { getStaffData, toggleStaffStatus, deleteStaff } from "@/lib/auth.actions";
+import { getSessionUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import prisma from "@/lib/prisma";
+import { cookies } from "next/headers";
 
-type StaffMember = {
-  id: number;
-  fullName: string | null;
-  email: string;
-  status: string;
-  phoneNumber: string | null;
-  role: string;
-  ownerId: number | null;
-};
+export const dynamic = "force-dynamic";
 
 export default async function ManageStaffPage() {
-  const staffMembers = await getStaffData() as StaffMember[];
+  const session = await getSessionUser();
+  if (!session?.email) redirect("/login");
+
+  // 1. Fetch user profile details
+  const user = await prisma.user.findUnique({
+    where: { email: session.email },
+    select: { id: true, status: true }
+  });
+
+  if (!user || user.status !== "approved") redirect("/pending");
+
+  // 2. Safely read the active store cookie
+  const cookieStore = await cookies();
+  const activeStoreCookie = cookieStore.get("activeStoreId")?.value;
+  const activeStoreId = activeStoreCookie ? parseInt(activeStoreCookie, 10) : null;
+
+  if (!activeStoreId || isNaN(activeStoreId)) {
+    redirect("/owner/stores");
+  }
+
+  // 3. Confirm store ownership and fetch store name
+  const activeStore = await prisma.store.findFirst({
+    where: { id: activeStoreId, ownerId: user.id },
+    select: { name: true }
+  });
+
+  if (!activeStore) {
+    redirect("/owner/stores");
+  }
+
+  // 4. Fetch ONLY the staff members assigned to THIS specific active store
+  const staffMembers = await prisma.user.findMany({
+    where: {
+      ownerId: user.id,          // Must be managed under this owner
+      role: "staff",             // Must be a staff account
+      staffStoreId: activeStoreId // Crucial: scoped strictly to the active store!
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      phoneNumber: true,
+      status: true,
+      createdAt: true,
+    }
+  });
 
   return (
-    <div className="min-h-screen bg-[#0f1117] p-8 text-slate-200">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-        <div className="flex items-center gap-4">
-          <Link href="/owner/dashboard" className="p-2 hover:bg-slate-800 rounded-full transition-colors">
-            <ArrowLeft size={24} />
-          </Link>
-          <h1 className="text-3xl font-bold">Manage Staff</h1>
-        </div>
-        <Link
-          href="/owner/staff/register"
-          className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-2xl font-semibold transition-all"
-        >
-          <UserPlus size={18} /> Add New Staff
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {staffMembers.map((staff: StaffMember) => (
-          <div key={staff.id} className="border border-slate-800 bg-slate-900/50 rounded-2xl p-6 shadow-xl">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-white">{staff.fullName}</h2>
-                <p className="text-sm text-slate-500">{staff.email}</p>
-              </div>
-              <span className={`px-3 py-1 rounded-md text-xs font-bold ${
-                staff.status === 'active' ? 'bg-emerald-950 text-emerald-500' : 'bg-red-950 text-red-500'
-              }`}>
-                {staff.status}
-              </span>
+    <div className="min-h-screen bg-[#0A0C10] text-slate-200 p-4 sm:p-8">
+      <div className="max-w-4xl mx-auto space-y-6">
+        
+        {/* Navigation Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <Link href="/owner/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-white mb-4 w-fit transition-colors text-sm">
+              <ArrowLeft size={16} /> Back to Dashboard
+            </Link>
+            <div className="flex items-center gap-3">
+              <Shield size={26} className="text-blue-500" />
+              <h1 className="text-2xl font-bold text-white tracking-tight">Manage Staff</h1>
             </div>
-
-            <button className="w-full py-2.5 mb-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-semibold transition-colors">
-              VIEW DETAILS
-            </button>
-
-            <div className="flex gap-3">
-              <form action={toggleStaffStatus.bind(null, staff.id, staff.status)} className="flex-1">
-                <button className="w-full py-2.5 bg-rose-950/50 text-rose-200 hover:bg-rose-950/80 rounded-lg text-sm font-semibold transition-colors">
-                  {staff.status === 'active' ? 'SUSPEND' : 'REINSTATE'}
-                </button>
-              </form>
-
-              <form action={deleteStaff.bind(null, staff.id)} className="flex-1">
-                <button className="w-full py-2.5 bg-red-950/50 text-red-200 hover:bg-red-950/80 rounded-lg text-sm font-semibold transition-colors">
-                  DELETE
-                </button>
-              </form>
-            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Currently viewing workforce roster for <span className="text-blue-400 font-semibold">{activeStore.name}</span>
+            </p>
           </div>
-        ))}
+
+          {/* Add Staff Button - Links to a registration page pre-filled or configured for this store */}
+          <Link 
+            href={`/owner/staff/create?storeId=${activeStoreId}`} 
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/10 transition-colors w-full sm:w-auto"
+          >
+            <Plus size={14} /> Add New Staff Member
+          </Link>
+        </div>
+
+        {/* Staff Directory Cards */}
+        {staffMembers.length === 0 ? (
+          <div className="text-center py-20 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10">
+            <UserX size={40} className="mx-auto mb-4 text-slate-700" />
+            <h3 className="text-sm font-bold text-slate-300">No staff registered for this location</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+              Staff registration will assign newly invited accounts directly to <span className="text-slate-400">{activeStore.name}</span>.
+            </p>
+            <Link 
+              href={`/owner/staff/create?storeId=${activeStoreId}`}
+              className="inline-block mt-4 text-xs font-semibold text-blue-400 hover:text-blue-300 underline"
+            >
+              Add first staff member
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {staffMembers.map((staff) => (
+              <div 
+                key={staff.id} 
+                className="bg-[#1a1d24] border border-slate-800/80 rounded-2xl p-5 hover:border-slate-700 transition-all flex flex-col justify-between group relative shadow-md shadow-black/20"
+              >
+                <div>
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <h2 className="text-base font-bold text-white truncate">
+                        {staff.fullName || "Unnamed Staff"}
+                      </h2>
+                      <span className={`text-[9px] px-2 py-0.5 rounded font-mono uppercase tracking-wide inline-block mt-1.5 ${
+                        staff.status === "active" 
+                          ? "bg-emerald-950/60 text-emerald-400 border border-emerald-900/50" 
+                          : "bg-amber-950/60 text-amber-400 border border-amber-900/50"
+                      }`}>
+                        {staff.status}
+                      </span>
+                    </div>
+                    <div className="h-9 w-9 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0 text-slate-400">
+                      <Store size={15} className="text-slate-500" />
+                    </div>
+                  </div>
+
+                  {/* Metadata fields */}
+                  <div className="mt-5 space-y-2 border-t border-slate-800/60 pt-3 text-xs text-slate-400">
+                    <div className="flex items-center gap-2">
+                      <Mail size={13} className="text-slate-600" />
+                      <span className="truncate">{staff.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Phone size={13} className="text-slate-600" />
+                      <span>{staff.phoneNumber || "No contact number configured"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Administration Action Buttons */}
+                <div className="mt-6 pt-3 border-t border-slate-800/60 flex items-center justify-between gap-2">
+                  <Link
+                    href={`/owner/staff/${staff.id}`}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-950/50 hover:bg-slate-800 text-slate-300 transition-colors"
+                  >
+                    View Details
+                  </Link>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Suspend Form Button */}
+                    <form action={`/api/staff/${staff.id}/suspend`} method="POST">
+                      <button 
+                        type="submit" 
+                        className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-800 text-amber-500/80 hover:bg-amber-500/5 hover:text-amber-400 transition-all cursor-pointer"
+                      >
+                        Suspend
+                      </button>
+                    </form>
+
+                    {/* Delete Form Button */}
+                    <form action={`/api/staff/${staff.id}/delete`} method="POST">
+                      <button 
+                        type="submit" 
+                        className="p-1.5 rounded-lg border border-slate-800 text-rose-500/80 hover:bg-rose-500/5 hover:text-rose-400 transition-all cursor-pointer"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
       </div>
     </div>
   );

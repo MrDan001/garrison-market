@@ -8,73 +8,85 @@ datasource db {
 }
 
 model User {
-  id                 Int         @id @default(autoincrement())
-  email              String      @unique
+  id                 Int      @id @default(autoincrement())
+  email              String   @unique
   password           String
-  role               String      @default("owner")
-  status             String      @default("pending")
+  role               String   @default("owner")
+  status             String   @default("pending")
   fullName           String?
   phoneNumber        String?
   image              String?
-  storeName          String?     // Kept for backward compatibility
-  mustChangePassword Boolean     @default(false)
-  createdAt          DateTime    @default(now())
+  storeName          String?
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
   ownerId            Int?
+  
   ownerNotifications     Notification[] @relation("OwnerNotifications")
   recipientNotifications Notification[] @relation("RecipientNotifications")
-  supportOwnerScope SupportMessage[] @relation("SupportOwnerScope")
-  supportSent       SupportMessage[] @relation("SupportSender")
+  supportOwnerScope      SupportMessage[] @relation("SupportOwnerScope")
+  supportSent            SupportMessage[] @relation("SupportSender")
 
+  shopAddress   String?
+  shopCity      String?
+  shopState     String?
+  productsSold  String?
 
-  // ── Shop profile details (collected at registration, reviewed by admin) ──
-  shopAddress        String?
-  shopCity           String?
-  shopState          String?
-  productsSold       String?
+  notificationsEnabled Boolean @default(true)
+  discountEnabled      Boolean @default(false)
+  consignmentEnabled   Boolean @default(false)
 
-  // ── Preferences ──
-  notificationsEnabled Boolean   @default(true)
-  discountEnabled      Boolean   @default(false)  // Owner controls whether staff can apply discounts
-  consignmentEnabled   Boolean   @default(false)  // Owner controls whether staff can sign out goods on consignment
+  stores         Store[]   @relation("OwnerStores")
+  staffStoreId   Int?
+  staffStore     Store?    @relation("StoreStaff", fields: [staffStoreId], references: [id])
 
-  // ── Multi-Store Relationship ──
-  stores             Store[]     @relation("OwnerStores")
+  inventory      Inventory[]
+  orders         Order[]
+  staffOrders    Order[]     @relation("StaffOrders")
+  reports        Report[]
+  owner          User?       @relation("StaffHierarchy", fields: [ownerId], references: [id], onDelete: Cascade)
+  managedStaff   User[]      @relation("StaffHierarchy")
 
-  inventory          Inventory[]
-  orders             Order[]
-  staffOrders        Order[]     @relation("StaffOrders")
-  reports            Report[]
-  owner              User?       @relation("StaffHierarchy", fields: [ownerId], references: [id])
-  managedStaff       User[]      @relation("StaffHierarchy")
-
-  // ── Consignment relationships ──
-  consignmentsOwned    Consignment[] @relation("OwnerConsignments")
-  consignmentsStaffed  Consignment[] @relation("StaffConsignments")
+  consignmentsOwned   Consignment[] @relation("OwnerConsignments")
+  consignmentsStaffed Consignment[] @relation("StaffConsignments")
 }
 
 model Store {
-  id          Int      @id @default(autoincrement())
-  name        String
-  phoneNumber String?
-  createdAt   DateTime @default(now())
-  ownerId     Int
-  owner       User     @relation("OwnerStores", fields: [ownerId], references: [id])
+  id           Int      @id @default(autoincrement())
+  name         String
+  phoneNumber  String?
+  address      String?
+  city         String?
+  state        String?
+  productsSold String?
+  createdAt    DateTime @default(now())
+  ownerId      Int
+  owner        User     @relation("OwnerStores", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  inventory     Inventory[]
+  orders        Order[]
+  reports       Report[]
+  consignments  Consignment[]
+  staff         User[]         @relation("StoreStaff")
+  notifications Notification[]
 }
 
 model Report {
-  id         Int          @id @default(autoincrement())
-  status     String       @default("pending")
-  date       DateTime     @default(now())
+  id        Int      @id @default(autoincrement())
+  status    String   @default("pending")
+  date      DateTime @default(now())
   totalSales Decimal
-  notes      String
-  authorId   Int
-  ownerId    Int
-  author     User         @relation(fields: [authorId], references: [id])
-  items      ReportItem[]
+  notes     String
+  authorId  Int
+  ownerId   Int
+  storeId   Int?
+  
+  author    User         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  store     Store?       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items     ReportItem[]
 }
 
 model ReportItem {
-  id             Int       @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   reportId       Int
   inventoryId    Int
   name           String
@@ -85,12 +97,12 @@ model ReportItem {
   discountValue  Decimal?
   discountType   String?
   discountReason String?
-  report         Report    @relation(fields: [reportId], references: [id])
-  inventory      Inventory @relation(fields: [inventoryId], references: [id])
+  report         Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  inventory      Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 }
 
 model Inventory {
-  id           Int          @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   name         String
   quantity     Int
   price        Decimal
@@ -98,82 +110,79 @@ model Inventory {
   category     String?
   restockLevel Int?
   image        String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   ownerId      Int
-  owner        User         @relation(fields: [ownerId], references: [id])
+  storeId      Int?
+
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  store        Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
   orderItems   OrderItem[]
   reportItems  ReportItem[]
-
-  // ── Consignment relationship ──
   consignmentItems ConsignmentItem[]
 }
 
 model Order {
-  id      Int         @id @default(autoincrement())
-  total   Decimal
-  date    DateTime    @default(now())
-  ownerId Int
-  staffId Int?
-  owner   User        @relation(fields: [ownerId], references: [id])
-  staff   User?       @relation("StaffOrders", fields: [staffId], references: [id])
-  items   OrderItem[]
+  id            Int      @id @default(autoincrement())
+  total         Decimal
+  date          DateTime @default(now())
+  ownerId       Int
+  staffId       Int?
+  storeId       Int?
 
-  // ── Optional link back to the consignment that generated this sale ──
-  // Null for ordinary over-the-counter sales; set when a sale came from
-  // settling a consignment, so reports can show "via consignment (name)".
+  owner         User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  staff         User?         @relation("StaffOrders", fields: [staffId], references: [id], onDelete: SetNull)
+  store         Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items         OrderItem[]
   consignmentId Int?
-  consignment   Consignment? @relation(fields: [consignmentId], references: [id])
+  consignment   Consignment?  @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
 }
 
 model OrderItem {
-  id             Int       @id @default(autoincrement())
-  orderId        Int
-  inventoryId    Int
-  quantity       Int
-  priceAtTime    Decimal
-  originalPrice  Decimal?
-  discountValue  Decimal?
-  discountType   String?
+  id            Int      @id @default(autoincrement())
+  orderId       Int
+  inventoryId   Int
+  quantity      Int
+  priceAtTime   Decimal
+  originalPrice Decimal?
+  discountValue Decimal?
+  discountType  String?
   discountReason String?
-  inventory      Inventory @relation(fields: [inventoryId], references: [id])
-  order          Order     @relation(fields: [orderId], references: [id])
+  inventory     Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model Notification {
   id          Int      @id @default(autoincrement())
-  type        String   // "report_status" | "low_stock" | "new_item" | "announcement"
+  type        String
   message     String
   link        String?
   read        Boolean  @default(false)
   ownerId     Int
-  recipientId Int?     // specific staff member; null = broadcast to everyone under ownerId
+  recipientId Int?
+  storeId     Int?
   createdAt   DateTime @default(now())
 
-  owner       User     @relation("OwnerNotifications", fields: [ownerId], references: [id])
-  recipient   User?    @relation("RecipientNotifications", fields: [recipientId], references: [id])
+  owner       User     @relation("OwnerNotifications", fields: [ownerId], references: [id], onDelete: Cascade)
+  recipient   User?    @relation("RecipientNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
+  store       Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
 }
 
-// ── Consignment feature ──────────────────────────────────────────────
-// A staff member signs out inventory to an external person (e.g. a
-// roadside seller) to sell on the shop's behalf. Nothing here touches
-// the existing Order/Report flow directly — settlement later creates
-// a normal Order for whatever was actually sold, tagged back to this
-// record for traceability, and returns unsold stock to inventory.
-
 model Consignment {
-  id             Int               @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   ownerId        Int
   staffId        Int
+  storeId        Int?
   recipientName  String
   recipientPhone String
   recipientNote  String?
-  status         String            @default("out") // "out" | "settled"
-  createdAt      DateTime          @default(now())
+  status         String    @default("out")
+  createdAt      DateTime  @default(now())
   settledAt      DateTime?
 
-  owner          User              @relation("OwnerConsignments", fields: [ownerId], references: [id])
-  staff          User              @relation("StaffConsignments", fields: [staffId], references: [id])
+  owner          User      @relation("OwnerConsignments", fields: [ownerId], references: [id], onDelete: Cascade)
+  staff          User      @relation("StaffConsignments", fields: [staffId], references: [id], onDelete: SetNull)
+  store          Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items          ConsignmentItem[]
   orders         Order[]
 }
@@ -187,21 +196,21 @@ model ConsignmentItem {
   quantityReturned Int         @default(0)
   priceAtTime      Decimal
 
-  consignment      Consignment @relation(fields: [consignmentId], references: [id])
-  inventory        Inventory   @relation(fields: [inventoryId], references: [id])
+  consignment      Consignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  inventory        Inventory   @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 }
 
 model SupportMessage {
   id         Int      @id @default(autoincrement())
-  threadType String   // "staff_owner" | "owner_admin"
-  ownerId    Int       // scope: which store this thread belongs to
-  staffId    Int?      // set only for staff_owner threads — which staff member's conversation
+  threadType String
+  ownerId    Int
+  staffId    Int?
   senderId   Int
-  senderRole String    // "staff" | "owner" | "admin"
+  senderRole String
   content    String
   read       Boolean  @default(false)
   createdAt  DateTime @default(now())
 
-  owner  User @relation("SupportOwnerScope", fields: [ownerId], references: [id])
-  sender User @relation("SupportSender", fields: [senderId], references: [id])
+  owner      User @relation("SupportOwnerScope", fields: [ownerId], references: [id], onDelete: Cascade)
+  sender     User @relation("SupportSender", fields: [senderId], references: [id], onDelete: Cascade)
 }

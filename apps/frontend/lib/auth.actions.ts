@@ -242,11 +242,24 @@ export async function updateOwnerStatus(email: string, status: 'approved' | 'dec
 
 export async function deleteUser(email: string) {
   try {
-    await prisma.user.delete({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return { success: false, error: "User not found" };
+
+    // Transaction to delete all related data in the correct order
+    await prisma.$transaction([
+      // 1. Delete associated inventory
+      prisma.inventory.deleteMany({ where: { ownerId: user.id } }),
+      // 2. Delete associated orders (This is what was blocking the delete)
+      prisma.order.deleteMany({ where: { ownerId: user.id } }),
+      // 3. Finally, delete the user
+      prisma.user.delete({ where: { id: user.id } }),
+    ]);
+
     revalidatePath("/admin/users");
     return { success: true };
   } catch (error) {
-    return { success: false, error: "Failed to delete user" };
+    console.error("Delete failed:", error);
+    return { success: false, error: "Failed to delete user. Check server logs." };
   }
 }
 
