@@ -71,14 +71,17 @@ model Store {
 }
 
 model Report {
-  id        Int      @id @default(autoincrement())
-  status    String   @default("pending")
-  date      DateTime @default(now())
-  totalSales Decimal
-  notes     String
-  authorId  Int
-  ownerId   Int
-  storeId   Int?
+  id            Int      @id @default(autoincrement())
+  status        String   @default("pending") // "pending" | "approved" | "declined" | "revision_requested"
+  date          DateTime @default(now())
+  totalSales    Decimal
+  cashTotal     Decimal  @default(0)
+  transferTotal Decimal  @default(0)
+  notes         String
+  ownerNote     String?
+  authorId      Int
+  ownerId       Int
+  storeId       Int?
   
   author    User         @relation(fields: [authorId], references: [id], onDelete: SetNull)
   store     Store?       @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -126,6 +129,7 @@ model Order {
   id            Int      @id @default(autoincrement())
   total         Decimal
   date          DateTime @default(now())
+  paymentMethod String   @default("cash") // "cash" | "transfer"
   ownerId       Int
   staffId       Int?
   storeId       Int?

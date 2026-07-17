@@ -4,15 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitDailyReport } from "@/lib/business.actions";
 import { FileText, Clock, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import { resubmitReportAction } from "@/lib/business.actions";
 
-export default function StaffReportClient({ staffId, reports, sales }: any) {
-  const router = useRouter();
+export default function StaffReportClient({ staffId, reports, sales, pendingRevision }: any) {  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [complaint, setComplaint] = useState("");
   const [showHistory, setShowHistory] = useState(false);
 
   const allSoldItems = sales.flatMap((s: any) => s.items);
   const totalValue = sales.reduce((sum: number, s: any) => sum + Number(s.total), 0);
+
+  const [clarification, setClarification] = useState("");
+  const [resubmitting, setResubmitting] = useState(false);
 
   const handleSubmit = async () => {
     if (!complaint.trim()) {
@@ -35,6 +38,23 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
     }
   };
 
+  const handleResubmit = async () => {
+    if (!clarification.trim()) {
+      alert("Please add a note explaining the correction.");
+      return;
+    }
+    setResubmitting(true);
+    try {
+      await resubmitReportAction(pendingRevision.id, clarification);
+      setClarification("");
+      window.location.reload();
+    } catch (e: any) {
+      alert(e.message || "Failed to resubmit.");
+    } finally {
+      setResubmitting(false);
+    }
+  };
+
   const getStatusStyle = (status: string) => {
     switch (status.toLowerCase()) {
       case 'approved': return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
@@ -53,6 +73,33 @@ export default function StaffReportClient({ staffId, reports, sales }: any) {
         <ArrowLeft size={20} />
         <span className="text-sm font-medium">Back</span>
       </button>
+
+      {pendingRevision && (
+  <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 sm:p-6 space-y-4">
+    <div className="flex items-start gap-3">
+      <div className="h-9 w-9 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+        <span className="text-lg">⚠️</span>
+      </div>
+      <div>
+        <h3 className="text-sm font-bold text-amber-300">A report needs correction</h3>
+        <p className="text-xs text-amber-200/70 mt-1 leading-relaxed">{pendingRevision.ownerNote}</p>
+      </div>
+    </div>
+    <textarea
+      value={clarification}
+      onChange={(e) => setClarification(e.target.value)}
+      placeholder="Explain or clarify here..."
+      className="w-full h-20 bg-[#0A0C10] border border-amber-500/20 rounded-2xl p-3 text-sm text-slate-200 outline-none focus:border-amber-500 transition-colors resize-none"
+    />
+    <button
+      onClick={handleResubmit}
+      disabled={resubmitting}
+      className="w-full py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-sm transition-colors"
+    >
+      {resubmitting ? "Resubmitting..." : "Resubmit Report"}
+    </button>
+  </div>
+)}
 
       {/* Sales Header */}
       <div className="bg-[#11131A] border border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-lg">

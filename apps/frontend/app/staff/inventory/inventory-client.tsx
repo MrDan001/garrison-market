@@ -59,6 +59,7 @@ export default function InventoryClient({
   const [discountInput, setDiscountInput] = useState("");
   const [discountType, setDiscountType] = useState<"percent" | "flat">("percent");
   const [discountReason, setDiscountReason] = useState(DISCOUNT_REASONS[0]);
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | null>(null);
 
   // Derived filter categories
   const outOfStockItems = useMemo(() => {
@@ -120,6 +121,10 @@ export default function InventoryClient({
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
   const handleProcessSale = async () => {
+    if (!paymentMethod) {
+      alert("Please select cash or transfer before confirming.");
+      return;
+    }
     setLoading(true);
     try {
       const payload = cart.map((item) => ({
@@ -127,9 +132,10 @@ export default function InventoryClient({
         originalPrice: item.price,
         price: item.finalPrice,
       }));
-      await processSaleAction(payload);
+      await processSaleAction(payload, paymentMethod);
       setCart([]);
       setShowCart(false);
+      setPaymentMethod(null);
       alert("Sale completed successfully!");
     } catch (error: any) {
       alert(error.message || "Failed to process sale.");
@@ -594,13 +600,35 @@ export default function InventoryClient({
               <span className="text-2xl font-bold text-white">₦{total.toLocaleString()}</span>
             </div>
 
-            <button
-              disabled={loading}
-              onClick={handleProcessSale}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
-            >
-              {loading ? "Processing..." : "Confirm Sale"}
-            </button>
+            <div className="mb-4">
+  <p className="text-xs font-semibold text-slate-400 mb-2">Payment Method</p>
+  <div className="grid grid-cols-2 gap-2">
+    <button
+      onClick={() => setPaymentMethod("cash")}
+      className={`py-3 rounded-xl text-sm font-bold transition-colors ${
+        paymentMethod === "cash" ? "bg-emerald-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
+      }`}
+    >
+      💵 Cash
+    </button>
+    <button
+      onClick={() => setPaymentMethod("transfer")}
+      className={`py-3 rounded-xl text-sm font-bold transition-colors ${
+        paymentMethod === "transfer" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
+      }`}
+    >
+      🏦 Transfer
+    </button>
+  </div>
+</div>
+
+<button
+  disabled={loading || !paymentMethod}
+  onClick={handleProcessSale}
+  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
+>
+  {loading ? "Processing..." : !paymentMethod ? "Select payment method" : "Confirm Sale"}
+</button>
           </div>
         </div>
       )}

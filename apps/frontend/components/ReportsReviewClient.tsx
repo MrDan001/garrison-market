@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { updateReportStatus } from "@/lib/business.actions";
+import { updateReportStatus, requestReportRevision } from "@/lib/business.actions";
 import {
   ClipboardList,
   Check,
@@ -13,6 +13,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
+  RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -25,8 +26,18 @@ export default function ReportsReviewClient({
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
 
+  // States for requesting a revision
+  const [correctingId, setCorrectingId] = useState<number | null>(null);
+  const [correctionNote, setCorrectionNote] = useState("");
+  const [submittingCorrection, setSubmittingCorrection] = useState(false);
+
   const toggleRow = (id: number) => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
+    // Reset revision state for this card if it gets closed
+    if (correctingId === id) {
+      setCorrectingId(null);
+      setCorrectionNote("");
+    }
   };
 
   const handleStatusUpdate = async (
@@ -42,6 +53,25 @@ export default function ReportsReviewClient({
       alert("Something went wrong updating the report.");
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleRequestRevision = async (reportId: number) => {
+    if (!correctionNote.trim()) {
+      alert("Please explain what needs correcting.");
+      return;
+    }
+    setSubmittingCorrection(true);
+    try {
+      await requestReportRevision(reportId, correctionNote);
+      setReports((prev) => prev.filter((r) => r.id !== reportId));
+      setCorrectingId(null);
+      setCorrectionNote("");
+    } catch (error) {
+      console.error(error);
+      alert("Something went wrong sending this back for correction.");
+    } finally {
+      setSubmittingCorrection(false);
     }
   };
 
@@ -109,6 +139,7 @@ export default function ReportsReviewClient({
               : "Today";
             const isExpanded = !!expandedRows[report.id];
             const items = report.items || [];
+            const isCorrectingThisOne = correctingId === report.id;
 
             return (
               <div
@@ -224,29 +255,89 @@ export default function ReportsReviewClient({
                         </div>
                       </div>
 
-                      {/* RIGHT — Verification Card */}
-                      <div className="md:col-span-5 bg-gradient-to-br from-[#141829] to-[#0d0f18] p-4 sm:p-5 rounded-xl border border-slate-800 flex flex-col justify-between shadow-inner">
-                        <div>
-                          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest flex items-center gap-1.5 mb-2">
-                            <ShieldCheck size={12} /> Live Verification Check
-                          </span>
-                          <span className="text-xs font-medium text-slate-400 block">
-                            Total Audited Sales Today
-                          </span>
-                          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight block mt-1.5">
-                            ₦{Number(report.totalSales).toLocaleString()}
-                          </span>
+                     {/* RIGHT — Verification Card */}
+<div className="md:col-span-5 bg-gradient-to-br from-[#141829] to-[#0d0f18] p-4 sm:p-5 rounded-xl border border-slate-800 flex flex-col justify-between shadow-inner">
+  <div>
+    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+      <ShieldCheck size={12} /> Financial Breakdown
+    </span>
+
+    <div className="grid grid-cols-2 gap-2.5 mb-3">
+      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
+        <p className="text-[10px] text-emerald-400 font-bold uppercase">💵 Cash</p>
+        <p className="text-lg font-black text-white mt-1">₦{report.cashTotal.toLocaleString()}</p>
+      </div>
+      <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
+        <p className="text-[10px] text-blue-400 font-bold uppercase">🏦 Transfer</p>
+        <p className="text-lg font-black text-white mt-1">₦{report.transferTotal.toLocaleString()}</p>
+      </div>
+    </div>
+
+    <div className="border-t border-slate-800/60 pt-3">
+      <span className="text-xs font-medium text-slate-400 block">Total Sales</span>
+      <span className="text-2xl sm:text-3xl font-black text-white tracking-tight block mt-1">
+        ₦{Number(report.totalSales).toLocaleString()}
+      </span>
+    </div>
+  </div>
+
+  <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-start gap-1.5 text-[10px] sm:text-[11px] text-slate-500 leading-normal">
+    <AlertCircle size={12} className="text-slate-600 shrink-0 mt-0.5" />
+    <span>Match this against your actual cash count and bank transfers before approving.</span>
+  </div>
+</div>
+
+                      {/* Revision Input Box (conditionally shown if Revision requested) */}
+                      {isCorrectingThisOne && (
+                        <div className="col-span-1 md:col-span-12 p-4 bg-[#1a1d2e] border border-slate-800 rounded-xl mt-3 animate-fadeIn">
+                          <label className="block text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-2">
+                            Reason for Correction Request
+                          </label>
+                          <textarea
+                            value={correctionNote}
+                            onChange={(e) => setCorrectionNote(e.target.value)}
+                            placeholder="State clearly what needs to be changed..."
+                            rows={3}
+                            className="w-full bg-[#0a0c12] border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                          />
+                          <div className="flex justify-end gap-2 mt-3">
+                            <button
+                              onClick={() => {
+                                setCorrectingId(null);
+                                setCorrectionNote("");
+                              }}
+                              className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleRequestRevision(report.id)}
+                              disabled={submittingCorrection}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {submittingCorrection ? "Sending..." : "Submit Request"}
+                            </button>
+                          </div>
                         </div>
-                        <div className="mt-5 sm:mt-6 pt-3 border-t border-slate-800/60 flex items-start gap-1.5 text-[10px] sm:text-[11px] text-slate-500 leading-normal">
-                          <AlertCircle size={12} className="text-slate-600 shrink-0 mt-0.5" />
-                          <span>
-                            Captured directly from system reports matching current transaction counts.
-                          </span>
-                        </div>
-                      </div>
+                      )}
 
                       {/* Action Row */}
-                      <div className="col-span-1 md:col-span-12 pt-4 border-t border-slate-800/60 flex items-center justify-end gap-3">
+                      <div className="col-span-1 md:col-span-12 pt-4 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        {/* Request Revision Button (Triggers input drawer above) */}
+                        {!isCorrectingThisOne && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCorrectingId(report.id);
+                            }}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-400/90 hover:text-amber-300 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 rounded-xl transition-all w-full sm:w-auto"
+                          >
+                            <RotateCcw size={13} />
+                            Needs Correction
+                          </button>
+                        )}
+                        <div className="hidden sm:block flex-1" />
+
                         <div className="w-full grid grid-cols-2 gap-3 sm:flex sm:w-auto sm:gap-3">
                           <button
                             onClick={(e) => {

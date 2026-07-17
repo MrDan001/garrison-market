@@ -29,10 +29,18 @@ export async function submitDailyReport(authorId: number, content: string) {
 
   const allSoldItems = recentSales.flatMap((s: any) => s.items);
   const totalValue = recentSales.reduce((sum: number, s: any) => sum + Number(s.total), 0);
+  const cashTotal = recentSales
+    .filter((s: any) => s.paymentMethod === "cash")
+    .reduce((sum: number, s: any) => sum + Number(s.total), 0);
+  const transferTotal = recentSales
+    .filter((s: any) => s.paymentMethod === "transfer")
+    .reduce((sum: number, s: any) => sum + Number(s.total), 0);
 
   await prisma.report.create({
     data: {
       totalSales: totalValue,
+      cashTotal,
+      transferTotal,
       notes: content && content.trim() !== "" ? content.trim() : "None",
       status: "pending",
       author: { connect: { id: authorId } },
@@ -208,7 +216,7 @@ export async function updateItemAction(formData: FormData) {
   return { success: true };
 }
 
-export async function processSaleAction(cartItems: any[]) {
+export async function processSaleAction(cartItems: any[], paymentMethod: "cash" | "transfer") {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
 
@@ -228,6 +236,7 @@ export async function processSaleAction(cartItems: any[]) {
   await prisma.order.create({
     data: {
       total: total,
+      paymentMethod,
       ownerId: session.role === 'owner' ? session.id : session.ownerId!,
       staffId: session.id,
       items: {
@@ -334,6 +343,61 @@ export async function updateReportStatus(reportId: number, status: "approved" | 
   });
 
   revalidatePath("/owner/report");
+}
+
+export async function requestReportRevision(reportId: number, note: string) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+  if (!note.trim()) throw new Error("Please explain what needs correcting");
+
+  const report = await prisma.report.update({
+    where: { id: reportId },
+    data: { status: "revision_requested", ownerNote: note.trim() },
+  });
+
+  await createNotification({
+    ownerId: report.ownerId,
+    recipientId: report.authorId,
+    type: "report_status",
+    message: "Your report was sent back — a correction is needed.",
+    link: "/staff/report",
+  });
+
+  revalidatePath("/owner/report");
+  revalidatePath("/staff/report");
+  return { success: true };
+}
+
+export async function resubmitReportAction(reportId: number, clarification: string) {
+  const session = await getSessionUser();
+  if (!session) throw new Error("Unauthorized");
+  if (!clarification.trim()) throw new Error("Please add a clarification note");
+
+  const report = await prisma.report.findUnique({ where: { id: reportId } });
+  if (!report) throw new Error("Report not found");
+  if (report.authorId !== session.id) throw new Error("Unauthorized");
+  if (report.status !== "revision_requested") throw new Error("This report isn't awaiting correction");
+
+  await prisma.report.update({
+    where: { id: reportId },
+    data: {
+      status: "pending",
+      notes: `${report.notes}\n\n[Clarification]: ${clarification.trim()}`,
+      ownerNote: null,
+    },
+  });
+
+  await createNotification({
+    ownerId: report.ownerId,
+    recipientId: null,
+    type: "report_status",
+    message: "A staff report was resubmitted with a clarification.",
+    link: "/owner/report",
+  });
+
+  revalidatePath("/staff/report");
+  revalidatePath("/owner/report");
+  return { success: true };
 }
 
 export async function updateInventoryQuantity(id: number, change: number) {

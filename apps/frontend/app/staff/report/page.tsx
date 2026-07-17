@@ -7,25 +7,27 @@ export default async function ReportPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const [sales, reports] = await Promise.all([
-    prisma.order.findMany({ 
-        where: { 
-          staffId: session!.id, 
-          date: { gte: today } 
-        },
-        include: { items: { include: { inventory: true } } } 
+  const [sales, reports, pendingRevision] = await Promise.all([
+    prisma.order.findMany({
+      where: { staffId: session!.id, date: { gte: today } },
+      include: { items: { include: { inventory: true } } }
     }),
-    prisma.report.findMany({ 
-        where: { authorId: session!.id, date: { gte: today } },
-        orderBy: { date: 'desc' }
-    })
+    prisma.report.findMany({
+      where: { authorId: session!.id, date: { gte: today } },
+      orderBy: { date: 'desc' }
+    }),
+    prisma.report.findFirst({
+      where: { authorId: session!.id, status: "revision_requested" },
+      orderBy: { date: 'desc' },
+    }),
   ]);
-
+  
   return (
-    <StaffReportClient 
-      staffId={session!.id} 
-      reports={JSON.parse(JSON.stringify(reports))} 
-      sales={JSON.parse(JSON.stringify(sales))} 
+    <StaffReportClient
+      staffId={session!.id}
+      reports={JSON.parse(JSON.stringify(reports))}
+      sales={JSON.parse(JSON.stringify(sales))}
+      pendingRevision={pendingRevision ? JSON.parse(JSON.stringify(pendingRevision)) : null}
     />
   );
 }
