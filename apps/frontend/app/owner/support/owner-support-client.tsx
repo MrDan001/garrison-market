@@ -1,16 +1,20 @@
 // app/owner/support/owner-support-client.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Headphones, ChevronRight } from "lucide-react";
 import ChatPanel from "@/components/ChatPanel";
 import {
   getOwnerStaffThread,
   sendOwnerToStaffMessage,
+  setOwnerTypingInStaffThread,
   getOwnerAdminThread,
   sendOwnerToAdminMessage,
+  setOwnerTypingInAdminThread,
 } from "@/lib/support.actions";
+
+const POLL_INTERVAL_MS = 3000;
 
 export default function OwnerSupportClient({
   currentUserId,
@@ -23,22 +27,50 @@ export default function OwnerSupportClient({
 }) {
   const [activeView, setActiveView] = useState<"list" | "admin" | number>("list");
   const [messages, setMessages] = useState<any[]>(adminMessages);
+  const [otherTyping, setOtherTyping] = useState(false);
 
   const openAdmin = async () => {
     setActiveView("admin");
     const data = await getOwnerAdminThread();
-    setMessages(data);
+    setMessages(data.messages);
+    setOtherTyping(data.otherTyping);
   };
 
   const openStaff = async (staffId: number) => {
     setActiveView(staffId);
     const data = await getOwnerStaffThread(staffId);
-    setMessages(data);
+    setMessages(data.messages);
+    setOtherTyping(data.otherTyping);
   };
+
+  // Poll for new messages + the other party's typing status while a thread is open.
+  useEffect(() => {
+    if (activeView === "list") return;
+
+    const poll = async () => {
+      const data =
+        activeView === "admin"
+          ? await getOwnerAdminThread()
+          : await getOwnerStaffThread(activeView as number);
+      setMessages(data.messages);
+      setOtherTyping(data.otherTyping);
+    };
+
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [activeView]);
 
   if (activeView !== "list") {
     const isAdmin = activeView === "admin";
     const staffInfo = !isAdmin ? staffThreads.find((t) => t.staff.id === activeView)?.staff : null;
+
+    const handleTyping = () => {
+      if (isAdmin) {
+        setOwnerTypingInAdminThread();
+      } else {
+        setOwnerTypingInStaffThread(activeView as number);
+      }
+    };
 
     return (
       <div className="h-screen bg-[#0A0C12] text-slate-200 flex flex-col">
@@ -55,13 +87,21 @@ export default function OwnerSupportClient({
           <ChatPanel
             messages={messages}
             currentUserId={currentUserId}
+            otherTyping={otherTyping}
+            otherPartyName={isAdmin ? "Support" : staffInfo?.fullName}
+            otherPartyImage={isAdmin ? null : staffInfo?.image}
+            onTyping={handleTyping}
             onSend={async (content) => {
               if (isAdmin) {
                 await sendOwnerToAdminMessage(content);
-                setMessages(await getOwnerAdminThread());
+                const data = await getOwnerAdminThread();
+                setMessages(data.messages);
+                setOtherTyping(data.otherTyping);
               } else {
                 await sendOwnerToStaffMessage(activeView as number, content);
-                setMessages(await getOwnerStaffThread(activeView as number));
+                const data = await getOwnerStaffThread(activeView as number);
+                setMessages(data.messages);
+                setOtherTyping(data.otherTyping);
               }
             }}
             emptyStateTitle={isAdmin ? "Contact support" : "Message this staff member"}

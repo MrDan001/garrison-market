@@ -3,24 +3,27 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageCircle, X, Store, Headphones, ChevronLeft } from "lucide-react";
 import {
-  getStaffOwnerThread, sendStaffMessage,
-  getStaffAdminThread, sendStaffToAdminMessage,
+  getStaffOwnerThread, sendStaffMessage, setStaffTypingInOwnerThread,
+  getStaffAdminThread, sendStaffToAdminMessage, setStaffTypingInAdminThread,
 } from "@/lib/support.actions";
 import ChatPanel from "./ChatPanel";
 
 type View = "closed" | "choose" | "owner" | "admin";
 
+const POLL_INTERVAL_MS = 3000;
+
 export default function StaffSupportBubble({ currentUserId }: { currentUserId: number }) {
   const [view, setView] = useState<View>("closed");
   const [ownerMessages, setOwnerMessages] = useState<any[]>([]);
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
+  const [otherTyping, setOtherTyping] = useState(false);
   const [totalUnread, setTotalUnread] = useState(0);
   const prevCountRef = useRef(0);
 
   const pollBadge = async () => {
     if (view !== "closed") return;
     const [owner, admin] = await Promise.all([getStaffOwnerThread(), getStaffAdminThread()]);
-    const combined = owner.length + admin.length;
+    const combined = owner.messages.length + admin.messages.length;
     if (combined > prevCountRef.current && prevCountRef.current > 0) {
       setTotalUnread((u) => u + (combined - prevCountRef.current));
     }
@@ -33,6 +36,26 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
     return () => clearInterval(interval);
   }, [view]);
 
+  // Poll for new messages + the other party's typing status while a thread is open.
+  useEffect(() => {
+    if (view !== "owner" && view !== "admin") return;
+
+    const poll = async () => {
+      if (view === "owner") {
+        const data = await getStaffOwnerThread();
+        setOwnerMessages(JSON.parse(JSON.stringify(data.messages)));
+        setOtherTyping(data.otherTyping);
+      } else {
+        const data = await getStaffAdminThread();
+        setAdminMessages(JSON.parse(JSON.stringify(data.messages)));
+        setOtherTyping(data.otherTyping);
+      }
+    };
+
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [view]);
+
   const openChooser = () => {
     setView("choose");
     setTotalUnread(0);
@@ -40,12 +63,16 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
 
   const openOwner = async () => {
     setView("owner");
-    setOwnerMessages(JSON.parse(JSON.stringify(await getStaffOwnerThread())));
+    const data = await getStaffOwnerThread();
+    setOwnerMessages(JSON.parse(JSON.stringify(data.messages)));
+    setOtherTyping(data.otherTyping);
   };
 
   const openAdmin = async () => {
     setView("admin");
-    setAdminMessages(JSON.parse(JSON.stringify(await getStaffAdminThread())));
+    const data = await getStaffAdminThread();
+    setAdminMessages(JSON.parse(JSON.stringify(data.messages)));
+    setOtherTyping(data.otherTyping);
   };
 
   return (
@@ -138,9 +165,14 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                 <ChatPanel
                   messages={ownerMessages}
                   currentUserId={currentUserId}
+                  otherTyping={otherTyping}
+                  otherPartyName="Store Owner"
+                  onTyping={setStaffTypingInOwnerThread}
                   onSend={async (content) => {
                     await sendStaffMessage(content);
-                    setOwnerMessages(JSON.parse(JSON.stringify(await getStaffOwnerThread())));
+                    const data = await getStaffOwnerThread();
+                    setOwnerMessages(JSON.parse(JSON.stringify(data.messages)));
+                    setOtherTyping(data.otherTyping);
                   }}
                   emptyStateTitle="Message your store owner"
                   emptyStateSub="Questions about a sale, a shift, or anything else — send it here."
@@ -166,9 +198,14 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                 <ChatPanel
                   messages={adminMessages}
                   currentUserId={currentUserId}
+                  otherTyping={otherTyping}
+                  otherPartyName="Support"
+                  onTyping={setStaffTypingInAdminThread}
                   onSend={async (content) => {
                     await sendStaffToAdminMessage(content);
-                    setAdminMessages(JSON.parse(JSON.stringify(await getStaffAdminThread())));
+                    const data = await getStaffAdminThread();
+                    setAdminMessages(JSON.parse(JSON.stringify(data.messages)));
+                    setOtherTyping(data.otherTyping);
                   }}
                   emptyStateTitle="Contact support"
                   emptyStateSub="Reserved for issues your store owner can't resolve — we're here to help."

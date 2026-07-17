@@ -218,3 +218,12 @@ model SupportMessage {
   owner      User @relation("SupportOwnerScope", fields: [ownerId], references: [id], onDelete: Cascade)
   sender     User @relation("SupportSender", fields: [senderId], references: [id], onDelete: Cascade)
 }
+
+model TypingStatus {
+  id         Int      @id @default(autoincrement())
+  threadKey  String
+  senderRole String
+  updatedAt  DateTime @updatedAt
+
+  @@unique([threadKey, senderRole])
+}

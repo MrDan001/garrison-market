@@ -1,14 +1,16 @@
 // app/admin/support/admin-support-client.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import ChatPanel from "@/components/ChatPanel";
 import {
-  getAdminOwnerThread, sendAdminReply,
-  getAdminStaffThread, sendAdminReplyToStaff,
+  getAdminOwnerThread, sendAdminReply, setAdminTypingInOwnerThread,
+  getAdminStaffThread, sendAdminReplyToStaff, setAdminTypingInStaffThread,
 } from "@/lib/support.actions";
+
+const POLL_INTERVAL_MS = 3000;
 
 export default function AdminSupportClient({
   currentUserId,
@@ -21,22 +23,52 @@ export default function AdminSupportClient({
 }) {
   const [active, setActive] = useState<{ type: "owner" | "staff"; id: number } | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
+  const [otherTyping, setOtherTyping] = useState(false);
 
   const openOwnerThread = async (ownerId: number) => {
     setActive({ type: "owner", id: ownerId });
-    setMessages(await getAdminOwnerThread(ownerId));
+    const data = await getAdminOwnerThread(ownerId);
+    setMessages(data.messages);
+    setOtherTyping(data.otherTyping);
   };
 
   const openStaffThread = async (staffId: number) => {
     setActive({ type: "staff", id: staffId });
-    setMessages(await getAdminStaffThread(staffId));
+    const data = await getAdminStaffThread(staffId);
+    setMessages(data.messages);
+    setOtherTyping(data.otherTyping);
   };
+
+  // Poll for new messages + the other party's typing status while a thread is open.
+  useEffect(() => {
+    if (!active) return;
+
+    const poll = async () => {
+      const data =
+        active.type === "owner"
+          ? await getAdminOwnerThread(active.id)
+          : await getAdminStaffThread(active.id);
+      setMessages(data.messages);
+      setOtherTyping(data.otherTyping);
+    };
+
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [active]);
 
   if (active) {
     const isOwner = active.type === "owner";
     const info = isOwner
       ? ownerThreads.find((t) => t.owner.id === active.id)?.owner
       : staffThreads.find((t) => t.staff.id === active.id)?.staff;
+
+    const handleTyping = () => {
+      if (isOwner) {
+        setAdminTypingInOwnerThread(active.id);
+      } else {
+        setAdminTypingInStaffThread(active.id);
+      }
+    };
 
     return (
       <div className="h-screen bg-[#0A0C12] text-slate-200 flex flex-col">
@@ -57,13 +89,21 @@ export default function AdminSupportClient({
           <ChatPanel
             messages={messages}
             currentUserId={currentUserId}
+            otherTyping={otherTyping}
+            otherPartyName={isOwner ? info?.storeName || info?.fullName : info?.fullName}
+            otherPartyImage={info?.image}
+            onTyping={handleTyping}
             onSend={async (content) => {
               if (isOwner) {
                 await sendAdminReply(active.id, content);
-                setMessages(await getAdminOwnerThread(active.id));
+                const data = await getAdminOwnerThread(active.id);
+                setMessages(data.messages);
+                setOtherTyping(data.otherTyping);
               } else {
                 await sendAdminReplyToStaff(active.id, content);
-                setMessages(await getAdminStaffThread(active.id));
+                const data = await getAdminStaffThread(active.id);
+                setMessages(data.messages);
+                setOtherTyping(data.otherTyping);
               }
             }}
             emptyStateTitle="No messages yet"

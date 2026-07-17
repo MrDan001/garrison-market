@@ -9,7 +9,7 @@ export default async function OwnerSupportPage() {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") redirect("/login");
 
-  const [staffThreads, adminMessages] = await Promise.all([
+  const [staffThreads, adminThread] = await Promise.all([
     getOwnerStaffThreads(),
     getOwnerAdminThread(),
   ]);
@@ -18,7 +18,7 @@ export default async function OwnerSupportPage() {
     <OwnerSupportClient
       currentUserId={session.id}
       staffThreads={JSON.parse(JSON.stringify(staffThreads))}
-      adminMessages={JSON.parse(JSON.stringify(adminMessages))}
+      adminMessages={JSON.parse(JSON.stringify(adminThread.messages))}
     />
   );
 }
