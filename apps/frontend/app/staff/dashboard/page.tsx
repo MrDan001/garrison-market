@@ -30,11 +30,13 @@ export default async function StaffDashboard() {
   const nameParts = staff.fullName?.split(" ") ?? ["Staff"];
   const firstName = nameParts[0] ?? "Staff";
 
+  // Greeting based on server/local estimation
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // FIX: Safe Localized Midnight Construction (Avoids UTC reset shifts)
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const [todayAgg, recentSales, recentReports, inventoryItems] = await Promise.all([
     prisma.order.aggregate({
@@ -54,10 +56,12 @@ export default async function StaffDashboard() {
       orderBy: { date: "desc" },
       select: { id: true, notes: true, date: true, author: { select: { fullName: true } } },
     }),
+    // OPTIMIZATION: Limits pulled rows to prevent server timeouts on massive inventories
     prisma.inventory.findMany({
       where: { ownerId: staff.ownerId ?? undefined },
       select: { id: true, name: true, quantity: true, restockLevel: true, updatedAt: true, createdAt: true },
       orderBy: { updatedAt: "desc" },
+      take: 100, 
     }),
   ]);
 
@@ -117,7 +121,7 @@ export default async function StaffDashboard() {
     <div className="h-screen w-screen bg-[#0A0C10] text-slate-200 flex flex-col overflow-hidden">
       <header className="sticky top-0 z-50 bg-[#0a0c12]/80 backdrop-blur-xl border-b border-slate-800/50 flex-shrink-0">
         <div className="max-w-3xl mx-auto px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
               <Store size={15} className="text-white" />
             </div>
@@ -133,7 +137,7 @@ export default async function StaffDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <NotificationBell notificationsEnabled={staff.notificationsEnabled} />
 
             <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden border border-slate-700">
@@ -215,7 +219,6 @@ export default async function StaffDashboard() {
                 </div>
               </Link>
 
-              {/* Desktop-only quick actions, since the bottom nav is hidden above md */}
               <Link href="/staff/inventory" className="hidden sm:flex bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
                   <ShoppingBag size={18} className="text-blue-400" />
@@ -264,7 +267,6 @@ export default async function StaffDashboard() {
         </div>
       </div>
 
-      {/* Bottom nav — mobile only. On desktop, the Quick Actions grid above covers navigation instead. */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0d0f18]/95 backdrop-blur-xl border-t border-slate-800/50 px-4 py-2 z-50">
         <div className="flex items-end justify-around max-w-md mx-auto">
           <Link href="/staff/invoice" className="flex flex-col items-center gap-1 py-2 px-3 group">
@@ -312,12 +314,12 @@ export default async function StaffDashboard() {
 function ActivityRow({ item }: { item: ActivityItem }) {
   if (item.type === "sale") {
     return (
-      <div className="flex justify-between items-center px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
-        <div className="flex items-center gap-3">
+      <div className="flex justify-between items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
             <ShoppingCart size={14} className="text-emerald-400" />
           </div>
-          <p className="text-sm font-medium text-slate-200">Sale confirmed</p>
+          <p className="text-sm font-medium text-slate-200 truncate">Sale confirmed</p>
         </div>
         <p className="text-sm font-bold text-emerald-400 shrink-0">₦{item.amount.toLocaleString()}</p>
       </div>
@@ -326,12 +328,12 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
   if (item.type === "report") {
     return (
-      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800 min-w-0">
         <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
           <ClipboardList size={14} className="text-amber-400" />
         </div>
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-200">Report submitted</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-slate-200 truncate">Report submitted</p>
           <p className="text-[11px] text-slate-500 truncate">by {item.authorName} — {item.snippet}</p>
         </div>
       </div>
@@ -340,11 +342,11 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
   if (item.type === "restock") {
     return (
-      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800 min-w-0">
         <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
           <PackageCheck size={14} className="text-emerald-400" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
           <p className="text-[11px] text-emerald-400 truncate">Restocked — {item.quantity} in stock</p>
         </div>
@@ -353,11 +355,11 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+    <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800 min-w-0">
       <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${item.isOutOfStock ? "bg-rose-500/10" : "bg-amber-500/10"}`}>
         <AlertTriangle size={14} className={item.isOutOfStock ? "text-rose-400" : "text-amber-400"} />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
         <p className={`text-[11px] truncate ${item.isOutOfStock ? "text-rose-400" : "text-amber-400"}`}>
           {item.isOutOfStock ? "Out of stock" : `Low stock — ${item.quantity} left`}

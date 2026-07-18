@@ -21,6 +21,8 @@ interface PrismaOrder {
   date: Date;
   ownerId: number;
   staffId: number | null;
+  buyerName: string | null;
+  buyerPhone: string | null; // FIXED: Added to interface types
   staff: {
     fullName: string | null;
   } | null;
@@ -36,20 +38,29 @@ export async function GET() {
   try {
     const session = await getSessionUser();
 
-    if (!session || session.role !== "owner") {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // session only carries { id, email, role, status, ownerId } — fullName
-    // isn't part of that selected shape, so fetch it directly instead of
-    // assuming it exists on the session object.
+    // Staff-facing endpoint — returns only the calling staff member's own
+    // sales. Owners should use a separate, broader endpoint.
+    if (session.role !== "staff") {
+      return NextResponse.json(
+        { error: "Forbidden: staff access only" },
+        { status: 403 }
+      );
+    }
+
     const ownerProfile = await prisma.user.findUnique({
-      where: { id: session.id },
+      where: { id: session.ownerId! },
       select: { fullName: true },
     });
 
     const orders = (await prisma.order.findMany({
-      where: { ownerId: session.id },
+      where: {
+        ownerId: session.ownerId!,
+        staffId: session.id,
+      },
       include: {
         staff: { select: { fullName: true } },
         owner: { select: { storeName: true, fullName: true, email: true } },
@@ -68,6 +79,8 @@ export async function GET() {
       date: order.date.toISOString(),
       ownerId: order.ownerId,
       staffId: order.staffId,
+      buyerName: order.buyerName,
+      buyerPhone: order.buyerPhone, // FIXED: Explicitly mapped and included in JSON response
       staff: order.staff,
       owner: order.owner,
       items: order.items.map((item: PrismaOrderItem) => ({

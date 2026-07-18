@@ -61,6 +61,10 @@ export default function InventoryClient({
   const [discountReason, setDiscountReason] = useState(DISCOUNT_REASONS[0]);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | null>(null);
 
+  // New state tracking for customer records
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+
   // Derived filter categories
   const outOfStockItems = useMemo(() => {
     return initialItems.filter((i) => i.quantity <= 0);
@@ -132,10 +136,15 @@ export default function InventoryClient({
         originalPrice: item.price,
         price: item.finalPrice,
       }));
-      await processSaleAction(payload, paymentMethod);
+      
+      // FIX: Pass customerName and customerPhone as individual arguments instead of an object
+      await processSaleAction(payload, paymentMethod, customerName, customerPhone);
+      
       setCart([]);
       setShowCart(false);
       setPaymentMethod(null);
+      setCustomerName("");
+      setCustomerPhone("");
       alert("Sale completed successfully!");
     } catch (error: any) {
       alert(error.message || "Failed to process sale.");
@@ -184,7 +193,7 @@ export default function InventoryClient({
     { key: "all", label: "All", count: initialItems.length },
     { key: "low-stock", label: "Low Stock", count: lowStockItems.length },
     { key: "out-of-stock", label: "Out of Stock", count: outOfStockItems.length },
-    { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> },
+ /*   { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> }, */
   ];
 
   return (
@@ -600,35 +609,56 @@ export default function InventoryClient({
               <span className="text-2xl font-bold text-white">₦{total.toLocaleString()}</span>
             </div>
 
-            <div className="mb-4">
-  <p className="text-xs font-semibold text-slate-400 mb-2">Payment Method</p>
-  <div className="grid grid-cols-2 gap-2">
-    <button
-      onClick={() => setPaymentMethod("cash")}
-      className={`py-3 rounded-xl text-sm font-bold transition-colors ${
-        paymentMethod === "cash" ? "bg-emerald-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
-      }`}
-    >
-      💵 Cash
-    </button>
-    <button
-      onClick={() => setPaymentMethod("transfer")}
-      className={`py-3 rounded-xl text-sm font-bold transition-colors ${
-        paymentMethod === "transfer" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
-      }`}
-    >
-      🏦 Transfer
-    </button>
-  </div>
-</div>
+            {/* Customer Details Fields */}
+            <div className="mb-5 space-y-3">
+              <p className="text-xs font-semibold text-slate-400">Customer Details (Optional)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="Customer Name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                <input
+                  type="tel"
+                  placeholder="Phone Number"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+            </div>
 
-<button
-  disabled={loading || !paymentMethod}
-  onClick={handleProcessSale}
-  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
->
-  {loading ? "Processing..." : !paymentMethod ? "Select payment method" : "Confirm Sale"}
-</button>
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-slate-400 mb-2">Payment Method</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setPaymentMethod("cash")}
+                  className={`py-3 rounded-xl text-sm font-bold transition-colors ${
+                    paymentMethod === "cash" ? "bg-emerald-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
+                  }`}
+                >
+                  💵 Cash
+                </button>
+                <button
+                  onClick={() => setPaymentMethod("transfer")}
+                  className={`py-3 rounded-xl text-sm font-bold transition-colors ${
+                    paymentMethod === "transfer" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
+                  }`}
+                >
+                  🏦 Transfer
+                </button>
+              </div>
+            </div>
+
+            <button
+              disabled={loading || !paymentMethod}
+              onClick={handleProcessSale}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
+            >
+              {loading ? "Processing..." : !paymentMethod ? "Select payment method" : "Confirm Sale"}
+            </button>
           </div>
         </div>
       )}

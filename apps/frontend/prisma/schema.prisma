@@ -130,6 +130,8 @@ model Order {
   total         Decimal
   date          DateTime @default(now())
   paymentMethod String   @default("cash") // "cash" | "transfer"
+  buyerName     String?
+  buyerPhone    String?
   ownerId       Int
   staffId       Int?
   storeId       Int?

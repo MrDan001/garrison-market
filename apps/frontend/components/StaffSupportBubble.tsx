@@ -162,21 +162,23 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                     <p className="text-[11px] text-slate-500">Usually replies within the day</p>
                   </div>
                 </div>
-                <ChatPanel
-                  messages={ownerMessages}
-                  currentUserId={currentUserId}
-                  otherTyping={otherTyping}
-                  otherPartyName="Store Owner"
-                  onTyping={setStaffTypingInOwnerThread}
-                  onSend={async (content) => {
-                    await sendStaffMessage(content);
-                    const data = await getStaffOwnerThread();
-                    setOwnerMessages(JSON.parse(JSON.stringify(data.messages)));
-                    setOtherTyping(data.otherTyping);
-                  }}
-                  emptyStateTitle="Message your store owner"
-                  emptyStateSub="Questions about a sale, a shift, or anything else — send it here."
-                />
+                <div className="flex-1 overflow-hidden">
+                  <ChatPanel
+                    messages={ownerMessages}
+                    currentUserId={currentUserId}
+                    otherTyping={otherTyping}
+                    otherPartyName="Store Owner"
+                    onTyping={setStaffTypingInOwnerThread}
+                    onSend={async (content) => {
+                      await sendStaffMessage(content);
+                      const data = await getStaffOwnerThread();
+                      setOwnerMessages(JSON.parse(JSON.stringify(data.messages)));
+                      setOtherTyping(data.otherTyping);
+                    }}
+                    emptyStateTitle="Message your store owner"
+                    emptyStateSub="Questions about a sale, a shift, or anything else — send it here."
+                  />
+                </div>
               </>
             )}
 
@@ -195,21 +197,23 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                     <p className="text-[11px] text-slate-500">For urgent or app-related issues</p>
                   </div>
                 </div>
-                <ChatPanel
-                  messages={adminMessages}
-                  currentUserId={currentUserId}
-                  otherTyping={otherTyping}
-                  otherPartyName="Support"
-                  onTyping={setStaffTypingInAdminThread}
-                  onSend={async (content) => {
-                    await sendStaffToAdminMessage(content);
-                    const data = await getStaffAdminThread();
-                    setAdminMessages(JSON.parse(JSON.stringify(data.messages)));
-                    setOtherTyping(data.otherTyping);
-                  }}
-                  emptyStateTitle="Contact support"
-                  emptyStateSub="Reserved for issues your store owner can't resolve — we're here to help."
-                />
+                <div className="flex-1 overflow-hidden">
+                  <ChatPanel
+                    messages={adminMessages}
+                    currentUserId={currentUserId}
+                    otherTyping={otherTyping}
+                    otherPartyName="Support"
+                    onTyping={setStaffTypingInAdminThread}
+                    onSend={async (content) => {
+                      await sendStaffToAdminMessage(content);
+                      const data = await getStaffAdminThread();
+                      setAdminMessages(JSON.parse(JSON.stringify(data.messages)));
+                      setOtherTyping(data.otherTyping);
+                    }}
+                    emptyStateTitle="Contact support"
+                    emptyStateSub="Reserved for issues your store owner can't resolve — we're here to help."
+                  />
+                </div>
               </>
             )}
           </div>

@@ -216,7 +216,12 @@ export async function updateItemAction(formData: FormData) {
   return { success: true };
 }
 
-export async function processSaleAction(cartItems: any[], paymentMethod: "cash" | "transfer") {
+export async function processSaleAction(
+  cartItems: any[],
+  paymentMethod: "cash" | "transfer",
+  buyerName?: string,
+  buyerPhone?: string
+) {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
 
@@ -233,10 +238,15 @@ export async function processSaleAction(cartItems: any[], paymentMethod: "cash" 
     }
   }
 
+  const cleanName = buyerName?.trim();
+  const cleanPhone = buyerPhone?.trim();
+
   await prisma.order.create({
     data: {
       total: total,
       paymentMethod,
+      buyerName: cleanName || "Walk-in Customer",
+      buyerPhone: cleanPhone || null,
       ownerId: session.role === 'owner' ? session.id : session.ownerId!,
       staffId: session.id,
       items: {
