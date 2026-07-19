@@ -19,7 +19,7 @@ export default function ForgotPasswordPage() {
 
     try {
       const result = await requestPasswordResetAction(formData);
-      if (result?.error) {
+      if (result && "error" in result) {
         setError(result.error);
         setIsLoading(false);
         return;

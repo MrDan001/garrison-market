@@ -25,8 +25,8 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
 
     try {
       const result = await resetPasswordAction(token, formData);
-      if (result?.error) {
-        setError(result.error);
+      if (result && "error" in result) {
+        setError(result.error ?? "This reset link is invalid or has expired.");
         setIsLoading(false);
         return;
       }

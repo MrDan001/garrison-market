@@ -48,9 +48,9 @@ export async function submitDailyReport(authorId: number, content: string) {
       transferTotal,
       notes: content && content.trim() !== "" ? content.trim() : "None",
       status: "pending",
-      author: { connect: { id: authorId } },
+      authorId: authorId,
       ownerId: session.ownerId!,
-      storeId: author?.staffStoreId ?? null,
+      storeId: author?.staffStoreId ?? undefined,
       items: {
         create: allSoldItems.map((i: any) => ({
           inventoryId: i.inventoryId,
