@@ -12,9 +12,15 @@
 
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const FROM = process.env.EMAIL_FROM || "Garrison Market <onboarding@resend.dev>";
+
+let resendClient: Resend | null = null;
+function getResendClient(): Resend {
+  if (!resendClient) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
+}
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   if (!process.env.RESEND_API_KEY) {
@@ -25,7 +31,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   }
 
   try {
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: FROM,
       to,
       subject: "Reset your Garrison Market password",
