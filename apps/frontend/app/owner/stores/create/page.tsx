@@ -29,7 +29,14 @@ export default function CreateStorePage() {
 
     startTransition(async () => {
       try {
-        await createStoreAction(formData);
+        const result = await createStoreAction(formData);
+        // createStoreAction returns { success: false, error } on expected
+        // failures (subscription locked, plan limit hit, validation) instead
+        // of throwing — it only redirects (which throws NEXT_REDIRECT) on
+        // success. So we must check the return value here.
+        if (result && result.success === false) {
+          setErrorMessage(result.error);
+        }
       } catch (err: any) {
         if (err.digest?.includes("NEXT_REDIRECT")) return;
         setErrorMessage(err.message || "An unexpected error occurred.");
