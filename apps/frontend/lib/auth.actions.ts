@@ -393,6 +393,11 @@ export async function toggleStaffStatus(id: number, currentStatus: string) {
 // --- ADMIN ACTIONS ---
 
 export async function updateOwnerStatus(email: string, status: 'approved' | 'declined' | 'suspended') {
+  const session = await getSessionUser();
+  if (!session || session.role.toLowerCase() !== "admin") {
+    return { success: false, error: "Unauthorized" };
+  }
+
   try {
     const normalizedStatus = status.toLowerCase().trim();
     const updateData: any = { status: normalizedStatus };
@@ -472,6 +477,11 @@ export async function extendSubscriptionAction(ownerId: number, days: number, re
 }
 
 export async function deleteUser(email: string) {
+  const session = await getSessionUser();
+  if (!session || session.role.toLowerCase() !== "admin") {
+    return { success: false, error: "Unauthorized" };
+  }
+
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return { success: false, error: "User not found" };

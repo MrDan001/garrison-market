@@ -503,16 +503,30 @@ export async function getStaffOrderHistory() {
   return serializeData(data);
 }
 
-export async function createStoreAction(formData: FormData) {
+export async function createStoreAction(
+  formData: FormData
+): Promise<{ success: false; error: string } | void> {
   const session = await getSessionUser();
-  if (!session?.email) throw new Error("Unauthorized");
+  if (!session?.email) return { success: false, error: "Unauthorized" };
 
   const user = await prisma.user.findUnique({ where: { email: session.email } });
-  if (!user) throw new Error("User not found.");
+  if (!user) return { success: false, error: "User not found." };
 
-  await assertSubscriptionActive(user.id);
+  // NOTE: assertSubscriptionActive/checkPlanLimit failures are expected,
+  // user-facing conditions (trial ended, plan limit hit) — not server faults.
+  // Next.js redacts *thrown* Server Action errors in production builds down
+  // to a generic "Server Components render" message, so these are returned
+  // as data instead of thrown, the same way registerStaffAction already does.
+  try {
+    await assertSubscriptionActive(user.id);
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Your trial or subscription has ended." };
+  }
+
   const limitCheck = await checkPlanLimit(user.id, "stores");
-  if (!limitCheck.allowed) throw new Error(limitCheck.reason);
+  if (!limitCheck.allowed) {
+    return { success: false, error: limitCheck.reason || "Plan limit reached." };
+  }
 
   const name = formData.get("name") as string;
   const phoneNumber = formData.get("phoneNumber") as string;
@@ -521,7 +535,7 @@ export async function createStoreAction(formData: FormData) {
   const state = formData.get("state") as string;
   const productsSold = formData.get("productsSold") as string;
 
-  if (!name) throw new Error("Store name is required.");
+  if (!name?.trim()) return { success: false, error: "Store name is required." };
 
   await prisma.store.create({
     data: {
