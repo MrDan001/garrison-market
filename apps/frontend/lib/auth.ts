@@ -1,4 +1,3 @@
-// lib/auth.ts
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
@@ -34,7 +33,7 @@ export async function getSessionUser() {
   if (!payload) return null;
 
   try {
-    return await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       select: {
         id: true,
@@ -42,8 +41,18 @@ export async function getSessionUser() {
         role: true,
         status: true,
         ownerId: true,
+        subscriptionStatus: true,
+        currentPeriodEnd: true,
       },
     });
+
+    if (!user) return null;
+
+    // Convert raw JavaScript Date instances to plain ISO strings before leaving the server
+    return {
+      ...user,
+      currentPeriodEnd: user.currentPeriodEnd ? user.currentPeriodEnd.toISOString() : null,
+    };
   } catch {
     return null;
   }

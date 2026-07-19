@@ -7,10 +7,26 @@ import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { createNotification } from "./notification.actions";
 import { getActiveStoreId } from "./store-context";
+import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
+
+// Deep sterilization helper to turn Decimals and Dates into safe primitives
+function serializeData<T>(data: T): T {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) => {
+      if (value && typeof value === "object" && value.constructor.name === "Decimal") {
+        return Number(value);
+      }
+      if (value instanceof Date) return value.toISOString();
+      return value;
+    })
+  );
+}
 
 export async function submitDailyReport(authorId: number, content: string) {
   const session = await getSessionUser();
   if (!session || session.id !== authorId) throw new Error("Unauthorized");
+
+  await assertSubscriptionActive(session.ownerId ?? session.id);
 
   const author = await prisma.user.findUnique({
     where: { id: authorId },
@@ -134,7 +150,7 @@ export async function getInventoryForStaff() {
 
   const storeId = await getActiveStoreId();
 
-  return await prisma.inventory.findMany({
+  const data = await prisma.inventory.findMany({
     where: {
       ownerId: targetOwnerId,
       ...(storeId ? { storeId } : {}),
@@ -152,6 +168,8 @@ export async function getInventoryForStaff() {
     },
     orderBy: { name: "asc" }
   });
+
+  return serializeData(data);
 }
 
 export async function addInventoryAction(formData: FormData) {
@@ -172,6 +190,10 @@ export async function addInventoryAction(formData: FormData) {
 export async function addItemAction(formData: FormData) {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  await assertSubscriptionActive(session.id);
+  const limitCheck = await checkPlanLimit(session.id, "products");
+  if (!limitCheck.allowed) throw new Error(limitCheck.reason);
 
   const name = formData.get("name") as string;
   const quantity = parseInt(formData.get("quantity") as string, 10);
@@ -250,6 +272,9 @@ export async function processSaleAction(
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
 
+  const saleOwnerScopeId = session.role === "owner" ? session.id : session.ownerId!;
+  await assertSubscriptionActive(saleOwnerScopeId);
+
   const total = cartItems.reduce((sum: number, item: any) => sum + (Number(item.price) * item.qty), 0);
 
   for (const item of cartItems) {
@@ -269,7 +294,7 @@ export async function processSaleAction(
   const saleOwnerId = session.role === 'owner' ? session.id : session.ownerId!;
   const saleStoreId = await getActiveStoreId();
 
-  const newOrder = await prisma.order.create({
+  await prisma.order.create({
     data: {
       total: total,
       paymentMethod,
@@ -321,8 +346,6 @@ export async function processSaleAction(
       data: { quantity: { decrement: item.qty } }
     });
 
-    // Fire only the moment the item crosses into low/out-of-stock —
-    // not on every sale after it's already low.
     if (
       before &&
       updated.restockLevel != null &&
@@ -352,7 +375,7 @@ export async function getStaffReports() {
   if (!session) return [];
 
   try {
-    return await prisma.report.findMany({
+    const data = await prisma.report.findMany({
       where: {
         ...(session.role === 'staff'
           ? { authorId: session.id }
@@ -366,6 +389,7 @@ export async function getStaffReports() {
       },
       orderBy: { date: 'desc' }
     });
+    return serializeData(data);
   } catch (error) {
     console.error("Error fetching staff reports:", error);
     return [];
@@ -379,14 +403,14 @@ export async function getTodaySales() {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
-  return await prisma.order.findMany({
+  const data = await prisma.order.findMany({
     where: { staffId: session.id, date: { gte: startOfToday } },
     include: { items: { include: { inventory: true } } }
   });
+  return serializeData(data);
 }
 
 export async function updateReportStatus(reportId: number, status: "approved" | "declined") {
-  "use server";
   const report = await prisma.report.update({
     where: { id: reportId },
     data: { status: status }
@@ -459,7 +483,6 @@ export async function resubmitReportAction(reportId: number, clarification: stri
 }
 
 export async function updateInventoryQuantity(id: number, change: number) {
-  "use server";
   await prisma.inventory.update({
     where: { id },
     data: { quantity: { increment: change } }
@@ -471,17 +494,25 @@ export async function getStaffOrderHistory() {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
 
-  return await prisma.order.findMany({
+  const data = await prisma.order.findMany({
     where: { staffId: session.id },
     include: { items: { include: { inventory: true } } },
     orderBy: { date: 'desc' },
     take: 100
   });
+  return serializeData(data);
 }
 
 export async function createStoreAction(formData: FormData) {
   const session = await getSessionUser();
   if (!session?.email) throw new Error("Unauthorized");
+
+  const user = await prisma.user.findUnique({ where: { email: session.email } });
+  if (!user) throw new Error("User not found.");
+
+  await assertSubscriptionActive(user.id);
+  const limitCheck = await checkPlanLimit(user.id, "stores");
+  if (!limitCheck.allowed) throw new Error(limitCheck.reason);
 
   const name = formData.get("name") as string;
   const phoneNumber = formData.get("phoneNumber") as string;
@@ -491,9 +522,6 @@ export async function createStoreAction(formData: FormData) {
   const productsSold = formData.get("productsSold") as string;
 
   if (!name) throw new Error("Store name is required.");
-
-  const user = await prisma.user.findUnique({ where: { email: session.email } });
-  if (!user) throw new Error("User not found.");
 
   await prisma.store.create({
     data: {

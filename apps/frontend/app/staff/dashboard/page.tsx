@@ -5,6 +5,8 @@ import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Packa
 import Link from "next/link";
 import NotificationBell from "@/components/NotificationBell";
 import StaffSupportBubble from "@/components/StaffSupportBubble";
+// FIXED: Changed to a named import to resolve TS2613
+import { TrialBanner } from "@/components/TrialBanner"; 
 
 type ActivityItem =
   | { type: "sale"; id: string; date: Date; amount: number }
@@ -26,6 +28,28 @@ export default async function StaffDashboard() {
 
   if (!staff || userRole !== "staff") redirect("/login");
   if (userStatus === "suspended" || userStatus === "pending") redirect("/pending/staff");
+
+  // FIXED: Fetch billing values directly from the Owner's User row instead of an unmapped subscription table
+  const ownerRow = staff.ownerId 
+    ? await prisma.user.findUnique({
+        where: { id: staff.ownerId },
+        select: { subscriptionStatus: true, currentPeriodEnd: true }
+      })
+    : null;
+
+  // Calculate if the account is locked based on the period end date
+  const isLocked = ownerRow?.currentPeriodEnd ? new Date() > new Date(ownerRow.currentPeriodEnd) : false;
+  
+  // Calculate trial days left if they are trialing
+  const trialDaysLeft = ownerRow?.currentPeriodEnd 
+    ? Math.max(0, Math.ceil((new Date(ownerRow.currentPeriodEnd).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  const billingStatus = {
+    isLocked,
+    subscriptionStatus: ownerRow?.subscriptionStatus || "trialing",
+    trialDaysLeft,
+  };
 
   const nameParts = staff.fullName?.split(" ") ?? ["Staff"];
   const firstName = nameParts[0] ?? "Staff";
@@ -166,6 +190,13 @@ export default async function StaffDashboard() {
         </div>
       </header>
 
+      <TrialBanner
+        isLocked={billingStatus.isLocked}
+        subscriptionStatus={billingStatus.subscriptionStatus}
+        trialDaysLeft={billingStatus.trialDaysLeft}
+        isOwner={false}
+      />
+
       <div className="flex-1 overflow-y-auto pt-6 pb-28 md:pb-10">
         <div className="max-w-3xl mx-auto w-full">
           <div className="px-5 mb-6">
@@ -225,7 +256,7 @@ export default async function StaffDashboard() {
                 </div>
               </Link>
 
-              <Link href="/staff/inventory" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
+              <Link href="/staff/inventory" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
                   <ShoppingBag size={18} className="text-blue-400" />
                 </div>
@@ -235,7 +266,7 @@ export default async function StaffDashboard() {
                 </div>
               </Link>
 
-              <Link href="/staff/invoice" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
+              <Link href="/staff/invoice" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-slate-500/10 flex items-center justify-center">
                   <Package size={18} className="text-slate-600 dark:text-slate-400" />
                 </div>
@@ -245,7 +276,7 @@ export default async function StaffDashboard() {
                 </div>
               </Link>
 
-              <Link href="/staff/profile" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
+              <Link href="/staff/profile" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
                   <UserCircle size={18} className="text-emerald-400" />
                 </div>

@@ -8,6 +8,8 @@ import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { signToken, verifyToken } from "@/lib/auth";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { TRIAL_DAYS } from "@/lib/plans";
+import { assertSubscriptionActive, checkPlanLimit } from "@/lib/subscription-guard";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -245,6 +247,16 @@ export async function registerStaffAction(formData: FormData) {
     return { success: false, error: "Unauthorized" };
   }
 
+  try {
+    await assertSubscriptionActive(session.id);
+  } catch {
+    return { success: false, error: "Your trial or subscription has ended. Please upgrade to add staff." };
+  }
+  const staffLimit = await checkPlanLimit(session.id, "staff");
+  if (!staffLimit.allowed) {
+    return { success: false, error: staffLimit.reason };
+  }
+
   const fullName = formData.get("fullName") as string;
   const email = formData.get("email") as string;
   const tempPassword = formData.get("tempPassword") as string;
@@ -305,9 +317,21 @@ export async function registerStaffAction(formData: FormData) {
 export async function getStaffData() {
   const sessionUser = await getSessionUser();
   if (!sessionUser || sessionUser.role.toLowerCase() !== 'owner') throw new Error("Unauthorized");
-  return await prisma.user.findMany({
+  
+  const staff = await prisma.user.findMany({
     where: { ownerId: sessionUser.id, role: 'staff' }
   });
+
+  // Deep sterilize to safely convert Decimals and Dates into safe primitives before hitting the wire
+  return JSON.parse(
+    JSON.stringify(staff, (key, value) => {
+      if (value && typeof value === "object" && value.constructor.name === "Decimal") {
+        return Number(value);
+      }
+      if (value instanceof Date) return value.toISOString();
+      return value;
+    })
+  );
 }
 
 export async function deleteStaff(id: number) {
@@ -348,9 +372,21 @@ export async function updateOwnerStatus(email: string, status: 'approved' | 'dec
   try {
     const normalizedStatus = status.toLowerCase().trim();
 
+    const updateData: any = { status: normalizedStatus };
+
+    // Start the 14-day free trial the moment an owner is approved — not at
+    // raw signup, since they can't use the app until approved anyway.
+    if (normalizedStatus === 'approved') {
+      const existing = await prisma.user.findUnique({ where: { email }, select: { trialEndsAt: true } });
+      if (!existing?.trialEndsAt) {
+        updateData.trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+        updateData.subscriptionStatus = 'trialing';
+      }
+    }
+
     await prisma.user.update({ 
       where: { email }, 
-      data: { status: normalizedStatus } 
+      data: updateData
     });
     
     revalidatePath("/admin/users");
@@ -361,19 +397,82 @@ export async function updateOwnerStatus(email: string, status: 'approved' | 'dec
   }
 }
 
+export async function extendSubscriptionAction(ownerId: number, days: number, reason?: string) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+  if (!days || days <= 0) return { success: false, error: "Days must be a positive number." };
+
+  try {
+    const owner = await prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { subscriptionStatus: true, trialEndsAt: true, currentPeriodEnd: true },
+    });
+    if (!owner) return { success: false, error: "Owner not found." };
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const now = new Date();
+
+    if (owner.subscriptionStatus === "trialing") {
+      // Push the trial end date out, extending from whichever is later —
+      // "now" if it already expired, or the existing date if still running.
+      const base = owner.trialEndsAt && owner.trialEndsAt > now ? owner.trialEndsAt : now;
+      await prisma.user.update({
+        where: { id: ownerId },
+        data: { trialEndsAt: new Date(base.getTime() + days * msPerDay) },
+      });
+    } else {
+      const base = owner.currentPeriodEnd && owner.currentPeriodEnd > now ? owner.currentPeriodEnd : now;
+      await prisma.user.update({
+        where: { id: ownerId },
+        data: { currentPeriodEnd: new Date(base.getTime() + days * msPerDay), subscriptionStatus: "active" },
+      });
+    }
+
+    await prisma.planExtension.create({
+      data: {
+        ownerId,
+        days,
+        reason: reason || null,
+        grantedBy: session.email,
+      },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    return { success: true };
+  } catch (error) {
+    console.error("Extend subscription error:", error);
+    return { success: false, error: "Failed to extend subscription." };
+  }
+}
+
 export async function deleteUser(email: string) {
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return { success: false, error: "User not found" };
 
-    // Transaction to delete all related data in the correct order
+    // Full cascade: flush every record attached to this owner, including
+    // their staff accounts and everything the staff created. Order matters —
+    // children before parents. Runs in one transaction so it's all-or-nothing.
+    const ownerId = user.id;
+    const staff = await prisma.user.findMany({ where: { ownerId }, select: { id: true } });
+    const staffIds = staff.map((s) => s.id);
+
     await prisma.$transaction([
-      // 1. Delete associated inventory
-      prisma.inventory.deleteMany({ where: { ownerId: user.id } }),
-      // 2. Delete associated orders (This is what was blocking the delete)
-      prisma.order.deleteMany({ where: { ownerId: user.id } }),
-      // 3. Finally, delete the user
-      prisma.user.delete({ where: { id: user.id } }),
+      prisma.orderItem.deleteMany({ where: { order: { ownerId } } }),
+      prisma.reportItem.deleteMany({ where: { report: { ownerId } } }),
+      prisma.consignmentItem.deleteMany({ where: { consignment: { ownerId } } }),
+      prisma.order.deleteMany({ where: { ownerId } }),
+      prisma.report.deleteMany({ where: { ownerId } }),
+      prisma.consignment.deleteMany({ where: { ownerId } }),
+      prisma.notification.deleteMany({ where: { ownerId } }),
+      prisma.supportMessage.deleteMany({ where: { ownerId } }),
+      prisma.inventory.deleteMany({ where: { ownerId } }),
+      prisma.payment.deleteMany({ where: { ownerId } }),
+      prisma.planExtension.deleteMany({ where: { ownerId } }),
+      prisma.store.deleteMany({ where: { ownerId } }),
+      // Staff accounts belonging to this owner
+      ...(staffIds.length > 0 ? [prisma.user.deleteMany({ where: { id: { in: staffIds } } })] : []),
+      prisma.user.delete({ where: { id: ownerId } }),
     ]);
 
     revalidatePath("/admin/users");

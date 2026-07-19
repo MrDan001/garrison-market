@@ -1,7 +1,8 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+// 👇 Changed from "@/lib/auth" to "@/lib/auth.actions" to use the correct session resolver
+import { getSessionUser } from "@/lib/auth.actions";
 import { revalidatePath } from "next/cache";
 
 export async function updateProfileWithPhoto(formData: FormData) {
@@ -11,8 +12,6 @@ export async function updateProfileWithPhoto(formData: FormData) {
   const fullName = formData.get("fullName") as string;
   const phoneNumber = formData.get("phone") as string;
 
-  // The image is already uploaded client-side to Vercel Blob before this
-  // action runs — we just receive the resulting URL, no file handling here.
   const imageUrl = formData.get("imageUrl") as string | null;
 
   try {
@@ -50,6 +49,7 @@ export async function updateProfileAction(formData: FormData) {
   revalidatePath("/owner/profile/edit");
   revalidatePath("/owner/profile");
 }
+
 export async function updateNotificationPreference(enabled: boolean) {
   const session = await getSessionUser();
   if (!session?.email) throw new Error("Unauthorized");

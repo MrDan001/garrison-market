@@ -5,6 +5,8 @@ import { getSessionUser } from "./auth.actions";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "./notification.actions";
 import { getActiveStoreId } from "./store-context";
+import { assertSubscriptionActive } from "./subscription-guard";
+import { getPlanConfig } from "./plans";
 
 type SignOutItem = { inventoryId: number; quantityOut: number };
 
@@ -17,10 +19,13 @@ export async function isConsignmentEnabledForStaff() {
 
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
-    select: { consignmentEnabled: true },
+    select: { consignmentEnabled: true, plan: true },
   });
 
-  return owner?.consignmentEnabled ?? false;
+  // Both the owner's manual toggle AND their plan must allow it — Basic
+  // plan owners never see consignment regardless of the toggle state.
+  const planAllows = getPlanConfig(owner?.plan).consignment;
+  return (owner?.consignmentEnabled ?? false) && planAllows;
 }
 
 export async function signOutConsignment(params: {
@@ -34,6 +39,8 @@ export async function signOutConsignment(params: {
 
   const ownerId = session.role === "owner" ? session.id : session.ownerId;
   if (!ownerId) throw new Error("No owner scope found for this account");
+
+  await assertSubscriptionActive(ownerId);
 
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
@@ -144,6 +151,8 @@ export async function settleConsignment(
   if (!consignment) throw new Error("Consignment not found");
   if (consignment.staffId !== session.id) throw new Error("Unauthorized");
   if (consignment.status !== "out") throw new Error("This consignment is already settled");
+
+  await assertSubscriptionActive(consignment.ownerId);
 
   for (const s of settlements) {
     const item = consignment.items.find((i) => i.id === s.itemId);

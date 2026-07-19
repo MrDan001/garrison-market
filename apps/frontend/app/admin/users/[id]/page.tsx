@@ -91,7 +91,7 @@ export default async function OwnerDetailsPage({
       {/* Approve / decline / suspend / delete actions */}
       <div className="bg-[var(--bg-surface)] p-6 rounded-2xl border border-slate-200 dark:border-slate-800">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Actions</h2>
-        <OwnerActions email={owner.email} status={owner.status} productsSold={owner.productsSold} />
+        <OwnerActions email={owner.email} status={owner.status} productsSold={owner.productsSold} ownerId={owner.id} />
       </div>
     </div>
   );

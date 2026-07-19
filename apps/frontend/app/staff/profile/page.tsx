@@ -1,4 +1,5 @@
-import { getSessionUser } from "@/lib/auth";
+// 1. Update your getSessionUser import line at the top to target your primary actions file:
+import { getSessionUser } from "@/lib/auth.actions"; 
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -48,6 +49,9 @@ export default async function StaffProfilePage() {
   const monthOrders = monthAgg._count;
   const statusKey = staff.status.toLowerCase();
 
+  // Create an explicit primitive string copy of the date to prevent any memory reference leakage
+  const safeJoinedDate = String(staff.createdAt.toLocaleDateString("en-NG"));
+
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-900 dark:text-slate-100 flex flex-col">
       <div className="border-b border-white/[0.06] px-5 pb-4 pt-4">
@@ -81,7 +85,7 @@ export default async function StaffProfilePage() {
           <StaffProfileSections
             email={staff.email}
             phone={staff.phoneNumber || "Not set"}
-            joinedDate={staff.createdAt.toLocaleDateString()}
+            joinedDate={safeJoinedDate} // ✅ Safe primitive string mapping
             monthSales={monthSales}
             monthOrders={monthOrders}
             notificationsEnabled={staff.notificationsEnabled}

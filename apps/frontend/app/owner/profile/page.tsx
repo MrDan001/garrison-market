@@ -1,14 +1,14 @@
-// app/owner/profile/page.tsx
 import {
   ChevronRight, Store, LayoutDashboard,
   Activity, CreditCard, Users, Receipt,
   Settings, LogOut, ArrowLeft, History,
-  MessageSquare, // <-- Imported Support/Threads Icon
+  MessageSquare, Zap, Clock, Calendar // Added for Subscription UI
 } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { logoutAction } from "@/lib/auth.actions";
+import { getOwnerBillingInfo } from "@/lib/billing.actions"; // Imported to fetch current live subscription metrics
 import SettingsDropdown from "./settings-dropdown";
 import OwnerAnnouncementForm from "@/components/OwnerAnnouncementForm";
 
@@ -17,6 +17,10 @@ export const dynamic = "force-dynamic";
 export default async function MorePage() {
   const session = await getSessionUser();
   if (!session?.email) redirect("/login");
+
+  // 1. Fetch current plan configuration limits & expiry data via your server action helper
+  const billingInfo = await getOwnerBillingInfo();
+  const { isLocked, plan, currentPeriodEnd } = billingInfo.status;
 
   const user = await prisma.user.findUnique({
     where: { email: session.email },
@@ -32,6 +36,11 @@ export default async function MorePage() {
   });
 
   if (!user) redirect("/login");
+
+  // Format expiration date nicely
+  const expiryDateString = currentPeriodEnd 
+    ? new Date(currentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "N/A";
 
   return (
     <div className="fixed inset-0 bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col pb-20">
@@ -61,6 +70,36 @@ export default async function MorePage() {
             <ChevronRight size={20} className="text-slate-400 dark:text-slate-600 shrink-0" />
           </div>
         </a>
+
+        {/* Brand New Feature: Interactive Active Subscription Card */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Subscription Info</h3>
+          <a href="/owner/billing" className="p-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 dark:from-blue-950/20 dark:to-indigo-950/10 flex items-center justify-between hover:border-blue-400 dark:hover:border-blue-700 transition-all block">
+            <div className="flex items-start gap-4">
+              <div className={`p-3 rounded-xl shrink-0 ${isLocked ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400'}`}>
+                <Zap size={22} className={!isLocked ? "fill-blue-500 dark:fill-blue-400 animate-pulse" : ""} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-[var(--text-primary)] capitalize">
+                    {plan || "Free / Trial"} Plan
+                  </span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${isLocked ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'}`}>
+                    {isLocked ? "Expired" : "Active"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  <Calendar size={13} />
+                  <span>Expires: <strong className="text-[var(--text-primary)]">{expiryDateString}</strong></span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
+              <span>Manage</span>
+              <ChevronRight size={16} />
+            </div>
+          </a>
+        </div>
 
         {/* Business section */}
         <MenuSection

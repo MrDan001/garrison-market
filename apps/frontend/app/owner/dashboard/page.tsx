@@ -3,6 +3,8 @@ import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import SalesChart from "@/components/SalesChart";
+import { getBillingStatus } from "@/lib/subscription-guard";
+import { TrialBanner, PremiumFeatureLock } from "@/components/TrialBanner";
 import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
 import { cookies } from "next/headers";
@@ -43,6 +45,8 @@ export default async function OwnerDashboardPage() {
 
     if (!user || user.status !== "approved") redirect("/pending");
 
+    const billingStatus = await getBillingStatus(user.id);
+
     // 2. Safely read the active store cookie
     const cookieStore = await cookies();
     const activeStoreCookie = cookieStore.get("activeStoreId")?.value;
@@ -75,9 +79,6 @@ export default async function OwnerDashboardPage() {
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // NOTE: storeId is nullable to support legacy pre-multi-store records.
-    // Those legacy rows (storeId: null) are visible from any store view;
-    // everything else is strictly scoped to the currently active store —
-    // owners should NOT see another store's data just by owning both.
     const orderMatchQuery = {
       ownerId: user.id,
       OR: [
@@ -179,6 +180,14 @@ export default async function OwnerDashboardPage() {
       date: d.date.toISOString(),
     }));
 
+    // FIXED: Safely maps and converts the Prisma Decimal object inside monthOrderItems to a plain JSON JavaScript number
+    const serializedMonthOrderItems = monthOrderItems.map((item) => ({
+      ...item,
+      priceAtTime: typeof item.priceAtTime === "object" && item.priceAtTime !== null
+        ? Number(item.priceAtTime.toString())
+        : Number(item.priceAtTime || 0)
+    }));
+
     const totalSales = serializedSalesData.reduce((acc, curr) => acc + curr.total, 0);
 
     // ── Build the merged activity feed ──
@@ -268,6 +277,13 @@ export default async function OwnerDashboardPage() {
           </div>
         </header>
 
+        <TrialBanner
+          isLocked={billingStatus.isLocked}
+          subscriptionStatus={billingStatus.subscriptionStatus}
+          trialDaysLeft={billingStatus.trialDaysLeft}
+          isOwner={true}
+        />
+
         <main className="max-w-6xl mx-auto px-4 sm:px-8 py-8 sm:py-12 space-y-10">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
             <div>
@@ -287,8 +303,14 @@ export default async function OwnerDashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
               <div className="p-6 sm:p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/40 dark:bg-slate-900/40 backdrop-blur-xl">
-                {/* Linked optimized line item array directly into chart engine */}
-                <SalesChart data={serializedSalesData} analyticsData={monthOrderItems} />
+                {/* FIXED: Uses serializedMonthOrderItems to resolve plain object runtime limits */}
+                {billingStatus.plan === "premium" ? (
+                  <SalesChart data={serializedSalesData} analyticsData={serializedMonthOrderItems} />
+                ) : (
+                  <PremiumFeatureLock featureName="Business Summary Chart" isOwner={true}>
+                    <SalesChart data={serializedSalesData} analyticsData={serializedMonthOrderItems} />
+                  </PremiumFeatureLock>
+                )}
               </div>
 
               <div className="p-6 sm:p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/40 dark:bg-slate-900/40 backdrop-blur-xl">
