@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
+import { withTimeout } from "@/lib/with-timeout";
 import { addItemAction } from "@/lib/business.actions";
 import { ArrowLeft, UploadCloud } from "lucide-react";
 import Link from "next/link";
@@ -13,6 +14,7 @@ export default function AddInventoryItemPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
@@ -38,6 +40,7 @@ export default function AddInventoryItemPage() {
     if (!formRef.current) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
     const formData = new FormData(formRef.current);
 
     try {
@@ -48,20 +51,29 @@ export default function AddInventoryItemPage() {
         setUploadStatus("Optimizing image...");
         const compressed = await compressImage(selectedFile, { maxDimension: 1000, quality: 0.82 });
         setUploadStatus("Uploading image...");
-        const blob = await upload(compressed.name, compressed, {
-          access: "public",
-          handleUploadUrl: "/api/blob/upload",
-        });
+        const blob = await withTimeout(
+          upload(compressed.name, compressed, {
+            access: "public",
+            handleUploadUrl: "/api/blob/upload",
+          }),
+          30000,
+          "Image upload timed out. Check your connection and try again."
+        );
         formData.set("imageUrl", blob.url);
       }
       formData.delete("image"); // raw file no longer needed by the action
 
       setUploadStatus("Saving item...");
-      await addItemAction(formData);
+      await withTimeout(
+        addItemAction(formData),
+        20000,
+        "Saving timed out. Check your connection and try again."
+      );
       router.push("/owner/inventory?status=added");
     } catch (err) {
       console.error("Submission failed:", err);
-      setUploadStatus("Something went wrong. Please try again.");
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setUploadStatus("");
       setIsSubmitting(false);
     }
   };
@@ -146,6 +158,12 @@ export default function AddInventoryItemPage() {
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Restock alert level *</label>
             <input name="restockLevel" type="number" className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600" />
           </div>
+
+          {submitError && (
+            <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm font-semibold text-rose-500">
+              {submitError}
+            </div>
+          )}
 
           <button
             type="submit"

@@ -199,16 +199,19 @@ export default async function MyStoresPage() {
                   </Link>
 
                   {isActive ? (
-                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                      <Store size={13} /> Active
-                    </span>
+                    <Link
+                      href="/owner/dashboard"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-white bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-lg transition-colors group/enter"
+                    >
+                      Enter Store <ArrowRight size={13} className="group-hover/enter:translate-x-0.5 transition-transform" />
+                    </Link>
                   ) : (
                     <form action={switchStoreAction.bind(null, store.id)}>
                       <button
                         type="submit"
-                        className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-all bg-transparent border-none cursor-pointer group/enter"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-white bg-blue-600 hover:bg-blue-500 px-3.5 py-2 rounded-lg transition-colors group/enter"
                       >
-                        Enter Shop <ArrowRight size={13} className="group-hover/enter:translate-x-0.5 transition-transform" />
+                        Enter Store <ArrowRight size={13} className="group-hover/enter:translate-x-0.5 transition-transform" />
                       </button>
                     </form>
                   )}
