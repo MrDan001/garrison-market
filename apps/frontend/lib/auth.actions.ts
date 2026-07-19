@@ -10,6 +10,7 @@ import { signToken, verifyToken } from "@/lib/auth";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { assertSubscriptionActive, checkPlanLimit } from "@/lib/subscription-guard";
+import { creditReferralReward } from "@/lib/referral.actions"; // 👇 Safely imported
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -82,7 +83,7 @@ export async function loginAction(formData: FormData) {
     if (userStatus === "PENDING" || userStatus === "SUSPENDED" || userStatus === "DECLINED") {
       await setSessionCookie();
       redirectUrl = userRole === "staff" ? "/pending/staff" : "/pending/staff";
-    } else if (userStatus === "APPROVED" || userStatus === "ACTIVE") { // 👈 Fixed: Now catches both uppercase "APPROVED" and "ACTIVE"
+    } else if (userStatus === "APPROVED" || userStatus === "ACTIVE") { 
       await setSessionCookie();
 
       if (userRole === "admin") redirectUrl = "/admin/dashboard";
@@ -108,12 +109,33 @@ export async function registerOwnerAction(formData: FormData) {
   try {
     const hashedPassword = await bcrypt.hash(data.password as string, 10);
 
+    const appliedCodeInput = data.referralCode as string | null;
+    let referrerId: number | null = null;
+
+    if (appliedCodeInput && appliedCodeInput.trim() !== "") {
+      const formattedToken = appliedCodeInput.trim().toUpperCase().replace(/\s+/g, "");
+
+      const referrer = await prisma.user.findUnique({
+        where: { referralCode: formattedToken },
+        select: { id: true }
+      });
+
+      if (referrer) {
+        referrerId = referrer.id;
+      }
+    }
+
+    const targetStoreName = (data.storeName as string) || "";
+    const cleanNewCodeForUser = targetStoreName.trim() !== ""
+      ? targetStoreName.trim().toUpperCase().replace(/\s+/g, "")
+      : `STORE_${Math.floor(1000 + Math.random() * 9000)}`;
+
     const newUser = await prisma.user.create({
       data: {
         email: data.email as string,
         password: hashedPassword,
         fullName: data.fullName as string,
-        storeName: (data.storeName as string) || "N/A",
+        storeName: targetStoreName || "N/A",
         phoneNumber: data.phoneNumber as string,
         shopAddress: (data.shopAddress as string) || null,
         shopCity: (data.shopCity as string) || null,
@@ -121,7 +143,16 @@ export async function registerOwnerAction(formData: FormData) {
         productsSold: (data.productsSold as string) || null,
         image: (data.imageUrl as string) || null,
         role: 'owner',
-        status: 'pending'
+        status: 'pending',
+        referralCode: cleanNewCodeForUser,
+        referredById: referrerId,
+        hasTriggeredReferralReward: false, 
+
+        stores: {
+          create: {
+            name: targetStoreName || `${data.fullName}'s Store`
+          }
+        }
       }
     });
 
@@ -135,12 +166,11 @@ export async function registerOwnerAction(formData: FormData) {
     });
 
     revalidatePath('/admin/users');
-
     return { redirectUrl: '/pending' };
 
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return { error: "An account with this email already exists." };
+      return { error: "An account with this email or custom store token already exists." };
     }
     console.error("Registration error:", error);
     return { error: "An unexpected error occurred." };
@@ -153,8 +183,6 @@ export async function requestPasswordResetAction(formData: FormData) {
   const email = (formData.get("email") as string)?.toLowerCase().trim();
   if (!email) return { error: "Email is required." };
 
-  // Always return a generic success message, whether or not the account
-  // exists — this avoids leaking which emails are registered.
   const genericSuccess = {
     success: true,
     message: "If an account exists for that email, a reset link has been sent.",
@@ -165,7 +193,7 @@ export async function requestPasswordResetAction(formData: FormData) {
     if (!user) return genericSuccess;
 
     const token = crypto.randomBytes(32).toString("hex");
-    const expiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    const expiry = new Date(Date.now() + 30 * 60 * 1000); 
 
     await prisma.user.update({
       where: { id: user.id },
@@ -180,7 +208,6 @@ export async function requestPasswordResetAction(formData: FormData) {
 
     const result = await sendPasswordResetEmail(email, resetUrl);
     if (!result.success) {
-      // Email service failed (e.g. missing API key) — don't block, but log clearly.
       console.error("Password reset email failed to send for:", email);
     }
 
@@ -268,8 +295,6 @@ export async function registerStaffAction(formData: FormData) {
     return { success: false, error: "Email and password are required." };
   }
 
-  // If a storeId was provided, confirm it actually belongs to this owner
-  // before assigning staff to it — prevents cross-owner store assignment.
   if (storeId && !isNaN(storeId)) {
     const store = await prisma.store.findFirst({
       where: { id: storeId, ownerId: session.id },
@@ -322,7 +347,6 @@ export async function getStaffData() {
     where: { ownerId: sessionUser.id, role: 'staff' }
   });
 
-  // Deep sterilize to safely convert Decimals and Dates into safe primitives before hitting the wire
   return JSON.parse(
     JSON.stringify(staff, (key, value) => {
       if (value && typeof value === "object" && value.constructor.name === "Decimal") {
@@ -371,11 +395,8 @@ export async function toggleStaffStatus(id: number, currentStatus: string) {
 export async function updateOwnerStatus(email: string, status: 'approved' | 'declined' | 'suspended') {
   try {
     const normalizedStatus = status.toLowerCase().trim();
-
     const updateData: any = { status: normalizedStatus };
 
-    // Start the 14-day free trial the moment an owner is approved — not at
-    // raw signup, since they can't use the app until approved anyway.
     if (normalizedStatus === 'approved') {
       const existing = await prisma.user.findUnique({ where: { email }, select: { trialEndsAt: true } });
       if (!existing?.trialEndsAt) {
@@ -413,8 +434,6 @@ export async function extendSubscriptionAction(ownerId: number, days: number, re
     const now = new Date();
 
     if (owner.subscriptionStatus === "trialing") {
-      // Push the trial end date out, extending from whichever is later —
-      // "now" if it already expired, or the existing date if still running.
       const base = owner.trialEndsAt && owner.trialEndsAt > now ? owner.trialEndsAt : now;
       await prisma.user.update({
         where: { id: ownerId },
@@ -437,6 +456,13 @@ export async function extendSubscriptionAction(ownerId: number, days: number, re
       },
     });
 
+    // 👇 Run the reward logic if the admin sets their subscription status to active manually
+    try {
+      await creditReferralReward(ownerId);
+    } catch (refError) {
+      console.error("Referral process error during manual admin modification:", refError);
+    }
+
     revalidatePath(`/admin/users/${ownerId}`);
     return { success: true };
   } catch (error) {
@@ -450,9 +476,6 @@ export async function deleteUser(email: string) {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return { success: false, error: "User not found" };
 
-    // Full cascade: flush every record attached to this owner, including
-    // their staff accounts and everything the staff created. Order matters —
-    // children before parents. Runs in one transaction so it's all-or-nothing.
     const ownerId = user.id;
     const staff = await prisma.user.findMany({ where: { ownerId }, select: { id: true } });
     const staffIds = staff.map((s) => s.id);
@@ -470,7 +493,6 @@ export async function deleteUser(email: string) {
       prisma.payment.deleteMany({ where: { ownerId } }),
       prisma.planExtension.deleteMany({ where: { ownerId } }),
       prisma.store.deleteMany({ where: { ownerId } }),
-      // Staff accounts belonging to this owner
       ...(staffIds.length > 0 ? [prisma.user.deleteMany({ where: { id: { in: staffIds } } })] : []),
       prisma.user.delete({ where: { id: ownerId } }),
     ]);
@@ -485,11 +507,10 @@ export async function deleteUser(email: string) {
 
 export async function getOwnersForAdmin() {
   try {
-    const owners = await prisma.user.findMany({
+    return await prisma.user.findMany({
       where: { role: 'owner' },
       select: { id: true, email: true, role: true, status: true, fullName: true, storeName: true }
     });
-    return owners;
   } catch (error) {
     console.error("Database fetch error:", error);
     return [];

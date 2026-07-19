@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
-import { Store, Phone, MapPin, Upload, Camera, AlertCircle, Mail, Lock, Eye, EyeOff, Loader2, ChevronRight, ShoppingBag, Building2 } from "lucide-react";
+import { Store, Phone, MapPin, Upload, Camera, AlertCircle, Mail, Lock, Eye, EyeOff, Loader2, ChevronRight, ShoppingBag, Building2, Tag } from "lucide-react";
 import { registerOwnerAction } from "@/lib/auth.actions";
 
 const NIGERIAN_LOCATIONS: Record<string, string[]> = {
@@ -57,9 +57,10 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [products, setProducts] = useState("");
-  const [shopAddress, setShopAddress] = useState(""); // NEW: was missing entirely before
+  const [shopAddress, setShopAddress] = useState(""); 
   const [selectedState, setSelectedState] = useState("");
   const [selectedLga, setSelectedLga] = useState("");
+  const [referralCode, setReferralCode] = useState(""); // NEW: Added local state tracking for referral input
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -112,14 +113,11 @@ export default function RegisterPage() {
       formData.append("storeName", storeName);
       formData.append("phoneNumber", `+234${phone}`);
       formData.append("productsSold", products);
-      formData.append("shopAddress", shopAddress); // NEW: field didn't exist before
+      formData.append("shopAddress", shopAddress); 
       formData.append("shopState", selectedState);
       formData.append("shopCity", selectedLga);
+      formData.append("referralCode", referralCode); // NEW: Append tracking identifier to standard request matrix
 
-      // FIXED: previously appended the raw File under "file", which the
-      // server action never reads — it expects an "imageUrl" string.
-      // Now we actually upload to Vercel Blob client-side first, same
-      // pattern used for inventory/profile photos, then send the URL.
       if (imageFile) {
         const compressed = await compressImage(imageFile, { maxDimension: 800, quality: 0.82 });
         const blob = await upload(compressed.name, compressed, {
@@ -260,7 +258,7 @@ export default function RegisterPage() {
                 <textarea
                   required
                   rows={3}
-                  placeholder="What are you selling? (e.g. Designer Shoes, Wholesale Electronics, Organic Skincare, Phones & Accessories...)"
+                  placeholder="What are you selling? (e.g. Designer Shoes, Wholesale Electronics, Organic Skincare...)"
                   value={products}
                   onChange={(e) => setProducts(e.target.value)}
                   className="w-full bg-[var(--bg-app)] text-sm text-[var(--text-primary)] pl-10 pr-4 py-3 rounded-sm border border-[var(--border-subtle)]/10 focus:outline-none focus:border-[#E55345] transition resize-none leading-relaxed"
@@ -269,7 +267,6 @@ export default function RegisterPage() {
               <p className="text-[10px] text-[var(--text-primary)]/40">Briefly detail your core commodities or specializations so customers can query your node.</p>
             </div>
 
-            {/* NEW: Shop Street Address — was completely missing before */}
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]/70" style={{ fontFamily: "var(--font-mono)" }}>
                 Shop Address
@@ -285,6 +282,24 @@ export default function RegisterPage() {
                   className="w-full bg-[var(--bg-app)] text-sm text-[var(--text-primary)] pl-10 pr-4 py-3 rounded-sm border border-[var(--border-subtle)]/10 focus:outline-none focus:border-[#E55345] transition"
                 />
               </div>
+            </div>
+
+            {/* NEW: Referral Token Input Node Block */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]/70" style={{ fontFamily: "var(--font-mono)" }}>
+                Referral Code <span className="text-[var(--text-primary)]/30 lowercase font-normal">(optional)</span>
+              </label>
+              <div className="relative">
+                <Tag size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-primary)]/30" />
+                <input
+                  type="text"
+                  placeholder="e.g. GARRISON_STORE_9901"
+                  value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value)}
+                  className="w-full bg-[var(--bg-app)] text-sm text-[var(--text-primary)] pl-10 pr-4 py-3 rounded-sm border border-[var(--border-subtle)]/10 focus:outline-none focus:border-[#E55345] transition tracking-wide uppercase"
+                />
+              </div>
+              <p className="text-[10px] text-[var(--text-primary)]/40">Enter a peer invite token to participate in affiliate program allocations.</p>
             </div>
 
             <div className="space-y-2">

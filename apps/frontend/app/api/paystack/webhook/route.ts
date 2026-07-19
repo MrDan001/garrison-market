@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { verifyWebhookSignature, verifyTransaction } from "@/lib/paystack";
 import { BILLING_CYCLES, type BillingCycleId, type PlanId } from "@/lib/plans";
 import { createNotification } from "@/lib/notification.actions";
+import { creditReferralReward } from "@/lib/referral.actions"; // 👇 IMPORT YOUR REWARD UTILITY
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
       : new Date();
     const newPeriodEnd = new Date(base.getTime() + months * 30 * 24 * 60 * 60 * 1000);
 
-    // FIXED: Cleaned up transaction nesting and syntax alignment
+    // Main Billing Activation State Sync
     await prisma.$transaction([
       prisma.payment.update({
         where: { reference },
@@ -73,6 +74,15 @@ export async function POST(request: NextRequest) {
         },
       }),
     ]);
+
+    // 👇 CHANNELS THE SUBSCRIBED USER'S CONVERSION THROUGH THE REFERRAL ENGINE
+    // If this subscriber has a referrer, Mr. A instantly gains 7 premium days
+    try {
+      await creditReferralReward(payment.ownerId);
+    } catch (refError) {
+      // Wrapped in a try/catch so referral process issues never disrupt the main payment lifecycle execution
+      console.error("Referral process error (payment went through fine):", refError);
+    }
 
     await createNotification({
       ownerId: payment.ownerId,

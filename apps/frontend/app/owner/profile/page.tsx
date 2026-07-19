@@ -1,14 +1,14 @@
 import {
   ChevronRight, Store, LayoutDashboard,
   Activity, CreditCard, Users, Receipt,
-  Settings, LogOut, ArrowLeft, History,
-  MessageSquare, Zap, Clock, Calendar // Added for Subscription UI
+  LogOut, ArrowLeft, History,
+  MessageSquare, Zap, Calendar, Gift
 } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { logoutAction } from "@/lib/auth.actions";
-import { getOwnerBillingInfo } from "@/lib/billing.actions"; // Imported to fetch current live subscription metrics
+import { getOwnerBillingInfo } from "@/lib/billing.actions"; 
 import SettingsDropdown from "./settings-dropdown";
 import OwnerAnnouncementForm from "@/components/OwnerAnnouncementForm";
 
@@ -18,7 +18,6 @@ export default async function MorePage() {
   const session = await getSessionUser();
   if (!session?.email) redirect("/login");
 
-  // 1. Fetch current plan configuration limits & expiry data via your server action helper
   const billingInfo = await getOwnerBillingInfo();
   const { isLocked, plan, currentPeriodEnd } = billingInfo.status;
 
@@ -32,15 +31,38 @@ export default async function MorePage() {
       notificationsEnabled: true,
       discountEnabled: true,
       consignmentEnabled: true,
+      // 👇 Fetch their stores to build the custom code dynamically
+      stores: {
+        select: {
+          name: true
+        },
+        take: 1 // Just grab the primary store
+      },
+      _count: {
+        select: {
+          referrals: {
+            where: {
+              status: "approved",
+              hasTriggeredReferralReward: true
+            }
+          }
+        }
+      }
     },
   });
 
   if (!user) redirect("/login");
 
-  // Format expiration date nicely
   const expiryDateString = currentPeriodEnd 
     ? new Date(currentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : "N/A";
+
+  // 👇 Generate clean token: Store name in all CAPS, or fallback if they haven't set up a store yet
+  const shortCode = user.stores[0]?.name 
+    ? user.stores[0].name.toUpperCase().replace(/\s+/g, "") 
+    : "NO_STORE_YET";
+    
+  const referralCount = user._count?.referrals || 0;
 
   return (
     <div className="fixed inset-0 bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col pb-20">
@@ -71,7 +93,7 @@ export default async function MorePage() {
           </div>
         </a>
 
-        {/* Brand New Feature: Interactive Active Subscription Card */}
+        {/* Subscription Info Card */}
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Subscription Info</h3>
           <a href="/owner/billing" className="p-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 dark:from-blue-950/20 dark:to-indigo-950/10 flex items-center justify-between hover:border-blue-400 dark:hover:border-blue-700 transition-all block">
@@ -101,6 +123,50 @@ export default async function MorePage() {
           </a>
         </div>
 
+        {/* Referral Program Section */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Growth & Rewards</h3>
+          <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-gradient-to-br from-emerald-50/40 via-transparent to-transparent dark:from-emerald-950/10 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 shrink-0">
+                <Gift size={22} />
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="font-bold text-sm text-[var(--text-primary)]">Invite & Earn Plan Days</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-normal">
+                  Share your code. For each store owner who signs up and secures verification using this code, you gain <strong className="text-emerald-500 dark:text-emerald-400">+7 premium days</strong> added directly to your current period end.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Native Server Component Safe Token Block */}
+              <div className="p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Your Referral Code</p>
+                <div className="mt-1 flex items-center justify-between">
+                  <code className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded select-all cursor-pointer tracking-wider">
+                    {shortCode}
+                  </code>
+                  <span className="text-[10px] text-slate-400 italic">Double-click to select</span>
+                </div>
+              </div>
+
+              {/* Metrics Read-Only Box */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Subscribed Referrals</p>
+                  <p className="text-xs font-bold text-[var(--text-primary)] mt-0.5">
+                    {referralCount} Active Enterprise{referralCount !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <div className="h-7 px-2.5 rounded-lg bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center shrink-0">
+                  +{referralCount * 7} Days Earned
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Business section */}
         <MenuSection
           title="Business"
@@ -120,7 +186,7 @@ export default async function MorePage() {
           <OwnerAnnouncementForm />
         </div>
 
-        {/* Account section — Settings row is the inline dropdown */}
+        {/* Account section */}
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Account</h3>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/40 dark:bg-slate-900/40 backdrop-blur-xl divide-y divide-slate-800">

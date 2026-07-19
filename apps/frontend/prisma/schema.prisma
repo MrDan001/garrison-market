@@ -33,6 +33,14 @@ model User {
   paystackAuthorizationCode String?
   currentStoreId           Int?      // last store the owner was viewing, for "return to same store"
 
+  // --- Referral Engine Tracks ---
+  // 👇 REMOVED @default(uuid()). We will manage this cleanly with application code!
+  referralCode               String?   @unique 
+  referredById               Int?
+  referredBy                 User?     @relation("ReferralTree", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals                  User[]    @relation("ReferralTree")
+  hasTriggeredReferralReward Boolean   @default(false)
+
   payments   Payment[]     @relation("OwnerPayments")
   planExtensions PlanExtension[] @relation("OwnerPlanExtensions")
   
@@ -67,6 +75,7 @@ model User {
   @@index([ownerId])
   @@index([staffStoreId])
   @@index([role, status])
+  @@index([referredById])
 }
 
 model Store {
