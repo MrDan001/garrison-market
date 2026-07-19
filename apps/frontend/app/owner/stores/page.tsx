@@ -199,12 +199,13 @@ export default async function MyStoresPage() {
                   </Link>
 
                   {isActive ? (
-                    <Link
+                    /* CHANGED FROM <Link> TO NATIVE <a> TO BYPASS NEXT.JS CLIENT ROUTER PREFETCH CACHE LOOPS */
+                    <a
                       href="/owner/dashboard"
                       className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-white bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-lg transition-colors group/enter"
                     >
                       Enter Store <ArrowRight size={13} className="group-hover/enter:translate-x-0.5 transition-transform" />
-                    </Link>
+                    </a>
                   ) : (
                     <form action={switchStoreAction.bind(null, store.id)}>
                       <button
