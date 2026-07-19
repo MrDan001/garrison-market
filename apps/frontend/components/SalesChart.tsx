@@ -119,9 +119,9 @@ export default function SalesDashboard({
   const customTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-[#0f1117] border border-slate-700 p-3 rounded-xl shadow-xl">
-          <p className="text-sm font-bold text-white mb-1">₦{payload[0].value.toLocaleString()}</p>
-          <p className="text-xs text-slate-400">{view === 'day' ? 'Daily Sales Total' : view === 'week' ? 'Weekly Output' : 'Monthly Accumulation'}</p>
+        <div className="bg-[var(--bg-app)] border border-slate-300 dark:border-slate-700 p-3 rounded-xl shadow-xl">
+          <p className="text-sm font-bold text-[var(--text-primary)] mb-1">₦{payload[0].value.toLocaleString()}</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">{view === 'day' ? 'Daily Sales Total' : view === 'week' ? 'Weekly Output' : 'Monthly Accumulation'}</p>
         </div>
       );
     }
@@ -131,20 +131,20 @@ export default function SalesDashboard({
   return (
     <div className="w-full space-y-8">
       {/* Chart Headers Control Structure */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/60 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800/60 pb-5">
         <div>
-          <h3 className="text-base font-semibold text-white">Performance Metrics</h3>
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">Performance Metrics</h3>
           <p className="text-xs text-slate-500">Visual data analytics and cross-system audits.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex bg-slate-950 p-1 rounded-full border border-slate-800/40">
+          <div className="flex bg-slate-50 dark:bg-slate-950 p-1 rounded-full border border-slate-200/40 dark:border-slate-800/40">
             {(['day', 'week', 'month'] as const).map((v) => (
-              <button key={v} onClick={() => setView(v)} className={`px-4 py-1.5 text-xs font-semibold rounded-full capitalize transition-all ${view === v ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'text-slate-400 hover:text-white'}`}>{v}</button>
+              <button key={v} onClick={() => setView(v)} className={`px-4 py-1.5 text-xs font-semibold rounded-full capitalize transition-all ${view === v ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'text-slate-600 dark:text-slate-400 hover:text-white'}`}>{v}</button>
             ))}
           </div>
-          <div className="flex bg-slate-950 p-1 rounded-full border border-slate-800/40">
+          <div className="flex bg-slate-50 dark:bg-slate-950 p-1 rounded-full border border-slate-200/40 dark:border-slate-800/40">
             {(['bar', 'line', 'summary'] as const).map((v) => (
-              <button key={v} onClick={() => setChartType(v)} className={`px-4 py-1.5 text-xs font-semibold rounded-full capitalize transition-all ${chartType === v ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>{v}</button>
+              <button key={v} onClick={() => setChartType(v)} className={`px-4 py-1.5 text-xs font-semibold rounded-full capitalize transition-all ${chartType === v ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-white'}`}>{v}</button>
             ))}
           </div>
         </div>
@@ -153,7 +153,7 @@ export default function SalesDashboard({
       {/* Primary Conditional Render Viewport */}
       {chartType !== 'summary' ? (
         /* Regular Chart Display Mode */
-        <div className="h-64 w-full bg-slate-950/20 rounded-2xl p-2">
+        <div className="h-64 w-full bg-slate-50/20 dark:bg-slate-950/20 rounded-2xl p-2">
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'bar' ? (
               <BarChart data={processedData}>
@@ -176,9 +176,9 @@ export default function SalesDashboard({
         /* Expanded Summary Dashboard Mode */
         <div className="space-y-8 animate-in fade-in duration-300">
           {/* Main Total Summary Card */}
-          <div className="flex flex-col justify-center items-center py-8 px-6 text-center bg-slate-950/40 rounded-2xl border border-slate-800/50">
-            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Total {view} Turnover</h4>
-            <p className="text-4xl font-black text-white tracking-tight">₦{totalSales.toLocaleString()}</p>
+          <div className="flex flex-col justify-center items-center py-8 px-6 text-center bg-slate-50/40 dark:bg-slate-950/40 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
+            <h4 className="text-sm font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">Total {view} Turnover</h4>
+            <p className="text-4xl font-black text-[var(--text-primary)] tracking-tight">₦{totalSales.toLocaleString()}</p>
             <p className="text-xs text-slate-500 mt-2 max-w-sm">Aggregated processing tracking for the configured dashboard view boundaries.</p>
           </div>
 
@@ -186,62 +186,62 @@ export default function SalesDashboard({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             
             {/* Panel 1: Top Staff Tracker */}
-            <div className="p-5 rounded-xl border border-slate-800/60 bg-slate-950/30 flex flex-col justify-between">
+            <div className="p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-950/30 flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-2 text-emerald-400 mb-3">
                   <Award size={18} />
-                  <h4 className="text-xs font-bold tracking-wider uppercase text-slate-300">Top Monthly Attributed Staff</h4>
+                  <h4 className="text-xs font-bold tracking-wider uppercase text-slate-700 dark:text-slate-300">Top Monthly Attributed Staff</h4>
                 </div>
-                <p className="text-lg font-bold text-white truncate">{analytics.bestStaff.name}</p>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-lg font-bold text-[var(--text-primary)] truncate">{analytics.bestStaff.name}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                   Generated <span className="text-emerald-400 font-semibold">₦{analytics.bestStaff.revenue.toLocaleString()}</span> across {analytics.bestStaff.orders} custom invoice records.
                 </p>
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-800/40 text-[11px] text-slate-500">
+              <div className="mt-4 pt-3 border-t border-slate-200/40 dark:border-slate-800/40 text-[11px] text-slate-500">
                 Ranks performance by gross counter receipts.
               </div>
             </div>
 
             {/* Panel 2: Best Selling Catalog Products */}
-            <div className="p-5 rounded-xl border border-slate-800/60 bg-slate-950/30">
+            <div className="p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-950/30">
               <div className="flex items-center gap-2 text-blue-400 mb-3">
                 <TrendingUp size={18} />
-                <h4 className="text-xs font-bold tracking-wider uppercase text-slate-300">Top 5 Best-Selling Lines</h4>
+                <h4 className="text-xs font-bold tracking-wider uppercase text-slate-700 dark:text-slate-300">Top 5 Best-Selling Lines</h4>
               </div>
               <div className="space-y-2.5">
                 {analytics.topProducts.length > 0 ? (
                   analytics.topProducts.map((p, idx) => (
                     <div key={idx} className="flex items-center justify-between text-xs min-w-0 gap-2">
-                      <span className="text-slate-300 truncate font-medium">{p.name}</span>
+                      <span className="text-slate-700 dark:text-slate-300 truncate font-medium">{p.name}</span>
                       <span className="font-mono bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded shrink-0 font-bold">
                         {p.unitsSold} units
                       </span>
                     </div>
                   ))
                 ) : (
-                  <p className="text-slate-600 text-xs py-2">No product logs parsed.</p>
+                  <p className="text-slate-400 dark:text-slate-600 text-xs py-2">No product logs parsed.</p>
                 )}
               </div>
             </div>
 
             {/* Panel 3: Low Velocity Risk Products */}
-            <div className="p-5 rounded-xl border border-slate-800/60 bg-slate-950/30">
+            <div className="p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-950/30">
               <div className="flex items-center gap-2 text-rose-400 mb-3">
                 <TrendingDown size={18} />
-                <h4 className="text-xs font-bold tracking-wider uppercase text-slate-300">Bottom 5 Low-Velocity items</h4>
+                <h4 className="text-xs font-bold tracking-wider uppercase text-slate-700 dark:text-slate-300">Bottom 5 Low-Velocity items</h4>
               </div>
               <div className="space-y-2.5">
                 {analytics.lowProducts.length > 0 ? (
                   analytics.lowProducts.map((p, idx) => (
                     <div key={idx} className="flex items-center justify-between text-xs min-w-0 gap-2">
-                      <span className="text-slate-300 truncate font-medium">{p.name}</span>
+                      <span className="text-slate-700 dark:text-slate-300 truncate font-medium">{p.name}</span>
                       <span className="font-mono bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded shrink-0 font-bold">
                         {p.unitsSold} sold
                       </span>
                     </div>
                   ))
                 ) : (
-                  <p className="text-slate-600 text-xs py-2">No low velocity lines logged.</p>
+                  <p className="text-slate-400 dark:text-slate-600 text-xs py-2">No low velocity lines logged.</p>
                 )}
               </div>
             </div>
@@ -257,10 +257,10 @@ export default function SalesDashboard({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Detected Bottlenecks List */}
               <div className="space-y-3">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Detected Irregularities</p>
+                <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Detected Irregularities</p>
                 {analytics.errors.length > 0 ? (
                   analytics.errors.map((err, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-300 bg-slate-950/40 p-3 rounded-lg border border-slate-900">
+                    <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-50/40 dark:bg-slate-950/40 p-3 rounded-lg border border-slate-100 dark:border-slate-900">
                       <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
                       <p>{err}</p>
                     </div>
@@ -275,10 +275,10 @@ export default function SalesDashboard({
 
               {/* Business Solutions Panel */}
               <div className="space-y-3">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Recommended Actions</p>
+                <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Recommended Actions</p>
                 {analytics.solutions.length > 0 ? (
                   analytics.solutions.map((sol, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-300 bg-blue-950/10 p-3 rounded-lg border border-blue-900/30">
+                    <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-blue-950/10 p-3 rounded-lg border border-blue-900/30">
                       <CheckCircle2 size={15} className="text-blue-400 shrink-0 mt-0.5" />
                       <p>{sol}</p>
                     </div>

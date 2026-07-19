@@ -197,12 +197,12 @@ export default function InventoryClient({
   ];
 
   return (
-    <div className="min-h-screen bg-[#0a0c10] text-slate-200 pb-32">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 pb-32">
 
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-[#0a0c10]/95 backdrop-blur-xl border-b border-slate-800/50 px-4 py-3 space-y-3">
+      <div className="sticky top-0 z-30 bg-[var(--bg-app)]/95 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 py-3 space-y-3">
         <div className="flex items-center gap-3">
-          <Link href="/staff/dashboard" className="flex items-center justify-center h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors shrink-0">
+          <Link href="/staff/dashboard" className="flex items-center justify-center h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-colors shrink-0">
             <ArrowLeft size={16} />
           </Link>
           <div className="relative flex-1">
@@ -212,12 +212,12 @@ export default function InventoryClient({
               placeholder="Search items..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 pl-9 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-2 pl-9 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
           <button
             onClick={() => cart.length > 0 && setShowCart(true)}
-            className="relative flex items-center justify-center h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors shrink-0"
+            className="relative flex items-center justify-center h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-colors shrink-0"
           >
             <ShoppingCart size={16} />
             {cartCount > 0 && (
@@ -237,7 +237,7 @@ export default function InventoryClient({
               className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1 shrink-0 ${
                 tab === t.key
                   ? "bg-blue-600 text-white"
-                  : "bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800/85"
+                  : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-800 hover:dark:text-slate-200 border border-slate-200/85 dark:border-slate-800/85"
               }`}
             >
               {t.icon}
@@ -252,7 +252,7 @@ export default function InventoryClient({
 
       {/* Title */}
       <div className="px-4 pt-5 pb-3">
-        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+        <h1 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Package size={20} className="text-blue-500" /> Inventory
         </h1>
         <p className="text-xs text-slate-500 mt-0.5">
@@ -264,7 +264,7 @@ export default function InventoryClient({
       <div className="px-4">
         {filteredItems.length === 0 ? (
           <div className="py-16 text-center">
-            <Package size={36} className="mx-auto mb-3 text-slate-700" />
+            <Package size={36} className="mx-auto mb-3 text-slate-300 dark:text-slate-700" />
             <p className="text-slate-500 text-sm">
               {searchQuery ? `No items match "${searchQuery}"` : `No items in ${tab.replace("-", " ")}`}
             </p>
@@ -299,16 +299,16 @@ export default function InventoryClient({
                   key={item.id}
                   onClick={() => !isOutOfStock && openDrawer(item)}
                   className={`relative bg-slate-900/60 border rounded-2xl overflow-hidden flex flex-col transition-all cursor-pointer active:scale-[0.97] ${
-                    isOutOfStock ? "border-slate-800 opacity-50 cursor-not-allowed"
+                    isOutOfStock ? "border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed"
                       : qtyInCart > 0 ? "border-blue-500/50 shadow-lg shadow-blue-500/10"
-                      : "border-slate-800 hover:border-slate-700"
+                      : "border-slate-200 dark:border-slate-800 hover:border-slate-300 hover:dark:border-slate-700"
                   }`}
                 >
-                  <div className="relative bg-slate-950 aspect-square flex items-center justify-center overflow-hidden">
+                  <div className="relative bg-slate-50 dark:bg-slate-950 aspect-square flex items-center justify-center overflow-hidden">
                     {item.image ? (
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
                     ) : (
-                      <div className="h-12 w-12 rounded-xl bg-slate-800 flex items-center justify-center">
+                      <div className="h-12 w-12 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
                         <Package size={24} className="text-slate-500" />
                       </div>
                     )}
@@ -341,20 +341,20 @@ export default function InventoryClient({
 
                     {/* Flame Hot Badge for Top Selling items */}
                     {tab === "top-selling" && (
-                      <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500 text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
+                      <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500 text-slate-50 dark:text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
                         <Flame size={10} fill="currentColor" /> {item.salesCount ?? 0} sold
                       </div>
                     )}
                   </div>
 
                   <div className="p-3 flex flex-col gap-1 flex-1">
-                    <p className="text-sm font-semibold text-white leading-tight truncate">{item.name}</p>
+                    <p className="text-sm font-semibold text-[var(--text-primary)] leading-tight truncate">{item.name}</p>
                     <p className="text-xs text-slate-500">{item.quantity} in stock</p>
                     <div className="mt-auto flex items-center justify-between">
                       <p className="text-sm font-bold text-blue-400">
                         ₦{(cartItem?.finalPrice ?? item.price).toLocaleString()}
                       </p>
-                      {!isOutOfStock && <ChevronRight size={14} className="text-slate-600" />}
+                      {!isOutOfStock && <ChevronRight size={14} className="text-slate-400 dark:text-slate-600" />}
                     </div>
                   </div>
                 </div>
@@ -366,16 +366,16 @@ export default function InventoryClient({
 
       {/* Floating checkout */}
       {cart.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-[#0a0c10]/95 backdrop-blur-xl border-t border-slate-800 z-40">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--bg-app)]/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 z-40">
           <button
             onClick={() => setShowCart(true)}
             className="w-full flex items-center justify-between bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] rounded-2xl px-5 py-4 transition-all shadow-lg shadow-emerald-900/10"
           >
-            <span className="flex items-center gap-2 font-bold text-white">
+            <span className="flex items-center gap-2 font-bold text-[var(--text-primary)]">
               <ShoppingCart size={18} />
               {cartCount} item{cartCount !== 1 ? "s" : ""}
             </span>
-            <span className="font-bold text-white">₦{total.toLocaleString()}</span>
+            <span className="font-bold text-[var(--text-primary)]">₦{total.toLocaleString()}</span>
           </button>
         </div>
       )}
@@ -384,16 +384,16 @@ export default function InventoryClient({
       {discountEnabled && drawerItem && (
         <div className="fixed inset-0 z-50 flex items-end">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeDrawer} />
-          <div className="relative w-full bg-[#111318] border-t border-slate-800 rounded-t-3xl z-10 max-h-[88vh] overflow-y-auto">
+          <div className="relative w-full bg-[var(--bg-surface)] border-t border-slate-200 dark:border-slate-800 rounded-t-3xl z-10 max-h-[88vh] overflow-y-auto">
             <div className="flex justify-center pt-3 pb-1">
-              <div className="h-1 w-10 rounded-full bg-slate-700" />
+              <div className="h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-700" />
             </div>
 
             <div className="px-5 pb-8 pt-3 space-y-5">
               {/* Product header */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-14 w-14 rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                  <div className="h-14 w-14 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
                     {drawerItem.image ? (
                       <img src={drawerItem.image} alt={drawerItem.name} className="h-full w-full object-cover" />
                     ) : (
@@ -401,11 +401,11 @@ export default function InventoryClient({
                     )}
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-lg font-bold text-white leading-tight truncate">{drawerItem.name}</h2>
+                    <h2 className="text-lg font-bold text-[var(--text-primary)] leading-tight truncate">{drawerItem.name}</h2>
                     {drawerItem.category && <p className="text-xs text-slate-500 mt-0.5">{drawerItem.category}</p>}
                   </div>
                 </div>
-                <button onClick={closeDrawer} className="p-2 text-slate-500 hover:text-white transition-colors shrink-0">
+                <button onClick={closeDrawer} className="p-2 text-slate-500 hover:text-[var(--text-primary)] transition-colors shrink-0">
                   <X size={18} />
                 </button>
               </div>
@@ -418,17 +418,17 @@ export default function InventoryClient({
               </div>
 
               {/* Discount section */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 overflow-hidden">
                 <button
                   onClick={() => setShowDiscount((v) => !v)}
-                  className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-800/30 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-200/30 hover:dark:bg-slate-800/30 transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
                     <div className="h-7 w-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
                       <Tag size={14} />
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-semibold text-white">Apply Discount</p>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">Apply Discount</p>
                       {showDiscount && savings > 0 && (
                         <p className="text-xs text-emerald-400">Saving ₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                       )}
@@ -438,7 +438,7 @@ export default function InventoryClient({
                 </button>
 
                 {showDiscount && (
-                  <div className="px-4 pb-4 space-y-3 border-t border-slate-800/60">
+                  <div className="px-4 pb-4 space-y-3 border-t border-slate-200/60 dark:border-slate-800/60">
                     {/* Type pills */}
                     <div className="flex gap-2 mt-3">
                       {(["percent", "flat"] as const).map((t) => (
@@ -446,7 +446,7 @@ export default function InventoryClient({
                           key={t}
                           onClick={() => setDiscountType(t)}
                           className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                            discountType === t ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
+                            discountType === t ? "bg-emerald-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]"
                           }`}
                         >
                           {t === "percent" ? "% Percentage" : "₦ Flat Amount"}
@@ -464,20 +464,20 @@ export default function InventoryClient({
                         placeholder={discountType === "percent" ? "e.g. 10" : "e.g. 500"}
                         value={discountInput}
                         onChange={(e) => setDiscountInput(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 pl-8 pr-4 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl py-2.5 pl-8 pr-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-emerald-500 transition-colors"
                       />
                     </div>
 
                     {/* Live preview */}
                     {discountInput && (
-                      <div className="flex items-center justify-between bg-slate-950/60 rounded-xl px-4 py-3 border border-slate-800">
+                      <div className="flex items-center justify-between bg-slate-50/60 dark:bg-slate-950/60 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-800">
                         <div>
                           <p className="text-[10px] text-slate-500 uppercase tracking-wider">New Price</p>
                           <p className="text-lg font-bold text-emerald-400">₦{previewPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-[10px] text-slate-500 uppercase tracking-wider">You save</p>
-                          <p className="text-lg font-bold text-white">₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                          <p className="text-lg font-bold text-[var(--text-primary)]">₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                         </div>
                       </div>
                     )}
@@ -491,7 +491,7 @@ export default function InventoryClient({
                             key={r}
                             onClick={() => setDiscountReason(r)}
                             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                              discountReason === r ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
+                              discountReason === r ? "bg-emerald-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]"
                             }`}
                           >
                             {r}
@@ -513,14 +513,14 @@ export default function InventoryClient({
               {/* Add to cart / controls */}
               {drawerCartItem ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3">
+                  <div className="flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-5 py-3">
                     <button
                       onClick={() => removeFromCart(drawerItem.id)}
-                      className="h-9 w-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors"
+                      className="h-9 w-9 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 flex items-center justify-center transition-colors"
                     >
                       <Minus size={16} />
                     </button>
-                    <span className="text-xl font-bold text-white">{drawerCartItem.qty}</span>
+                    <span className="text-xl font-bold text-[var(--text-primary)]">{drawerCartItem.qty}</span>
                     <button
                       onClick={() => addToCart(drawerItem)}
                       disabled={drawerCartItem.qty >= drawerItem.quantity}
@@ -531,7 +531,7 @@ export default function InventoryClient({
                   </div>
                   <button
                     onClick={closeDrawer}
-                    className="w-full py-4 rounded-2xl font-bold text-sm bg-slate-800 hover:bg-slate-700 text-white transition-colors"
+                    className="w-full py-4 rounded-2xl font-bold text-sm bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 text-[var(--text-primary)] transition-colors"
                   >
                     Done
                   </button>
@@ -540,7 +540,7 @@ export default function InventoryClient({
                 <button
                   disabled={drawerItem.quantity <= 0}
                   onClick={handleAddFromDrawer}
-                  className="w-full py-4 rounded-2xl font-bold text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-4 rounded-2xl font-bold text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:dark:text-slate-600 text-white transition-colors flex items-center justify-center gap-2"
                 >
                   <ShoppingCart size={17} />
                   {showDiscount && savings > 0
@@ -557,29 +557,29 @@ export default function InventoryClient({
       {showCart && (
         <div className="fixed inset-0 z-50 flex items-end">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCart(false)} />
-          <div className="relative w-full bg-[#111318] border-t border-slate-800 rounded-t-3xl p-6 max-h-[80vh] overflow-y-auto z-10">
+          <div className="relative w-full bg-[var(--bg-surface)] border-t border-slate-200 dark:border-slate-800 rounded-t-3xl p-6 max-h-[80vh] overflow-y-auto z-10">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
                 <ShoppingCart size={20} /> Checkout
               </h2>
-              <button onClick={() => setShowCart(false)} className="p-2 text-slate-500 hover:text-white transition-colors">
+              <button onClick={() => setShowCart(false)} className="p-2 text-slate-500 hover:text-[var(--text-primary)] transition-colors">
                 <X size={20} />
               </button>
             </div>
 
             <div className="space-y-3 mb-5">
               {cart.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-3 p-3 bg-slate-900/60 rounded-xl border border-slate-800">
+                <div key={item.id} className="flex items-center justify-between gap-3 p-3 bg-slate-100/60 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="h-10 w-10 bg-slate-950 rounded-lg overflow-hidden shrink-0 flex items-center justify-center border border-slate-800">
+                    <div className="h-10 w-10 bg-slate-50 dark:bg-slate-950 rounded-lg overflow-hidden shrink-0 flex items-center justify-center border border-slate-200 dark:border-slate-800">
                       {item.image ? (
                         <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
                       ) : (
-                        <Package size={16} className="text-slate-600" />
+                        <Package size={16} className="text-slate-400 dark:text-slate-600" />
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{item.name}</p>
+                      <p className="text-sm font-medium text-[var(--text-primary)] truncate">{item.name}</p>
                       <div className="flex items-center gap-1.5">
                         <p className="text-xs text-slate-500">₦{item.finalPrice.toLocaleString()} each</p>
                         {item.discountValue && (
@@ -589,54 +589,54 @@ export default function InventoryClient({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => removeFromCart(item.id)} className="h-7 w-7 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                    <button onClick={() => removeFromCart(item.id)} className="h-7 w-7 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-colors">
                       <Minus size={13} />
                     </button>
-                    <span className="w-6 text-center text-sm font-bold text-white">{item.qty}</span>
-                    <button onClick={() => addToCart(item)} disabled={item.qty >= item.quantity} className="h-7 w-7 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors disabled:opacity-30">
+                    <span className="w-6 text-center text-sm font-bold text-[var(--text-primary)]">{item.qty}</span>
+                    <button onClick={() => addToCart(item)} disabled={item.qty >= item.quantity} className="h-7 w-7 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-colors disabled:opacity-30">
                       <Plus size={13} />
                     </button>
                   </div>
-                  <span className="text-sm font-bold text-white shrink-0 w-20 text-right">
+                  <span className="text-sm font-bold text-[var(--text-primary)] shrink-0 w-20 text-right">
                     ₦{(item.finalPrice * item.qty).toLocaleString()}
                   </span>
                 </div>
               ))}
             </div>
 
-            <div className="border-t border-slate-800 pt-4 mb-5 flex justify-between items-center">
-              <span className="text-slate-400 font-medium">Total</span>
-              <span className="text-2xl font-bold text-white">₦{total.toLocaleString()}</span>
+            <div className="border-t border-slate-200 dark:border-slate-800 pt-4 mb-5 flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400 font-medium">Total</span>
+              <span className="text-2xl font-bold text-[var(--text-primary)]">₦{total.toLocaleString()}</span>
             </div>
 
             {/* Customer Details Fields */}
             <div className="mb-5 space-y-3">
-              <p className="text-xs font-semibold text-slate-400">Customer Details (Optional)</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Customer Details (Optional)</p>
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="text"
                   placeholder="Customer Name"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
                 />
                 <input
                   type="tel"
                   placeholder="Phone Number"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
             </div>
 
             <div className="mb-4">
-              <p className="text-xs font-semibold text-slate-400 mb-2">Payment Method</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Payment Method</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setPaymentMethod("cash")}
                   className={`py-3 rounded-xl text-sm font-bold transition-colors ${
-                    paymentMethod === "cash" ? "bg-emerald-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
+                    paymentMethod === "cash" ? "bg-emerald-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
                   }`}
                 >
                   💵 Cash
@@ -644,7 +644,7 @@ export default function InventoryClient({
                 <button
                   onClick={() => setPaymentMethod("transfer")}
                   className={`py-3 rounded-xl text-sm font-bold transition-colors ${
-                    paymentMethod === "transfer" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
+                    paymentMethod === "transfer" ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
                   }`}
                 >
                   🏦 Transfer
@@ -655,7 +655,7 @@ export default function InventoryClient({
             <button
               disabled={loading || !paymentMethod}
               onClick={handleProcessSale}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
             >
               {loading ? "Processing..." : !paymentMethod ? "Select payment method" : "Confirm Sale"}
             </button>
@@ -679,9 +679,9 @@ export default function InventoryClient({
 
 function StatChip({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className={`rounded-xl border px-3 py-2.5 text-center ${highlight ? "border-blue-500/30 bg-blue-500/10" : "border-slate-800 bg-slate-900/60"}`}>
+    <div className={`rounded-xl border px-3 py-2.5 text-center ${highlight ? "border-blue-500/30 bg-blue-500/10" : "border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/60"}`}>
       <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">{label}</p>
-      <p className={`text-base font-bold mt-0.5 ${highlight ? "text-blue-400" : "text-white"}`}>{value}</p>
+      <p className={`text-base font-bold mt-0.5 ${highlight ? "text-blue-400" : "text-[var(--text-primary)]"}`}>{value}</p>
     </div>
   );
 }
@@ -706,16 +706,16 @@ function SimpleCard({
   return (
     <div
       className={`relative bg-slate-900/60 border rounded-2xl overflow-hidden flex flex-col transition-all ${
-        isOutOfStock ? "border-slate-800 opacity-50"
+        isOutOfStock ? "border-slate-200 dark:border-slate-800 opacity-50"
           : qtyInCart > 0 ? "border-blue-500/50 shadow-lg shadow-blue-500/10"
-          : "border-slate-800 hover:border-slate-700"
+          : "border-slate-200 dark:border-slate-800 hover:border-slate-300 hover:dark:border-slate-700"
       }`}
     >
-      <div className="relative bg-slate-950 aspect-square flex items-center justify-center overflow-hidden">
+      <div className="relative bg-slate-50 dark:bg-slate-950 aspect-square flex items-center justify-center overflow-hidden">
         {item.image ? (
           <img src={item.image} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
         ) : (
-          <div className="h-12 w-12 rounded-xl bg-slate-800 flex items-center justify-center">
+          <div className="h-12 w-12 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
             <Package size={24} className="text-slate-500" />
           </div>
         )}
@@ -736,7 +736,7 @@ function SimpleCard({
 
         {/* Flame Hot Badge for Top Selling items */}
         {tab === "top-selling" && (
-          <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500 text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500 text-slate-50 dark:text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
             <Flame size={10} fill="currentColor" /> {item.salesCount ?? 0} sold
           </div>
         )}
@@ -753,20 +753,20 @@ function SimpleCard({
       </div>
 
       <div className="p-3 flex flex-col gap-1 flex-1">
-        <p className="text-sm font-semibold text-white leading-tight truncate">{item.name}</p>
+        <p className="text-sm font-semibold text-[var(--text-primary)] leading-tight truncate">{item.name}</p>
         <p className="text-xs text-slate-500">{item.quantity} in stock</p>
         <p className="mt-auto text-sm font-bold text-blue-400">₦{item.price.toLocaleString()}</p>
       </div>
 
       {qtyInCart > 0 && (
-        <div className="flex items-center justify-center gap-3 border-t border-slate-800 bg-slate-950/60 px-3 py-2">
+        <div className="flex items-center justify-center gap-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/60 px-3 py-2">
           <button
             onClick={onRemove}
-            className="h-7 w-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-white transition-colors"
+            className="h-7 w-7 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 flex items-center justify-center text-[var(--text-primary)] transition-colors"
           >
             <Minus size={14} />
           </button>
-          <span className="text-sm font-bold text-white w-5 text-center">{qtyInCart}</span>
+          <span className="text-sm font-bold text-[var(--text-primary)] w-5 text-center">{qtyInCart}</span>
           <button
             onClick={onAdd}
             disabled={qtyInCart >= item.quantity}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save, UploadCloud, Trash2 } from "lucide-react";
 import { upload } from "@vercel/blob/client";
+import { compressImage } from "@/lib/image-compress";
 import { updateItemAction, deleteInventoryAction } from "@/lib/business.actions";
 
 interface Props {
@@ -68,8 +69,10 @@ export default function InventoryEditForm({
 
     try {
       if (selectedFile) {
+        setStatus("Optimizing image...");
+        const compressed = await compressImage(selectedFile, { maxDimension: 1000, quality: 0.82 });
         setStatus("Uploading image...");
-        const blob = await upload(selectedFile.name, selectedFile, {
+        const blob = await upload(compressed.name, compressed, {
           access: "public",
           handleUploadUrl: "/api/blob/upload",
         });
@@ -108,13 +111,13 @@ export default function InventoryEditForm({
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0C10] text-slate-200">
-      <div className="sticky top-0 z-10 bg-[#0A0C10]/80 backdrop-blur-xl border-b border-slate-800/50 px-4 py-4 flex items-center justify-between gap-4">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
+      <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 py-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link href="/owner/inventory" className="text-slate-400 hover:text-white">
+          <Link href="/owner/inventory" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
             <ArrowLeft size={24} />
           </Link>
-          <h1 className="text-xl font-bold text-white">Edit Product</h1>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Edit Product</h1>
         </div>
         <button
           type="button"
@@ -140,7 +143,7 @@ export default function InventoryEditForm({
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
+              className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
             />
           </div>
 
@@ -154,7 +157,7 @@ export default function InventoryEditForm({
               required
               value={quantity}
               onChange={(e) => setQuantity(parseInt(e.target.value, 10) || 0)}
-              className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
+              className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
             />
           </div>
 
@@ -170,7 +173,7 @@ export default function InventoryEditForm({
                 required
                 value={costPrice}
                 onChange={(e) => setCostPrice(parseFloat(e.target.value) || 0)}
-                className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
+                className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
               />
             </div>
             <div>
@@ -184,7 +187,7 @@ export default function InventoryEditForm({
                 required
                 value={price}
                 onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
-                className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
+                className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
               />
             </div>
           </div>
@@ -204,12 +207,12 @@ export default function InventoryEditForm({
 
             <div
               onClick={handleDivClick}
-              className="border-2 border-dashed border-slate-800 hover:border-blue-600/50 rounded-2xl p-4 flex flex-col items-center justify-center text-slate-500 min-h-36 bg-[#1a1d24] cursor-pointer transition-all overflow-hidden group relative"
+              className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-blue-600/50 rounded-2xl p-4 flex flex-col items-center justify-center text-slate-500 min-h-36 bg-[var(--bg-surface)] cursor-pointer transition-all overflow-hidden group relative"
             >
               {imagePreview ? (
                 <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-black/40 group-hover:bg-black/60 transition-colors">
                   <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                  <div className="absolute flex flex-col items-center text-white bg-slate-950/80 px-3 py-1.5 rounded-xl text-xs gap-1 border border-slate-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute flex flex-col items-center text-[var(--text-primary)] bg-slate-50/80 dark:bg-slate-950/80 px-3 py-1.5 rounded-xl text-xs gap-1 border border-slate-200 dark:border-slate-800 opacity-0 group-hover:opacity-100 transition-opacity">
                     <UploadCloud size={14} className="text-blue-400" />
                     <span>Change Image</span>
                   </div>
@@ -217,7 +220,7 @@ export default function InventoryEditForm({
               ) : (
                 <>
                   <UploadCloud size={32} className="group-hover:text-blue-400 transition-colors" />
-                  <span className="text-xs mt-2 group-hover:text-slate-300">Tap to browse or change product picture</span>
+                  <span className="text-xs mt-2 group-hover:text-slate-700 group-hover:dark:text-slate-300">Tap to browse or change product picture</span>
                 </>
               )}
             </div>
@@ -232,14 +235,14 @@ export default function InventoryEditForm({
               type="number"
               value={restockLevel}
               onChange={(e) => setRestockLevel(parseInt(e.target.value, 10) || 0)}
-              className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
+              className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-white py-4 rounded-xl font-bold text-sm mt-6 transition-colors shadow-lg shadow-blue-500/10"
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-white py-4 rounded-xl font-bold text-sm mt-6 transition-colors shadow-lg shadow-blue-500/10"
           >
             <Save size={16} /> {isSubmitting ? status || "Saving..." : "Save Changes"}
           </button>

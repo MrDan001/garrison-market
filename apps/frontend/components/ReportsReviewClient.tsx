@@ -76,16 +76,16 @@ export default function ReportsReviewClient({
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0C12] text-slate-200">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
 
       {/* ── Top Header ── */}
-      <div className="sticky top-0 z-10 bg-[#11131A] border-b border-slate-800 shadow-sm">
+      <div className="sticky top-0 z-10 bg-[var(--bg-surface)] border-b border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
 
           <div className="flex items-center gap-3 min-w-0">
             <Link
               href="/owner/dashboard"
-              className="flex items-center justify-center h-8 w-8 rounded-lg bg-[#161a29] hover:bg-slate-800 active:bg-slate-700 text-slate-300 transition-colors shrink-0"
+              className="flex items-center justify-center h-8 w-8 rounded-lg bg-[var(--bg-surface)] hover:bg-slate-200 hover:dark:bg-slate-800 active:bg-slate-300 active:dark:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors shrink-0"
               title="Back to Dashboard"
             >
               <ArrowLeft size={16} />
@@ -96,10 +96,10 @@ export default function ReportsReviewClient({
                 <ClipboardList size={17} />
               </div>
               <div className="min-w-0">
-                <h1 className="text-sm sm:text-base font-bold text-white leading-tight truncate">
+                <h1 className="text-sm sm:text-base font-bold text-[var(--text-primary)] leading-tight truncate">
                   Staff Reports
                 </h1>
-                <p className="hidden sm:block text-[11px] text-slate-400 leading-tight">
+                <p className="hidden sm:block text-[11px] text-slate-600 dark:text-slate-400 leading-tight">
                   Review submitted daily reports
                 </p>
               </div>
@@ -120,10 +120,10 @@ export default function ReportsReviewClient({
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 sm:py-8 space-y-4 pb-24">
 
         {reports.length === 0 ? (
-          <div className="bg-[#11131A] border border-dashed border-slate-800 rounded-2xl p-10 sm:p-14 text-center shadow-sm mt-4">
+          <div className="bg-[var(--bg-surface)] border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-10 sm:p-14 text-center shadow-sm mt-4">
             <ClipboardList size={38} className="mx-auto mb-3 text-slate-500" />
-            <h3 className="text-sm font-semibold text-slate-200">All caught up!</h3>
-            <p className="text-xs text-slate-400 mt-1">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">All caught up!</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
               No pending staff reports to review right now.
             </p>
           </div>
@@ -144,22 +144,22 @@ export default function ReportsReviewClient({
             return (
               <div
                 key={report.id}
-                className="bg-[#11131A] border border-slate-800 rounded-2xl shadow-sm overflow-hidden transition-all duration-200"
+                className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden transition-all duration-200"
               >
                 {/* ── Card Header ── */}
                 <div
                   onClick={() => toggleRow(report.id)}
-                  className="px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-[#161a29] active:bg-[#1c2135] transition-colors select-none"
+                  className="px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-[var(--bg-surface)] active:bg-[var(--bg-surface)] transition-colors select-none"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 shrink-0 rounded-xl bg-[#161a29] flex items-center justify-center text-blue-400 font-bold text-sm shadow-inner">
+                    <div className="h-10 w-10 shrink-0 rounded-xl bg-[var(--bg-surface)] flex items-center justify-center text-blue-400 font-bold text-sm shadow-inner">
                       {staffName.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-white truncate">
+                      <h3 className="text-sm font-semibold text-[var(--text-primary)] truncate">
                         {staffName}
                       </h3>
-                      <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1 mt-0.5">
                         <Calendar size={11} />
                         {reportDate}
                       </p>
@@ -170,7 +170,7 @@ export default function ReportsReviewClient({
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
                       Pending
                     </span>
-                    <div className="text-slate-400 p-1 rounded-lg hover:bg-slate-800 transition-colors">
+                    <div className="text-slate-600 dark:text-slate-400 p-1 rounded-lg hover:bg-slate-200 hover:dark:bg-slate-800 transition-colors">
                       {isExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
                     </div>
                   </div>
@@ -178,7 +178,7 @@ export default function ReportsReviewClient({
 
                 {/* ── Expanded Panel ── */}
                 {isExpanded && (
-                  <div className="border-t border-slate-800 bg-[#0f111a] animate-fadeIn">
+                  <div className="border-t border-slate-200 dark:border-slate-800 bg-[var(--bg-app)] animate-fadeIn">
 
                     <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
 
@@ -188,23 +188,23 @@ export default function ReportsReviewClient({
                           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                             Report Narrative
                           </h4>
-                          <span className="text-[10px] text-slate-600 block mt-0.5">
+                          <span className="text-[10px] text-slate-400 dark:text-slate-600 block mt-0.5">
                             Staff Submitted Breakdown
                           </span>
                         </div>
 
                         {/* Table */}
-                        <div className="border border-slate-800 rounded-xl overflow-hidden bg-[#131622]">
+                        <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-[var(--bg-surface)]">
                           <table className="w-full text-left border-collapse">
                             <thead>
-                              <tr className="border-b border-slate-800/60 text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-[#161a29]">
+                              <tr className="border-b border-slate-200/60 dark:border-slate-800/60 text-[10px] sm:text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider bg-[var(--bg-surface)]">
                                 <th className="p-2.5 sm:p-3">Item</th>
                                 <th className="p-2.5 sm:p-3 text-center">Price</th>
                                 <th className="p-2.5 sm:p-3 text-center">Qty</th>
                                 <th className="p-2.5 sm:p-3 text-right">Total</th>
                               </tr>
                             </thead>
-                            <tbody className="text-[11px] sm:text-xs text-slate-300 divide-y divide-slate-800/40 font-medium">
+                            <tbody className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 divide-y divide-slate-800/40 font-medium">
                               {items.length === 0 ? (
                                 <tr>
                                   <td colSpan={4} className="p-4 text-center text-slate-500">
@@ -214,7 +214,7 @@ export default function ReportsReviewClient({
                               ) : (
                                 items.map((item: any) => (
                                   <tr key={item.id}>
-                                    <td className="p-2.5 sm:p-3 text-slate-200 max-w-[100px] sm:max-w-none truncate">
+                                    <td className="p-2.5 sm:p-3 text-slate-800 dark:text-slate-200 max-w-[100px] sm:max-w-none truncate">
                                       <span className="flex items-center gap-1.5">
                                         {item.name}
                                         {item.discountValue != null && (
@@ -230,13 +230,13 @@ export default function ReportsReviewClient({
                                         <span className="block text-[10px] text-slate-500 mt-0.5">{item.discountReason}</span>
                                       )}
                                     </td>
-                                    <td className="p-2.5 sm:p-3 text-center text-slate-400">
+                                    <td className="p-2.5 sm:p-3 text-center text-slate-600 dark:text-slate-400">
                                       ₦{Number(item.price).toLocaleString()}
                                     </td>
                                     <td className="p-2.5 sm:p-3 text-center font-bold text-blue-400">
                                       {item.quantity}
                                     </td>
-                                    <td className="p-2.5 sm:p-3 text-right font-bold text-white">
+                                    <td className="p-2.5 sm:p-3 text-right font-bold text-[var(--text-primary)]">
                                       ₦{Number(item.total).toLocaleString()}
                                     </td>
                                   </tr>
@@ -250,13 +250,13 @@ export default function ReportsReviewClient({
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-2">
                           Staff Feedback & Comments
                         </label>
-                        <div className="p-3 min-h-[56px] bg-[#090a10] border border-slate-800 rounded-xl text-[11px] sm:text-xs text-slate-300 font-medium whitespace-pre-wrap leading-relaxed">
+                        <div className="p-3 min-h-[56px] bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 font-medium whitespace-pre-wrap leading-relaxed">
                           {report.notes}
                         </div>
                       </div>
 
                      {/* RIGHT — Verification Card */}
-<div className="md:col-span-5 bg-gradient-to-br from-[#141829] to-[#0d0f18] p-4 sm:p-5 rounded-xl border border-slate-800 flex flex-col justify-between shadow-inner">
+<div className="md:col-span-5 bg-gradient-to-br from-[#141829] to-[#0d0f18] p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between shadow-inner">
   <div>
     <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest flex items-center gap-1.5 mb-3">
       <ShieldCheck size={12} /> Financial Breakdown
@@ -265,31 +265,31 @@ export default function ReportsReviewClient({
     <div className="grid grid-cols-2 gap-2.5 mb-3">
       <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
         <p className="text-[10px] text-emerald-400 font-bold uppercase">💵 Cash</p>
-        <p className="text-lg font-black text-white mt-1">₦{report.cashTotal.toLocaleString()}</p>
+        <p className="text-lg font-black text-[var(--text-primary)] mt-1">₦{report.cashTotal.toLocaleString()}</p>
       </div>
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
         <p className="text-[10px] text-blue-400 font-bold uppercase">🏦 Transfer</p>
-        <p className="text-lg font-black text-white mt-1">₦{report.transferTotal.toLocaleString()}</p>
+        <p className="text-lg font-black text-[var(--text-primary)] mt-1">₦{report.transferTotal.toLocaleString()}</p>
       </div>
     </div>
 
-    <div className="border-t border-slate-800/60 pt-3">
-      <span className="text-xs font-medium text-slate-400 block">Total Sales</span>
-      <span className="text-2xl sm:text-3xl font-black text-white tracking-tight block mt-1">
+    <div className="border-t border-slate-200/60 dark:border-slate-800/60 pt-3">
+      <span className="text-xs font-medium text-slate-600 dark:text-slate-400 block">Total Sales</span>
+      <span className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight block mt-1">
         ₦{Number(report.totalSales).toLocaleString()}
       </span>
     </div>
   </div>
 
-  <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-start gap-1.5 text-[10px] sm:text-[11px] text-slate-500 leading-normal">
-    <AlertCircle size={12} className="text-slate-600 shrink-0 mt-0.5" />
+  <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/60 flex items-start gap-1.5 text-[10px] sm:text-[11px] text-slate-500 leading-normal">
+    <AlertCircle size={12} className="text-slate-400 dark:text-slate-600 shrink-0 mt-0.5" />
     <span>Match this against your actual cash count and bank transfers before approving.</span>
   </div>
 </div>
 
                       {/* Revision Input Box (conditionally shown if Revision requested) */}
                       {isCorrectingThisOne && (
-                        <div className="col-span-1 md:col-span-12 p-4 bg-[#1a1d2e] border border-slate-800 rounded-xl mt-3 animate-fadeIn">
+                        <div className="col-span-1 md:col-span-12 p-4 bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl mt-3 animate-fadeIn">
                           <label className="block text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-2">
                             Reason for Correction Request
                           </label>
@@ -298,7 +298,7 @@ export default function ReportsReviewClient({
                             onChange={(e) => setCorrectionNote(e.target.value)}
                             placeholder="State clearly what needs to be changed..."
                             rows={3}
-                            className="w-full bg-[#0a0c12] border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                            className="w-full bg-[var(--bg-app)] border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                           />
                           <div className="flex justify-end gap-2 mt-3">
                             <button
@@ -306,7 +306,7 @@ export default function ReportsReviewClient({
                                 setCorrectingId(null);
                                 setCorrectionNote("");
                               }}
-                              className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                              className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 hover:dark:text-slate-200 transition-colors"
                             >
                               Cancel
                             </button>
@@ -322,7 +322,7 @@ export default function ReportsReviewClient({
                       )}
 
                       {/* Action Row */}
-                      <div className="col-span-1 md:col-span-12 pt-4 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <div className="col-span-1 md:col-span-12 pt-4 border-t border-slate-200/60 dark:border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-3">
                         {/* Request Revision Button (Triggers input drawer above) */}
                         {!isCorrectingThisOne && (
                           <button
@@ -345,7 +345,7 @@ export default function ReportsReviewClient({
                               handleStatusUpdate(report.id, "declined");
                             }}
                             disabled={processingId !== null}
-                            className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-transparent border border-slate-700 hover:border-rose-500 active:border-rose-500 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-400 active:text-rose-400 transition-all duration-150 disabled:opacity-50"
+                            className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-transparent border border-slate-300 dark:border-slate-700 hover:border-rose-500 active:border-rose-500 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-rose-400 active:text-rose-400 transition-all duration-150 disabled:opacity-50"
                           >
                             <X size={13} />
                             Decline Report

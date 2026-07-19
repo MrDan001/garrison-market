@@ -94,17 +94,17 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center sm:justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setView("closed")} />
 
-          <div className="relative w-full sm:max-w-md sm:mx-4 h-[75vh] sm:h-[600px] bg-[#0d0f18] border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl z-10 flex flex-col shadow-2xl overflow-hidden">
+          <div className="relative w-full sm:max-w-md sm:mx-4 h-[75vh] sm:h-[600px] bg-[var(--bg-app)] border-t sm:border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl z-10 flex flex-col shadow-2xl overflow-hidden">
 
             {/* ── CHOOSER SCREEN ── */}
             {view === "choose" && (
               <>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800/60 shrink-0">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200/60 dark:border-slate-800/60 shrink-0">
                   <div>
-                    <h2 className="text-sm font-bold text-white">Get in Touch</h2>
+                    <h2 className="text-sm font-bold text-[var(--text-primary)]">Get in Touch</h2>
                     <p className="text-[11px] text-slate-500">Who would you like to message?</p>
                   </div>
-                  <button onClick={() => setView("closed")} className="h-8 w-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                  <button onClick={() => setView("closed")} className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-colors">
                     <X size={16} />
                   </button>
                 </div>
@@ -115,11 +115,11 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                     className="w-full flex items-center gap-4 p-5 rounded-3xl bg-gradient-to-br from-emerald-600/15 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 transition-all active:scale-[0.98] text-left"
                   >
                     <div className="h-14 w-14 rounded-2xl bg-emerald-600 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-600/20">
-                      <Store size={24} className="text-white" />
+                      <Store size={24} className="text-[var(--text-primary)]" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-white">Your Store Owner</p>
-                      <p className="text-xs text-slate-400 mt-0.5 leading-snug">
+                      <p className="text-sm font-bold text-[var(--text-primary)]">Your Store Owner</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
                         Questions about a shift, a sale, or day-to-day store matters
                       </p>
                     </div>
@@ -130,18 +130,18 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                     className="w-full flex items-center gap-4 p-5 rounded-3xl bg-gradient-to-br from-blue-600/15 to-blue-500/5 border border-blue-500/20 hover:border-blue-500/40 transition-all active:scale-[0.98] text-left"
                   >
                     <div className="h-14 w-14 rounded-2xl bg-blue-600 flex items-center justify-center shrink-0 shadow-lg shadow-blue-600/20">
-                      <Headphones size={24} className="text-white" />
+                      <Headphones size={24} className="text-[var(--text-primary)]" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-white">Garrison Market Support</p>
-                      <p className="text-xs text-slate-400 mt-0.5 leading-snug">
+                      <p className="text-sm font-bold text-[var(--text-primary)]">Garrison Market Support</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
                         App issues, account problems, or anything urgent
                       </p>
                     </div>
                   </button>
                 </div>
 
-                <p className="px-6 pb-5 text-center text-[10px] text-slate-600">
+                <p className="px-6 pb-5 text-center text-[10px] text-slate-400 dark:text-slate-600">
                   We typically respond within a few hours
                 </p>
               </>
@@ -150,15 +150,15 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
             {/* ── OWNER CHAT ── */}
             {view === "owner" && (
               <>
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/60 shrink-0">
-                  <button onClick={() => setView("choose")} className="h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors">
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200/60 dark:border-slate-800/60 shrink-0">
+                  <button onClick={() => setView("choose")} className="h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 flex items-center justify-center transition-colors">
                     <ChevronLeft size={16} />
                   </button>
                   <div className="h-9 w-9 rounded-xl bg-emerald-600/15 flex items-center justify-center">
                     <Store size={16} className="text-emerald-400" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-white">Store Owner</h2>
+                    <h2 className="text-sm font-bold text-[var(--text-primary)]">Store Owner</h2>
                     <p className="text-[11px] text-slate-500">Usually replies within the day</p>
                   </div>
                 </div>
@@ -185,15 +185,15 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
             {/* ── ADMIN CHAT ── */}
             {view === "admin" && (
               <>
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/60 shrink-0">
-                  <button onClick={() => setView("choose")} className="h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors">
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200/60 dark:border-slate-800/60 shrink-0">
+                  <button onClick={() => setView("choose")} className="h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 flex items-center justify-center transition-colors">
                     <ChevronLeft size={16} />
                   </button>
                   <div className="h-9 w-9 rounded-xl bg-blue-600/15 flex items-center justify-center">
                     <Headphones size={16} className="text-blue-400" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-white">Garrison Market Support</h2>
+                    <h2 className="text-sm font-bold text-[var(--text-primary)]">Garrison Market Support</h2>
                     <p className="text-[11px] text-slate-500">For urgent or app-related issues</p>
                   </div>
                 </div>

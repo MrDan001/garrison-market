@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth.actions";
+import { getActiveStoreId } from "@/lib/store-context";
 import { redirect } from "next/navigation";
 import ReportsReviewClient from "@/components/ReportsReviewClient";
 
@@ -7,9 +8,15 @@ export default async function OwnerReportsPage() {
   const session = await getSessionUser();
   if (!session) redirect("/login");
 
+  const activeStoreId = await getActiveStoreId();
+
   // 1. Fetch using the second query's structure, but with the first query's nested inventory relation
   const pendingReports = await prisma.report.findMany({
-    where: { ownerId: session.id, status: "pending" },
+    where: {
+      ownerId: session.id,
+      status: "pending",
+      OR: [{ storeId: activeStoreId }, { storeId: null }],
+    },
     include: {
       author: { select: { id: true, fullName: true } },
       items: {

@@ -3,17 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bell, ClipboardCheck, PackageX,
-  Sparkles, Megaphone, Inbox, CheckCheck,
+  Sparkles, Megaphone, Inbox, CheckCheck, Banknote, FileText,
 } from "lucide-react";
 import { getNotificationsForStaff, markAllNotificationsRead } from "@/lib/notification.actions";
 
-type NotifType = "report_status" | "low_stock" | "new_item" | "announcement";
+type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted";
 
 const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label: string }> = {
   report_status: { icon: ClipboardCheck, bg: "bg-blue-500/10", text: "text-blue-400", label: "Report" },
   low_stock: { icon: PackageX, bg: "bg-amber-500/10", text: "text-amber-400", label: "Stock Alert" },
   new_item: { icon: Sparkles, bg: "bg-emerald-500/10", text: "text-emerald-400", label: "New Item" },
   announcement: { icon: Megaphone, bg: "bg-purple-500/10", text: "text-purple-400", label: "Announcement" },
+  sale_made: { icon: Banknote, bg: "bg-emerald-500/10", text: "text-emerald-400", label: "Sale" },
+  report_submitted: { icon: FileText, bg: "bg-blue-500/10", text: "text-blue-400", label: "Report Submitted" },
 };
 
 function timeAgo(dateStr: string) {
@@ -139,7 +141,7 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
       {/* Trigger Button */}
       <button
         onClick={handleToggleOpen}
-        className="relative flex items-center justify-center h-8 w-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+        className="relative flex items-center justify-center h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
         aria-label="Notifications"
         aria-expanded={open}
       >
@@ -153,16 +155,16 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
 
       {/* Floating Dropdown Panel */}
       {open && (
-        <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 mt-2 w-auto sm:w-96 bg-[#0d0f18] border border-slate-800/80 rounded-2xl z-50 flex flex-col shadow-2xl origin-top sm:origin-top-right transition-all">
+        <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 mt-2 w-auto sm:w-96 bg-[var(--bg-app)] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl z-50 flex flex-col shadow-2xl origin-top sm:origin-top-right transition-all">
           
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-800/60">
             <div className="flex items-center gap-2">
               <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
                 <Bell size={14} className="text-blue-400" />
               </div>
               <div>
-                <h2 className="text-xs font-bold text-white">Notifications</h2>
+                <h2 className="text-xs font-bold text-[var(--text-primary)]">Notifications</h2>
                 <p className="text-[10px] text-slate-500">
                   {notifications.length === 0 ? "All caught up" : `${notifications.length} recent update${notifications.length !== 1 ? "s" : ""}`}
                 </p>
@@ -174,15 +176,15 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
           <div className="max-h-80 overflow-y-auto px-3 py-3 space-y-3">
             {loading ? (
               <div className="flex items-center justify-center py-10">
-                <div className="h-5 w-5 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
+                <div className="h-5 w-5 border-2 border-slate-300 dark:border-slate-700 border-t-blue-500 rounded-full animate-spin" />
               </div>
             ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="h-12 w-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-3">
-                  <Inbox size={20} className="text-slate-700" />
+                <div className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center mb-3">
+                  <Inbox size={20} className="text-slate-300 dark:text-slate-700" />
                 </div>
-                <p className="text-xs font-semibold text-slate-300">Nothing here yet</p>
-                <p className="text-[10px] text-slate-600 mt-1 max-w-[180px]">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Nothing here yet</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-1 max-w-[180px]">
                   Updates and alerts will appear here.
                 </p>
               </div>
@@ -214,7 +216,7 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
 
           {/* Footer */}
           {notifications.length > 0 && (
-            <div className="px-4 py-2 border-t border-slate-800/60 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 bg-slate-950/40 rounded-b-2xl">
+            <div className="px-4 py-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 bg-slate-50/40 dark:bg-slate-950/40 rounded-b-2xl">
               <CheckCheck size={11} className="text-emerald-500" />
               All caught up
             </div>
@@ -234,8 +236,8 @@ function NotificationCard({ notification }: { notification: any }) {
     <div 
       className={`relative flex gap-3 p-3 rounded-xl transition-all duration-150 group
         ${isUnread 
-          ? "bg-slate-900/90 border border-slate-700/80 hover:bg-slate-900 shadow-sm" 
-          : "bg-slate-900/30 border border-slate-900/80 hover:border-slate-800 hover:bg-slate-900/50"
+          ? "bg-slate-100/90 dark:bg-slate-900/90 border border-slate-300/80 dark:border-slate-700/80 hover:bg-slate-100 hover:dark:bg-slate-900 shadow-sm" 
+          : "bg-slate-100/30 dark:bg-slate-900/30 border border-slate-100/80 dark:border-slate-900/80 hover:border-slate-200 hover:dark:border-slate-800 hover:bg-slate-100/50 hover:dark:bg-slate-900/50"
         }
       `}
     >
@@ -254,11 +256,11 @@ function NotificationCard({ notification }: { notification: any }) {
           <span className={`text-[9px] font-bold uppercase tracking-wide ${config.text}`}>
             {config.label}
           </span>
-          <span className="text-[9px] text-slate-600 shrink-0">
+          <span className="text-[9px] text-slate-400 dark:text-slate-600 shrink-0">
             {timeAgo(notification.createdAt)}
           </span>
         </div>
-        <p className={`text-xs leading-normal mt-1 ${isUnread ? "text-white font-medium" : "text-slate-400"}`}>
+        <p className={`text-xs leading-normal mt-1 ${isUnread ? "text-[var(--text-primary)] font-medium" : "text-slate-600 dark:text-slate-400"}`}>
           {notification.message}
         </p>
       </div>

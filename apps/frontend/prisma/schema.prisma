@@ -20,6 +20,21 @@ model User {
   mustChangePassword Boolean  @default(false)
   createdAt          DateTime @default(now())
   ownerId            Int?
+
+  resetToken         String?   @unique
+  resetTokenExpiry   DateTime?
+
+  // --- Subscription / Billing (owner-level; staff inherit via ownerId) ---
+  plan                     String    @default("basic")     // "basic" | "premium"
+  subscriptionStatus       String    @default("trialing")  // "trialing" | "active" | "expired" | "cancelled"
+  trialEndsAt              DateTime?
+  currentPeriodEnd         DateTime?
+  paystackCustomerCode     String?
+  paystackAuthorizationCode String?
+  currentStoreId           Int?      // last store the owner was viewing, for "return to same store"
+
+  payments   Payment[]     @relation("OwnerPayments")
+  planExtensions PlanExtension[] @relation("OwnerPlanExtensions")
   
   ownerNotifications     Notification[] @relation("OwnerNotifications")
   recipientNotifications Notification[] @relation("RecipientNotifications")
@@ -48,6 +63,10 @@ model User {
 
   consignmentsOwned   Consignment[] @relation("OwnerConsignments")
   consignmentsStaffed Consignment[] @relation("StaffConsignments")
+
+  @@index([ownerId])
+  @@index([staffStoreId])
+  @@index([role, status])
 }
 
 model Store {
@@ -68,6 +87,8 @@ model Store {
   consignments  Consignment[]
   staff         User[]         @relation("StoreStaff")
   notifications Notification[]
+
+  @@index([ownerId])
 }
 
 model Report {
@@ -86,6 +107,11 @@ model Report {
   author    User         @relation(fields: [authorId], references: [id], onDelete: SetNull)
   store     Store?       @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items     ReportItem[]
+
+  @@index([ownerId, status])
+  @@index([storeId])
+  @@index([authorId])
+  @@index([date])
 }
 
 model ReportItem {
@@ -102,6 +128,9 @@ model ReportItem {
   discountReason String?
   report         Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
   inventory      Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([inventoryId])
 }
 
 model Inventory {
@@ -123,6 +152,9 @@ model Inventory {
   orderItems   OrderItem[]
   reportItems  ReportItem[]
   consignmentItems ConsignmentItem[]
+
+  @@index([ownerId, storeId])
+  @@index([storeId])
 }
 
 model Order {
@@ -142,6 +174,10 @@ model Order {
   items         OrderItem[]
   consignmentId Int?
   consignment   Consignment?  @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, date])
+  @@index([storeId, date])
+  @@index([staffId, date])
 }
 
 model OrderItem {
@@ -156,6 +192,9 @@ model OrderItem {
   discountReason String?
   inventory     Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([inventoryId])
 }
 
 model Notification {
@@ -172,6 +211,10 @@ model Notification {
   owner       User     @relation("OwnerNotifications", fields: [ownerId], references: [id], onDelete: Cascade)
   recipient   User?    @relation("RecipientNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
   store       Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, read])
+  @@index([recipientId, read])
+  @@index([createdAt])
 }
 
 model Consignment {
@@ -191,6 +234,11 @@ model Consignment {
   store          Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items          ConsignmentItem[]
   orders         Order[]
+
+  @@index([ownerId])
+  @@index([staffId])
+  @@index([storeId])
+  @@index([status])
 }
 
 model ConsignmentItem {
@@ -204,6 +252,9 @@ model ConsignmentItem {
 
   consignment      Consignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
   inventory        Inventory   @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@index([consignmentId])
+  @@index([inventoryId])
 }
 
 model SupportMessage {
@@ -219,6 +270,37 @@ model SupportMessage {
 
   owner      User @relation("SupportOwnerScope", fields: [ownerId], references: [id], onDelete: Cascade)
   sender     User @relation("SupportSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, createdAt])
+  @@index([senderId])
+  @@index([threadType, ownerId])
+}
+
+model Payment {
+  id                Int      @id @default(autoincrement())
+  ownerId           Int
+  plan              String   // "basic" | "premium"
+  amount            Decimal  // in Naira
+  reference         String   @unique // Paystack transaction reference
+  status            String   @default("pending") // "pending" | "success" | "failed"
+  periodStart       DateTime @default(now())
+  periodEnd         DateTime
+  createdAt         DateTime @default(now())
+
+  owner             User     @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+}
+
+model PlanExtension {
+  id         Int      @id @default(autoincrement())
+  ownerId    Int
+  days       Int
+  reason     String?
+  grantedBy  String   // admin email
+  createdAt  DateTime @default(now())
+
+  owner      User     @relation("OwnerPlanExtensions", fields: [ownerId], references: [id], onDelete: Cascade)
 }
 
 model TypingStatus {

@@ -34,10 +34,10 @@ export default async function MorePage() {
   if (!user) redirect("/login");
 
   return (
-    <div className="fixed inset-0 bg-[#0a0c12] text-slate-200 flex flex-col pb-20">
+    <div className="fixed inset-0 bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col pb-20">
       {/* Header */}
-      <header className="flex items-center gap-4 p-4 border-b border-slate-800">
-        <a href="/owner/dashboard" className="p-2 -ml-2 hover:bg-slate-800 rounded-full transition-colors">
+      <header className="flex items-center gap-4 p-4 border-b border-slate-200 dark:border-slate-800">
+        <a href="/owner/dashboard" className="p-2 -ml-2 hover:bg-slate-200 hover:dark:bg-slate-800 rounded-full transition-colors">
           <ArrowLeft size={20} />
         </a>
         <h1 className="text-lg font-bold">More</h1>
@@ -45,9 +45,9 @@ export default async function MorePage() {
 
       <main className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
         {/* Profile Card */}
-        <a href="/owner/profile/edit" className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center gap-4 hover:border-slate-600 transition-all block">
+        <a href="/owner/profile/edit" className="p-4 rounded-2xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 flex items-center gap-4 hover:border-slate-400 hover:dark:border-slate-600 transition-all block">
           <div className="flex items-center gap-4 w-full">
-            <div className="h-14 w-14 rounded-full bg-indigo-600 flex items-center justify-center text-xl font-bold overflow-hidden border border-slate-700 shrink-0">
+            <div className="h-14 w-14 rounded-full bg-indigo-600 flex items-center justify-center text-xl font-bold overflow-hidden border border-slate-300 dark:border-slate-700 shrink-0">
               {user.image ? (
                 <img src={user.image} alt="Profile" className="h-full w-full object-cover" />
               ) : (
@@ -55,10 +55,10 @@ export default async function MorePage() {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="font-bold text-white truncate">{user.fullName}</h2>
-              <p className="text-xs text-slate-400 truncate">{user.email}</p>
+              <h2 className="font-bold text-[var(--text-primary)] truncate">{user.fullName}</h2>
+              <p className="text-xs text-slate-600 dark:text-slate-400 truncate">{user.email}</p>
             </div>
-            <ChevronRight size={20} className="text-slate-600 shrink-0" />
+            <ChevronRight size={20} className="text-slate-400 dark:text-slate-600 shrink-0" />
           </div>
         </a>
 
@@ -84,30 +84,30 @@ export default async function MorePage() {
         {/* Account section — Settings row is the inline dropdown */}
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Account</h3>
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl divide-y divide-slate-800">
-            <a href="/owner/stores" className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/40 dark:bg-slate-900/40 backdrop-blur-xl divide-y divide-slate-800">
+            <a href="/owner/stores" className="flex items-center justify-between p-4 hover:bg-slate-200/30 hover:dark:bg-slate-800/30 transition-colors">
               <div className="flex items-center gap-3">
-                <Store size={18} className="text-slate-400" />
+                <Store size={18} className="text-slate-600 dark:text-slate-400" />
                 <span className="text-sm font-medium">My Stores</span>
               </div>
-              <ChevronRight size={18} className="text-slate-600" />
+              <ChevronRight size={18} className="text-slate-400 dark:text-slate-600" />
             </a>
             
-            <a href="/owner/staff" className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
+            <a href="/owner/staff" className="flex items-center justify-between p-4 hover:bg-slate-200/30 hover:dark:bg-slate-800/30 transition-colors">
               <div className="flex items-center gap-3">
-                <LayoutDashboard size={18} className="text-slate-400" />
+                <LayoutDashboard size={18} className="text-slate-600 dark:text-slate-400" />
                 <span className="text-sm font-medium">Staff</span>
               </div>
-              <ChevronRight size={18} className="text-slate-600" />
+              <ChevronRight size={18} className="text-slate-400 dark:text-slate-600" />
             </a>
 
             {/* Support Link */}
-            <a href="/owner/support" className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
+            <a href="/owner/support" className="flex items-center justify-between p-4 hover:bg-slate-200/30 hover:dark:bg-slate-800/30 transition-colors">
               <div className="flex items-center gap-3">
-                <MessageSquare size={18} className="text-slate-400" />
+                <MessageSquare size={18} className="text-slate-600 dark:text-slate-400" />
                 <span className="text-sm font-medium">Support</span>
               </div>
-              <ChevronRight size={18} className="text-slate-600" />
+              <ChevronRight size={18} className="text-slate-400 dark:text-slate-600" />
             </a>
 
             {/* Inline Settings Dropdown */}
@@ -143,14 +143,14 @@ function MenuSection({
   return (
     <div className="space-y-3">
       <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">{title}</h3>
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl divide-y divide-slate-800">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/40 dark:bg-slate-900/40 backdrop-blur-xl divide-y divide-slate-800">
         {items.map((item) => (
-          <a key={item.label} href={item.href} className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
+          <a key={item.label} href={item.href} className="flex items-center justify-between p-4 hover:bg-slate-200/30 hover:dark:bg-slate-800/30 transition-colors">
             <div className="flex items-center gap-3">
-              <item.icon size={18} className="text-slate-400" />
+              <item.icon size={18} className="text-slate-600 dark:text-slate-400" />
               <span className="text-sm font-medium">{item.label}</span>
             </div>
-            <ChevronRight size={18} className="text-slate-600" />
+            <ChevronRight size={18} className="text-slate-400 dark:text-slate-600" />
           </a>
         ))}
       </div>

@@ -29,10 +29,10 @@ export default function OwnerAnnouncementForm() {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl p-4 space-y-3">
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/40 dark:bg-slate-900/40 backdrop-blur-xl p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Megaphone size={18} className="text-blue-400" />
-        <h3 className="text-sm font-semibold text-white">Send Announcement to Staff</h3>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Send Announcement to Staff</h3>
       </div>
       <p className="text-xs text-slate-500">
         This appears as a notification for every staff member on your team.
@@ -41,12 +41,12 @@ export default function OwnerAnnouncementForm() {
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         placeholder="e.g. Store closes early on Friday for stock-taking."
-        className="w-full h-20 bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-200 outline-none focus:border-blue-600 transition-colors resize-none"
+        className="w-full h-20 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-blue-600 transition-colors resize-none"
       />
       <button
         onClick={handleSend}
         disabled={isPending || !message.trim()}
-        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-sm font-semibold transition-colors"
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:dark:text-slate-600 text-white text-sm font-semibold transition-colors"
       >
         <Send size={14} />
         {isPending ? "Sending..." : "Send to All Staff"}

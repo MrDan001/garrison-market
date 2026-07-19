@@ -22,6 +22,8 @@ import Link from "next/link";
 import { logoutAction } from "@/lib/auth.actions";
 import { updateNotificationPreference } from "@/lib/profile.actions";
 import { APP_VERSION } from "@/lib/version";
+import { InstallAppCard, PushNotificationCard } from "@/components/SettingsExtras";
+import ThemeToggle from "@/components/ThemeToggle";
 
 interface Props {
   email: string;
@@ -47,7 +49,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
       onClick={onChange}
       aria-pressed={checked}
       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 ${
-        checked ? "bg-emerald-500" : "bg-slate-700"
+        checked ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
       }`}
     >
       <span
@@ -63,17 +65,17 @@ function Row({ row }: { row: RowData }) {
   const Icon = row.icon;
   const inner = (
     <>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-slate-300">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-slate-700 dark:text-slate-300">
         <Icon size={17} strokeWidth={1.8} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-medium text-slate-100">{row.label}</p>
+        <p className="truncate text-[15px] font-medium text-slate-900 dark:text-slate-100">{row.label}</p>
         <p className="truncate text-[12.5px] text-slate-500">{row.sub}</p>
       </div>
       {typeof row.toggleValue === "boolean" ? (
         <Toggle checked={row.toggleValue} onChange={row.onToggle!} />
       ) : row.href ? (
-        <ChevronRight size={18} className="shrink-0 text-slate-600" strokeWidth={1.8} />
+        <ChevronRight size={18} className="shrink-0 text-slate-400 dark:text-slate-600" strokeWidth={1.8} />
       ) : null}
     </>
   );
@@ -106,12 +108,12 @@ function Section({
   rows: RowData[];
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0d1420]">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--bg-surface)]">
       <button onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
           <Icon size={16} strokeWidth={2} />
         </div>
-        <span className="flex-1 text-[13px] font-semibold uppercase tracking-wide text-slate-400">{title}</span>
+        <span className="flex-1 text-[13px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">{title}</span>
         <ChevronDown
           size={18}
           className={`text-slate-500 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
@@ -228,6 +230,12 @@ export default function StaffProfileSections({
         />
       ))}
 
+      <div className="space-y-3">
+        <ThemeToggle />
+        <PushNotificationCard />
+        <InstallAppCard />
+      </div>
+
       <form action={logoutAction}>
         <button
           type="submit"
@@ -238,7 +246,7 @@ export default function StaffProfileSections({
         </button>
       </form>
 
-      <p className="pb-2 pt-1 text-center text-[11.5px] text-slate-600">Staff Portal</p>
+      <p className="pb-2 pt-1 text-center text-[11.5px] text-slate-400 dark:text-slate-600">Staff Portal</p>
     </>
   );
 }

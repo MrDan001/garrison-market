@@ -19,9 +19,21 @@ export async function getActiveStoreId(): Promise<number | null> {
   // Owner — read the cookie set by switchStoreAction
   const cookieStore = await cookies();
   const cookieVal = cookieStore.get("activeStoreId")?.value;
-  if (cookieVal) return parseInt(cookieVal, 10);
+  const cookieStoreId = cookieVal ? parseInt(cookieVal, 10) : null;
 
-  // No cookie yet (e.g. right after registration) — fall back to their oldest store
+  if (cookieStoreId && !isNaN(cookieStoreId)) {
+    // Defense-in-depth: re-verify the store actually belongs to this owner,
+    // even though switchStoreAction already checks this at write-time.
+    // Cookies can be edited directly (e.g. via browser devtools), so reads
+    // must never blindly trust a storeId without re-checking ownership.
+    const owned = await prisma.store.findFirst({
+      where: { id: cookieStoreId, ownerId: session.id },
+      select: { id: true },
+    });
+    if (owned) return owned.id;
+  }
+
+  // No valid cookie — fall back to their oldest store
   const firstStore = await prisma.store.findFirst({
     where: { ownerId: session.id },
     orderBy: { createdAt: "asc" },

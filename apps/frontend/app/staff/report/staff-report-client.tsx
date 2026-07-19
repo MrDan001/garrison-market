@@ -64,11 +64,11 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0A0C12] text-slate-200 px-4 sm:px-6 py-6 space-y-6">
+    <div className="min-h-screen w-full bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 px-4 sm:px-6 py-6 space-y-6">
       {/* Back Button */}
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-2"
+        className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-colors mb-2"
       >
         <ArrowLeft size={20} />
         <span className="text-sm font-medium">Back</span>
@@ -89,7 +89,7 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
       value={clarification}
       onChange={(e) => setClarification(e.target.value)}
       placeholder="Explain or clarify here..."
-      className="w-full h-20 bg-[#0A0C10] border border-amber-500/20 rounded-2xl p-3 text-sm text-slate-200 outline-none focus:border-amber-500 transition-colors resize-none"
+      className="w-full h-20 bg-[var(--bg-app)] border border-amber-500/20 rounded-2xl p-3 text-sm text-slate-800 dark:text-slate-200 outline-none focus:border-amber-500 transition-colors resize-none"
     />
     <button
       onClick={handleResubmit}
@@ -102,14 +102,14 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
 )}
 
       {/* Sales Header */}
-      <div className="bg-[#11131A] border border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-lg">
+      <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-lg">
         <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Total Sales Today</p>
-        <h1 className="text-3xl sm:text-5xl font-bold text-white mt-2">₦{totalValue.toLocaleString()}</h1>
+        <h1 className="text-3xl sm:text-5xl font-bold text-[var(--text-primary)] mt-2">₦{totalValue.toLocaleString()}</h1>
       </div>
 
       {/* Main Report Form */}
-      <div className="bg-[#11131A] border border-slate-800 rounded-3xl p-5 sm:p-8 shadow-2xl">
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-5 sm:mb-6">Daily Summary & Submission</h2>
+      <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-8 shadow-2xl">
+        <h2 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-5 sm:mb-6">Daily Summary & Submission</h2>
 
         <div className="space-y-5 sm:space-y-6">
           <div>
@@ -118,15 +118,15 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
             {/* Mobile: stacked cards */}
             <div className="sm:hidden space-y-2">
               {allSoldItems.length === 0 && (
-                <p className="text-slate-600 text-sm italic p-3">No sales yet today.</p>
+                <p className="text-slate-400 dark:text-slate-600 text-sm italic p-3">No sales yet today.</p>
               )}
               {allSoldItems.map((item: any, idx: number) => (
-                <div key={idx} className="bg-[#0A0C10] border border-slate-800 rounded-xl p-3 flex justify-between items-center">
+                <div key={idx} className="bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
                   <div className="min-w-0">
-                    <p className="text-sm text-slate-200 truncate">{item.inventory?.name || "N/A"}</p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{item.inventory?.name || "N/A"}</p>
                     <p className="text-xs text-slate-500">₦{Number(item.priceAtTime).toLocaleString()} × {item.quantity}</p>
                   </div>
-                  <span className="font-bold text-white text-sm shrink-0 ml-3">
+                  <span className="font-bold text-[var(--text-primary)] text-sm shrink-0 ml-3">
                     ₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}
                   </span>
                 </div>
@@ -134,10 +134,10 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
             </div>
 
             {/* Desktop: table */}
-            <div className="hidden sm:block bg-[#0A0C10] border border-slate-800 rounded-2xl p-4 overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
+            <div className="hidden sm:block bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300">
                 <thead>
-                  <tr className="text-slate-500 border-b border-slate-800">
+                  <tr className="text-slate-500 border-b border-slate-200 dark:border-slate-800">
                     <th className="pb-3 px-2">Item</th>
                     <th className="pb-3 px-2">Price</th>
                     <th className="pb-3 px-2">Qty</th>
@@ -146,11 +146,11 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
                 </thead>
                 <tbody>
                   {allSoldItems.map((item: any, idx: number) => (
-                    <tr key={idx} className="border-b border-slate-800/50 last:border-0">
+                    <tr key={idx} className="border-b border-slate-200/50 dark:border-slate-800/50 last:border-0">
                       <td className="py-3 px-2">{item.inventory?.name || "N/A"}</td>
                       <td className="py-3 px-2">₦{Number(item.priceAtTime).toLocaleString()}</td>
                       <td className="py-3 px-2">{item.quantity}</td>
-                      <td className="py-3 px-2 font-bold text-white">₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}</td>
+                      <td className="py-3 px-2 font-bold text-[var(--text-primary)]">₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -159,7 +159,7 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
           </div>
 
           <textarea
-            className="w-full h-24 bg-[#0A0C10] border border-slate-800 rounded-2xl p-4 text-slate-200 outline-none focus:border-blue-600 transition-colors"
+            className="w-full h-24 bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-slate-800 dark:text-slate-200 outline-none focus:border-blue-600 transition-colors"
             placeholder="Type your notes here..."
             value={complaint}
             onChange={(e) => setComplaint(e.target.value)}
@@ -168,7 +168,7 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="w-full py-4 sm:py-5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white rounded-2xl font-bold transition-all active:scale-[0.98]"
+            className="w-full py-4 sm:py-5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 text-white rounded-2xl font-bold transition-all active:scale-[0.98]"
           >
             {loading ? "Submitting..." : "Submit Full Daily Report"}
           </button>
@@ -178,7 +178,7 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
       {/* History Toggle */}
       <button
         onClick={() => setShowHistory(!showHistory)}
-        className="w-full py-4 flex items-center justify-center gap-2 bg-[#11131A] border border-slate-800 rounded-2xl font-semibold text-slate-400 hover:text-white transition-all active:scale-[0.98]"
+        className="w-full py-4 flex items-center justify-center gap-2 bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl font-semibold text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-all active:scale-[0.98]"
       >
         {showHistory ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         {showHistory ? "Hide Report History" : "View Report History"}
@@ -188,14 +188,14 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
       {showHistory && (
         <div className="space-y-3 animate-in fade-in duration-500">
           {reports.length === 0 && (
-            <p className="text-slate-600 text-sm italic text-center py-4">No reports submitted today.</p>
+            <p className="text-slate-400 dark:text-slate-600 text-sm italic text-center py-4">No reports submitted today.</p>
           )}
           {reports.map((r: any) => (
-            <div key={r.id} className="bg-[#11131A] p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-3">
+            <div key={r.id} className="bg-[var(--bg-surface)] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
                 <FileText size={18} className="text-blue-500 shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <p className="text-[11px] text-slate-300 leading-tight line-clamp-3 sm:line-clamp-none">{r.notes}</p>
+                  <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-tight line-clamp-3 sm:line-clamp-none">{r.notes}</p>
                   <p className="text-[9px] text-slate-500 mt-1"><Clock size={10} className="inline mr-1" /> {new Date(r.date).toLocaleTimeString()}</p>
                 </div>
               </div>

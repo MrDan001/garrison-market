@@ -2,15 +2,18 @@
 // app/owner/more/settings-dropdown.tsx
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   Settings, ChevronDown, ChevronUp,
-  Bell, Tag, Truck, CheckCircle2, Loader2,
+  Bell, Tag, Truck, CheckCircle2, Loader2, Lock, ChevronRight,
 } from "lucide-react";
 import {
   toggleDiscountAction,
   toggleNotificationsAction,
   toggleConsignmentAction,
 } from "@/lib/settings.actions";
+import { InstallAppCard, PushNotificationCard } from "@/components/SettingsExtras";
+import ThemeToggle from "@/components/ThemeToggle";
 
 interface Props {
   notificationsEnabled: boolean;
@@ -65,10 +68,10 @@ export default function SettingsDropdown({
       {/* Settings Row — acts as toggle trigger */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors"
+        className="w-full flex items-center justify-between p-4 hover:bg-slate-200/30 hover:dark:bg-slate-800/30 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <Settings size={18} className="text-slate-400" />
+          <Settings size={18} className="text-slate-600 dark:text-slate-400" />
           <span className="text-sm font-medium">Settings</span>
         </div>
         {open ? (
@@ -80,10 +83,10 @@ export default function SettingsDropdown({
 
       {/* Dropdown panel */}
       {open && (
-        <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-4 space-y-4">
+        <div className="border-t border-slate-200/60 dark:border-slate-800/60 bg-slate-50/40 dark:bg-slate-950/40 px-4 py-4 space-y-4">
 
           {/* Section label */}
-          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">
             Preferences
           </p>
 
@@ -98,10 +101,10 @@ export default function SettingsDropdown({
           />
 
           {/* Divider */}
-          <div className="border-t border-slate-800/40" />
+          <div className="border-t border-slate-200/40 dark:border-slate-800/40" />
 
           {/* Section label */}
-          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">
             Staff Permissions
           </p>
 
@@ -140,6 +143,42 @@ export default function SettingsDropdown({
               Staff can now sign out goods on consignment
             </div>
           )}
+
+          {/* Divider */}
+          <div className="border-t border-slate-200/40 dark:border-slate-800/40" />
+
+          {/* Section label */}
+          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">
+            Security
+          </p>
+
+          <Link
+            href="/change-password"
+            className="flex items-center justify-between gap-3 rounded-xl bg-slate-50/40 dark:bg-slate-950/40 hover:bg-slate-100 hover:dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 px-3 py-2.5 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
+                <Lock size={16} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 leading-tight">Change Password</p>
+                <p className="text-[11px] text-slate-500 leading-tight">Update your login password</p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-slate-400 dark:text-slate-600 shrink-0" />
+          </Link>
+
+          {/* Divider */}
+          <div className="border-t border-slate-200/40 dark:border-slate-800/40" />
+
+          {/* Section label */}
+          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">
+            Device
+          </p>
+
+          <ThemeToggle />
+          <PushNotificationCard />
+          <InstallAppCard />
         </div>
       )}
     </div>
@@ -169,11 +208,11 @@ function ToggleRow({
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="h-8 w-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+        <div className="h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-200 leading-tight">{label}</p>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 leading-tight">{label}</p>
           <p className="text-[11px] text-slate-500 leading-tight">{description}</p>
         </div>
       </div>
@@ -190,7 +229,7 @@ function ToggleRow({
         {loading ? (
           <Loader2
             size={12}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white animate-spin"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[var(--text-primary)] animate-spin"
           />
         ) : (
           <span

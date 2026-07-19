@@ -35,10 +35,10 @@ export function OwnerTable({ initialOwners }: { initialOwners: OwnerType[] }) {
         {initialOwners.map((owner) => {
           const cleanStatus = owner.status.toLowerCase().trim();
           return (
-            <div key={owner.id} className="bg-[#161821] p-4 rounded-2xl border border-slate-800 shadow-lg">
+            <div key={owner.id} className="bg-[var(--bg-surface)] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="font-bold text-white">{owner.fullName || "No Name"}</h3>
+                  <h3 className="font-bold text-[var(--text-primary)]">{owner.fullName || "No Name"}</h3>
                   <p className="text-[10px] text-slate-500">{owner.email}</p>
                 </div>
                 <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
@@ -49,7 +49,7 @@ export function OwnerTable({ initialOwners }: { initialOwners: OwnerType[] }) {
               </div>
               
               <div className="grid grid-cols-2 gap-2">
-                <a href={`/admin/users/${owner.id}`} className="col-span-2 text-center py-2 bg-slate-800 rounded-lg text-[10px] font-bold text-slate-300">VIEW DETAILS</a>
+                <a href={`/admin/users/${owner.id}`} className="col-span-2 text-center py-2 bg-slate-200 dark:bg-slate-800 rounded-lg text-[10px] font-bold text-slate-700 dark:text-slate-300">VIEW DETAILS</a>
                 
                 {cleanStatus === 'pending' && (
                   <>
@@ -71,10 +71,10 @@ export function OwnerTable({ initialOwners }: { initialOwners: OwnerType[] }) {
       </div>
 
       {/* DESKTOP VIEW */}
-      <div className="hidden md:block overflow-x-auto bg-[#0f1117] rounded-3xl border border-slate-800 shadow-xl">
+      <div className="hidden md:block overflow-x-auto bg-[var(--bg-app)] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-[#161821] text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-800">
+            <tr className="bg-[var(--bg-surface)] text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
               <th className="p-4">Owner</th>
               <th className="p-4">Status</th>
               <th className="p-4 text-right">Actions</th>
@@ -84,9 +84,9 @@ export function OwnerTable({ initialOwners }: { initialOwners: OwnerType[] }) {
             {initialOwners.map((owner) => {
               const cleanStatus = owner.status.toLowerCase().trim();
               return (
-                <tr key={owner.id} className="hover:bg-slate-800/20">
+                <tr key={owner.id} className="hover:bg-slate-200/20 hover:dark:bg-slate-800/20">
                   <td className="p-4">
-                    <div className="font-bold text-white">{owner.fullName || "No Name"}</div>
+                    <div className="font-bold text-[var(--text-primary)]">{owner.fullName || "No Name"}</div>
                     <div className="text-[10px] text-slate-500">{owner.email}</div>
                   </td>
                   <td className="p-4">
@@ -98,7 +98,7 @@ export function OwnerTable({ initialOwners }: { initialOwners: OwnerType[] }) {
                   </td>
                   <td className="p-4 text-right">
                     <div className="flex justify-end gap-2">
-                      <a href={`/admin/users/${owner.id}`} className="px-3 py-1 bg-slate-800 rounded text-[10px] text-slate-300 font-bold">VIEW</a>
+                      <a href={`/admin/users/${owner.id}`} className="px-3 py-1 bg-slate-200 dark:bg-slate-800 rounded text-[10px] text-slate-700 dark:text-slate-300 font-bold">VIEW</a>
                       {cleanStatus === 'pending' && (
                         <>
                           <button onClick={() => handleAction(() => updateOwnerStatus(owner.email, 'approved'))} className="px-3 py-1 bg-emerald-600 rounded text-[10px] text-white font-bold cursor-pointer">APPROVE</button>

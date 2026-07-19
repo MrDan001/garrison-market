@@ -12,6 +12,11 @@ export async function submitDailyReport(authorId: number, content: string) {
   const session = await getSessionUser();
   if (!session || session.id !== authorId) throw new Error("Unauthorized");
 
+  const author = await prisma.user.findUnique({
+    where: { id: authorId },
+    select: { fullName: true, staffStoreId: true },
+  });
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -36,7 +41,7 @@ export async function submitDailyReport(authorId: number, content: string) {
     .filter((s: any) => s.paymentMethod === "transfer")
     .reduce((sum: number, s: any) => sum + Number(s.total), 0);
 
-  await prisma.report.create({
+  const newReport = await prisma.report.create({
     data: {
       totalSales: totalValue,
       cashTotal,
@@ -45,6 +50,7 @@ export async function submitDailyReport(authorId: number, content: string) {
       status: "pending",
       author: { connect: { id: authorId } },
       ownerId: session.ownerId!,
+      storeId: author?.staffStoreId ?? null,
       items: {
         create: allSoldItems.map((i: any) => ({
           inventoryId: i.inventoryId,
@@ -65,7 +71,26 @@ export async function submitDailyReport(authorId: number, content: string) {
     },
   });
 
+  const submittedAt = new Date(newReport.date).toLocaleString("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  await createNotification({
+    ownerId: session.ownerId!,
+    recipientId: null,
+    storeId: author?.staffStoreId ?? null,
+    type: "report_submitted",
+    message: `${author?.fullName || "A staff member"} submitted a daily report on ${submittedAt}.`,
+    link: "/owner/report",
+  });
+
   revalidatePath("/staff/report");
+  revalidatePath("/owner/dashboard");
   return { success: true };
 }
 
@@ -241,14 +266,18 @@ export async function processSaleAction(
   const cleanName = buyerName?.trim();
   const cleanPhone = buyerPhone?.trim();
 
-  await prisma.order.create({
+  const saleOwnerId = session.role === 'owner' ? session.id : session.ownerId!;
+  const saleStoreId = await getActiveStoreId();
+
+  const newOrder = await prisma.order.create({
     data: {
       total: total,
       paymentMethod,
       buyerName: cleanName || "Walk-in Customer",
       buyerPhone: cleanPhone || null,
-      ownerId: session.role === 'owner' ? session.id : session.ownerId!,
+      ownerId: saleOwnerId,
       staffId: session.id,
+      storeId: saleStoreId,
       items: {
         create: cartItems.map((item: any) => ({
           inventoryId: item.id,
@@ -265,6 +294,23 @@ export async function processSaleAction(
         }))
       }
     }
+  });
+
+  const soldByStaff = session.role !== 'owner'
+    ? await prisma.user.findUnique({ where: { id: session.id }, select: { fullName: true } })
+    : null;
+
+  const naira = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(total);
+
+  await createNotification({
+    ownerId: saleOwnerId,
+    recipientId: null,
+    storeId: saleStoreId,
+    type: "sale_made",
+    message: soldByStaff?.fullName
+      ? `${soldByStaff.fullName} made a sale of ${naira}.`
+      : `A sale of ${naira} was made.`,
+    link: "/owner/dashboard",
   });
 
   for (const item of cartItems) {
@@ -286,6 +332,7 @@ export async function processSaleAction(
       await createNotification({
         ownerId: updated.ownerId,
         recipientId: null,
+        storeId: saleStoreId,
         type: "low_stock",
         message: updated.quantity <= 0
           ? `${updated.name} is now out of stock.`
@@ -296,6 +343,7 @@ export async function processSaleAction(
   }
 
   revalidatePath("/staff/inventory");
+  revalidatePath("/owner/dashboard");
   return { success: true };
 }
 

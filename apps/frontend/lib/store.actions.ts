@@ -3,10 +3,27 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getSessionUser } from "./auth.actions";
+import prisma from "./prisma";
 
 export async function switchStoreAction(storeId: number) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") {
+    throw new Error("Unauthorized");
+  }
+
+  // Critical check: the store being switched to must actually belong to
+  // this owner. Without this, any authenticated user could point their
+  // activeStoreId cookie at a completely different owner's store.
+  const store = await prisma.store.findFirst({
+    where: { id: storeId, ownerId: session.id },
+    select: { id: true },
+  });
+  if (!store) {
+    throw new Error("Store not found or does not belong to you.");
+  }
+
   const cookieStore = await cookies();
-  // Store the active store ID in a secure cookie
   cookieStore.set("activeStoreId", storeId.toString(), {
     path: "/",
     httpOnly: true,
@@ -15,7 +32,11 @@ export async function switchStoreAction(storeId: number) {
     maxAge: 60 * 60 * 24 * 30, // 30 days
   });
 
-  // Redirect to the dashboard which will read this cookie
+  await prisma.user.update({
+    where: { id: session.id },
+    data: { currentStoreId: storeId },
+  });
+
   redirect("/owner/dashboard");
 }
 

@@ -49,15 +49,15 @@ export default async function StaffProfilePage() {
   const statusKey = staff.status.toLowerCase();
 
   return (
-    <div className="min-h-screen bg-[#070b12] text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-900 dark:text-slate-100 flex flex-col">
       <div className="border-b border-white/[0.06] px-5 pb-4 pt-4">
         <div className="max-w-2xl mx-auto w-full">
-          <Link href="/staff/dashboard" className="text-[13px] text-slate-500 hover:text-slate-300 transition-colors">
+          <Link href="/staff/dashboard" className="text-[13px] text-slate-500 hover:text-slate-700 hover:dark:text-slate-300 transition-colors">
             ‹ Back
           </Link>
           <div className="mt-3 flex items-center gap-3">
             <div className="relative shrink-0">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-xl font-bold text-white overflow-hidden">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-xl font-bold text-[var(--text-primary)] overflow-hidden">
                 {staff.image ? (
                   <img src={staff.image} alt={staff.fullName || "Staff"} className="h-full w-full object-cover" />
                 ) : (
@@ -66,9 +66,9 @@ export default async function StaffProfilePage() {
               </div>
             </div>
             <div className="min-w-0">
-              <p className="truncate text-lg font-bold text-white">{staff.fullName}</p>
-              <p className="text-[13px] text-slate-400 capitalize">{staff.role} Account</p>
-              <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusStyles[statusKey] || "bg-slate-500/10 text-slate-400"}`}>
+              <p className="truncate text-lg font-bold text-[var(--text-primary)]">{staff.fullName}</p>
+              <p className="text-[13px] text-slate-600 dark:text-slate-400 capitalize">{staff.role} Account</p>
+              <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusStyles[statusKey] || "bg-slate-500/10 text-slate-600 dark:text-slate-400"}`}>
                 {staff.status}
               </span>
             </div>
@@ -89,7 +89,7 @@ export default async function StaffProfilePage() {
         </div>
       </div>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around border-t border-white/[0.06] bg-[#070b12] px-2 py-2.5">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around border-t border-white/[0.06] bg-[var(--bg-app)] px-2 py-2.5">
         <Link href="/staff/dashboard" className="flex flex-col items-center gap-1">
           <Package size={22} strokeWidth={1.8} className="text-slate-500" />
           <span className="text-[10.5px] text-slate-500">Home</span>
@@ -100,7 +100,7 @@ export default async function StaffProfilePage() {
         </Link>
         <Link href="/staff/inventory" className="flex flex-col items-center gap-1 -mt-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 shadow-lg shadow-blue-500/30">
-            <ShoppingBag size={20} className="text-white" strokeWidth={2} />
+            <ShoppingBag size={20} className="text-[var(--text-primary)]" strokeWidth={2} />
           </div>
           <span className="text-[10.5px] font-semibold text-blue-400">Sell</span>
         </Link>

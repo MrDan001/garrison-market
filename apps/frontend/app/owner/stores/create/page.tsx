@@ -38,17 +38,17 @@ export default function CreateStorePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0C10] text-slate-200">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
       {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-[#0A0C10]/80 backdrop-blur-xl border-b border-slate-800/50 px-4 py-4 flex items-center gap-4">
-        <Link href="/owner/stores" className="text-slate-400 hover:text-white transition-colors">
+      <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 py-4 flex items-center gap-4">
+        <Link href="/owner/stores" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-colors">
           <ArrowLeft size={22} />
         </Link>
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-            <Store size={16} className="text-white" />
+            <Store size={16} className="text-[var(--text-primary)]" />
           </div>
-          <h1 className="text-lg font-bold text-white tracking-tight">Register New Location</h1>
+          <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">Register New Location</h1>
         </div>
       </div>
 
@@ -66,10 +66,10 @@ export default function CreateStorePage() {
           )}
 
           {/* Basic Info */}
-          <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <div className="bg-slate-100/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <Building2 size={14} className="text-blue-400" />
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Store Details</h2>
+              <h2 className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Store Details</h2>
             </div>
 
             <div>
@@ -82,7 +82,7 @@ export default function CreateStorePage() {
                 required
                 disabled={isPending}
                 placeholder="e.g. Garrison Market - Branch 2"
-                className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-600 disabled:opacity-50 transition-colors"
+                className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-600 disabled:opacity-50 transition-colors"
               />
             </div>
 
@@ -95,16 +95,16 @@ export default function CreateStorePage() {
                 type="tel"
                 disabled={isPending}
                 placeholder="e.g. +234..."
-                className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-600 disabled:opacity-50 transition-colors"
+                className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-600 disabled:opacity-50 transition-colors"
               />
             </div>
           </div>
 
           {/* Location */}
-          <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <div className="bg-slate-100/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <MapPin size={14} className="text-emerald-400" />
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Location</h2>
+              <h2 className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Location</h2>
             </div>
 
             <div>
@@ -116,7 +116,7 @@ export default function CreateStorePage() {
                 type="text"
                 disabled={isPending}
                 placeholder="e.g. 12 Aba Road"
-                className="w-full bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-600 disabled:opacity-50 transition-colors"
+                className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-emerald-600 disabled:opacity-50 transition-colors"
               />
             </div>
 
@@ -131,7 +131,7 @@ export default function CreateStorePage() {
                     value={selectedState}
                     onChange={(e) => handleStateChange(e.target.value)}
                     disabled={isPending}
-                    className="w-full appearance-none bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 pr-9 text-sm text-white focus:outline-none focus:border-emerald-600 disabled:opacity-50 transition-colors"
+                    className="w-full appearance-none bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 pr-9 text-sm text-[var(--text-primary)] focus:outline-none focus:border-emerald-600 disabled:opacity-50 transition-colors"
                   >
                     <option value="">Select state...</option>
                     {STATES.map((state) => (
@@ -152,7 +152,7 @@ export default function CreateStorePage() {
                     value={selectedCity}
                     onChange={(e) => setSelectedCity(e.target.value)}
                     disabled={isPending || !selectedState}
-                    className="w-full appearance-none bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 pr-9 text-sm text-white focus:outline-none focus:border-emerald-600 disabled:opacity-40 transition-colors"
+                    className="w-full appearance-none bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 pr-9 text-sm text-[var(--text-primary)] focus:outline-none focus:border-emerald-600 disabled:opacity-40 transition-colors"
                   >
                     <option value="">{selectedState ? "Select LGA..." : "Select state first"}</option>
                     {availableCities.map((city) => (
@@ -166,23 +166,23 @@ export default function CreateStorePage() {
           </div>
 
           {/* What they sell */}
-          <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <div className="bg-slate-100/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <Package size={14} className="text-amber-400" />
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">What This Store Sells</h2>
+              <h2 className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">What This Store Sells</h2>
             </div>
             <textarea
               name="productsSold"
               disabled={isPending}
               placeholder="e.g. Groceries, electronics, phone accessories..."
-              className="w-full h-20 bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-600 disabled:opacity-50 transition-colors resize-none"
+              className="w-full h-20 bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-amber-600 disabled:opacity-50 transition-colors resize-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={isPending}
-            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white py-4 rounded-xl font-bold text-sm mt-2 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-600/10 disabled:opacity-50 active:scale-[0.98]"
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 text-white py-4 rounded-xl font-bold text-sm mt-2 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-600/10 disabled:opacity-50 active:scale-[0.98]"
           >
             <Save size={16} />
             {isPending ? "Creating Outlet..." : "Save Store Outlet"}

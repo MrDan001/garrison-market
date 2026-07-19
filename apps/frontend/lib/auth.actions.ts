@@ -2,10 +2,12 @@
 
 import prisma from "@/lib/prisma";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { signToken, verifyToken } from "@/lib/auth";
+import { sendPasswordResetEmail } from "@/lib/email";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -143,10 +145,96 @@ export async function registerOwnerAction(formData: FormData) {
   }
 }
 
+// --- PASSWORD RESET ---
+
+export async function requestPasswordResetAction(formData: FormData) {
+  const email = (formData.get("email") as string)?.toLowerCase().trim();
+  if (!email) return { error: "Email is required." };
+
+  // Always return a generic success message, whether or not the account
+  // exists — this avoids leaking which emails are registered.
+  const genericSuccess = {
+    success: true,
+    message: "If an account exists for that email, a reset link has been sent.",
+  };
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return genericSuccess;
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: token, resetTokenExpiry: expiry },
+    });
+
+    const headerList = await headers();
+    const host = headerList.get("host");
+    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
+    const resetUrl = `${baseUrl}/reset-password/${token}`;
+
+    const result = await sendPasswordResetEmail(email, resetUrl);
+    if (!result.success) {
+      // Email service failed (e.g. missing API key) — don't block, but log clearly.
+      console.error("Password reset email failed to send for:", email);
+    }
+
+    return genericSuccess;
+  } catch (error) {
+    console.error("Password reset request error:", error);
+    return genericSuccess;
+  }
+}
+
+export async function resetPasswordAction(token: string, formData: FormData) {
+  const newPassword = formData.get("newPassword") as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
+
+  if (!newPassword || newPassword.length < 6) {
+    return { error: "Password must be at least 6 characters long." };
+  }
+  if (newPassword !== confirmPassword) {
+    return { error: "Passwords do not match." };
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { resetToken: token } });
+
+    if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
+      return { error: "This reset link is invalid or has expired. Please request a new one." };
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Password reset error:", error);
+    return { error: "Something went wrong. Please try again." };
+  }
+}
+
 export async function logoutAction() {
   const cookieStore = await cookies();
   cookieStore.delete("session-token");
   await safeRedirect("/login");
+}
+
+export async function sessionTimeoutLogoutAction() {
+  const cookieStore = await cookies();
+  cookieStore.delete("session-token");
+  await safeRedirect("/login?reason=timeout");
 }
 
 // --- STAFF & OWNER ACTIONS ---

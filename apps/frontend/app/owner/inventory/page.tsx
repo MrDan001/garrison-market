@@ -63,7 +63,7 @@ export default async function OwnerInventoryPage() {
   }));
 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0A0C10]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[var(--bg-app)]" />}>
       <InventoryGrid items={serialized} />
     </Suspense>
   );

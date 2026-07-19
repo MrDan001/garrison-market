@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { ThemeAntiFlashScript } from './theme-anti-flash';
+import SessionTimeoutGuard from '@/components/SessionTimeoutGuard';
 import "./styles.css";
 
 export const metadata: Metadata = {
@@ -31,10 +32,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeAntiFlashScript />
       </head>
       <body
-        className="antialiased bg-[#F1EEE3] text-[#16233D] dark:bg-[#0a0c12] dark:text-slate-200 transition-colors duration-200"
+        className="antialiased bg-[var(--bg-app)] text-[var(--text-primary)] transition-colors duration-200"
         suppressHydrationWarning={true}
       >
         {children}
+        <SessionTimeoutGuard />
       </body>
     </html>
   );

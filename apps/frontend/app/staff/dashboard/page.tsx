@@ -18,7 +18,7 @@ export default async function StaffDashboard() {
 
   const staff = await prisma.user.findUnique({
     where: { email: session.email },
-    select: { id: true, fullName: true, role: true, status: true, image: true, ownerId: true, notificationsEnabled: true },
+    select: { id: true, fullName: true, role: true, status: true, image: true, ownerId: true, notificationsEnabled: true, staffStoreId: true },
   });
 
   const userRole = staff?.role?.toLowerCase().trim();
@@ -51,14 +51,20 @@ export default async function StaffDashboard() {
       select: { id: true, total: true, date: true },
     }),
     prisma.report.findMany({
-      where: { ownerId: staff.ownerId ?? undefined },
+      where: {
+        ownerId: staff.ownerId ?? undefined,
+        OR: [{ storeId: staff.staffStoreId }, { storeId: null }],
+      },
       take: 5,
       orderBy: { date: "desc" },
       select: { id: true, notes: true, date: true, author: { select: { fullName: true } } },
     }),
     // OPTIMIZATION: Limits pulled rows to prevent server timeouts on massive inventories
     prisma.inventory.findMany({
-      where: { ownerId: staff.ownerId ?? undefined },
+      where: {
+        ownerId: staff.ownerId ?? undefined,
+        OR: [{ storeId: staff.staffStoreId }, { storeId: null }],
+      },
       select: { id: true, name: true, quantity: true, restockLevel: true, updatedAt: true, createdAt: true },
       orderBy: { updatedAt: "desc" },
       take: 100, 
@@ -118,17 +124,17 @@ export default async function StaffDashboard() {
     .slice(0, 8);
 
   return (
-    <div className="h-screen w-screen bg-[#0A0C10] text-slate-200 flex flex-col overflow-hidden">
-      <header className="sticky top-0 z-50 bg-[#0a0c12]/80 backdrop-blur-xl border-b border-slate-800/50 flex-shrink-0">
+    <div className="h-screen w-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col overflow-hidden">
+      <header className="sticky top-0 z-50 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 flex-shrink-0">
         <div className="max-w-3xl mx-auto px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
-              <Store size={15} className="text-white" />
+              <Store size={15} className="text-[var(--text-primary)]" />
             </div>
             <div className="min-w-0">
               <p className="text-[11px] text-slate-500 leading-none">Staff Portal</p>
               <div className="flex items-center gap-2 mt-0.5">
-                <p className="text-sm font-semibold text-white truncate leading-none">{staff.fullName}</p>
+                <p className="text-sm font-semibold text-[var(--text-primary)] truncate leading-none">{staff.fullName}</p>
                 <span className="relative flex h-1.5 w-1.5 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
@@ -140,7 +146,7 @@ export default async function StaffDashboard() {
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <NotificationBell notificationsEnabled={staff.notificationsEnabled} />
 
-            <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden border border-slate-700">
+            <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-[var(--text-primary)] shrink-0 overflow-hidden border border-slate-300 dark:border-slate-700">
               {staff?.image ? (
                 <img src={staff.image} alt="Profile" className="h-full w-full object-cover" />
               ) : (
@@ -151,7 +157,7 @@ export default async function StaffDashboard() {
             </div>
             <Link
               href="/login"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 transition-all duration-150"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-200 dark:border-slate-800 transition-all duration-150"
             >
               <LogOut size={13} />
               <span className="hidden sm:inline">Sign out</span>
@@ -164,24 +170,24 @@ export default async function StaffDashboard() {
         <div className="max-w-3xl mx-auto w-full">
           <div className="px-5 mb-6">
             <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">{greeting}</p>
-            <h1 className="text-2xl font-bold text-white tracking-tight">{firstName} 👋</h1>
+            <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">{firstName} 👋</h1>
           </div>
 
           <div className="px-5 mb-6">
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+              <div className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingUp size={14} className="text-emerald-400" />
                   <p className="text-[11px] text-slate-500 uppercase tracking-wider">Today's Sales</p>
                 </div>
-                <p className="text-xl font-bold text-white">₦{todaySales.toLocaleString()}</p>
+                <p className="text-xl font-bold text-[var(--text-primary)]">₦{todaySales.toLocaleString()}</p>
               </div>
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+              <div className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Clock size={14} className="text-blue-400" />
                   <p className="text-[11px] text-slate-500 uppercase tracking-wider">Orders Today</p>
                 </div>
-                <p className="text-xl font-bold text-white">{todayOrders}</p>
+                <p className="text-xl font-bold text-[var(--text-primary)]">{todayOrders}</p>
               </div>
             </div>
           </div>
@@ -189,62 +195,62 @@ export default async function StaffDashboard() {
           <div className="px-5 mb-6">
             <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <Link href="/staff/report" className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-800 transition-colors">
+              <Link href="/staff/report" className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
                   <FileText size={18} className="text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white">Daily Report</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Daily Report</p>
                   <p className="text-[11px] text-slate-500">Submit EOD summary</p>
                 </div>
               </Link>
 
-              <Link href="/staff/orders" className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-800 transition-colors">
+              <Link href="/staff/orders" className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center">
                   <History size={18} className="text-indigo-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white">Order History</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Order History</p>
                   <p className="text-[11px] text-slate-500">View past sales</p>
                 </div>
               </Link>
 
-              <Link href="/staff/consignment" className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-800 transition-colors">
+              <Link href="/staff/consignment" className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-purple-500/10 flex items-center justify-center">
                   <Truck size={18} className="text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white">Consignment</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Consignment</p>
                   <p className="text-[11px] text-slate-500">Sign out or settle goods</p>
                 </div>
               </Link>
 
-              <Link href="/staff/inventory" className="hidden sm:flex bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-800 transition-colors">
+              <Link href="/staff/inventory" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
                   <ShoppingBag size={18} className="text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white">Sell</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Sell</p>
                   <p className="text-[11px] text-slate-500">Open the inventory & cart</p>
                 </div>
               </Link>
 
-              <Link href="/staff/invoice" className="hidden sm:flex bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-800 transition-colors">
+              <Link href="/staff/invoice" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-slate-500/10 flex items-center justify-center">
-                  <Package size={18} className="text-slate-400" />
+                  <Package size={18} className="text-slate-600 dark:text-slate-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white">Invoice</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Invoice</p>
                   <p className="text-[11px] text-slate-500">Print or share an invoice</p>
                 </div>
               </Link>
 
-              <Link href="/staff/profile" className="hidden sm:flex bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-800 transition-colors">
+              <Link href="/staff/profile" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
                   <UserCircle size={18} className="text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white">Profile</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Profile</p>
                   <p className="text-[11px] text-slate-500">Account & preferences</p>
                 </div>
               </Link>
@@ -257,8 +263,8 @@ export default async function StaffDashboard() {
               {activityFeed.length > 0 ? (
                 activityFeed.map((item) => <ActivityRow key={item.id} item={item} />)
               ) : (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 text-center">
-                  <ShoppingBag size={28} className="mx-auto mb-2 text-slate-700" />
+                <div className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center">
+                  <ShoppingBag size={28} className="mx-auto mb-2 text-slate-300 dark:text-slate-700" />
                   <p className="text-slate-500 text-sm">No recent activity yet.</p>
                 </div>
               )}
@@ -267,7 +273,7 @@ export default async function StaffDashboard() {
         </div>
       </div>
 
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0d0f18]/95 backdrop-blur-xl border-t border-slate-800/50 px-4 py-2 z-50">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-app)]/95 backdrop-blur-xl border-t border-slate-200/50 dark:border-slate-800/50 px-4 py-2 z-50">
         <div className="flex items-end justify-around max-w-md mx-auto">
           <Link href="/staff/invoice" className="flex flex-col items-center gap-1 py-2 px-3 group">
             <div className="h-6 w-6 flex items-center justify-center">
@@ -284,8 +290,8 @@ export default async function StaffDashboard() {
           </Link>
 
           <Link href="/staff/inventory" className="flex flex-col items-center gap-1 -mt-6">
-            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 active:scale-95 transition-transform border-4 border-[#0d0f18]">
-              <ShoppingBag size={26} className="text-white" />
+            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 active:scale-95 transition-transform border-4 border-[var(--border-subtle)]">
+              <ShoppingBag size={26} className="text-[var(--text-primary)]" />
             </div>
             <span className="text-[10px] text-blue-400 font-bold mt-0.5">SELL</span>
           </Link>
@@ -314,12 +320,12 @@ export default async function StaffDashboard() {
 function ActivityRow({ item }: { item: ActivityItem }) {
   if (item.type === "sale") {
     return (
-      <div className="flex justify-between items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+      <div className="flex justify-between items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3 min-w-0">
           <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
             <ShoppingCart size={14} className="text-emerald-400" />
           </div>
-          <p className="text-sm font-medium text-slate-200 truncate">Sale confirmed</p>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">Sale confirmed</p>
         </div>
         <p className="text-sm font-bold text-emerald-400 shrink-0">₦{item.amount.toLocaleString()}</p>
       </div>
@@ -328,12 +334,12 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
   if (item.type === "report") {
     return (
-      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800 min-w-0">
+      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 min-w-0">
         <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
           <ClipboardList size={14} className="text-amber-400" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-slate-200 truncate">Report submitted</p>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">Report submitted</p>
           <p className="text-[11px] text-slate-500 truncate">by {item.authorName} — {item.snippet}</p>
         </div>
       </div>
@@ -342,12 +348,12 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
   if (item.type === "restock") {
     return (
-      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800 min-w-0">
+      <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 min-w-0">
         <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
           <PackageCheck size={14} className="text-emerald-400" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{item.itemName}</p>
           <p className="text-[11px] text-emerald-400 truncate">Restocked — {item.quantity} in stock</p>
         </div>
       </div>
@@ -355,12 +361,12 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800 min-w-0">
+    <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 min-w-0">
       <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${item.isOutOfStock ? "bg-rose-500/10" : "bg-amber-500/10"}`}>
         <AlertTriangle size={14} className={item.isOutOfStock ? "text-rose-400" : "text-amber-400"} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-slate-200 truncate">{item.itemName}</p>
+        <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{item.itemName}</p>
         <p className={`text-[11px] truncate ${item.isOutOfStock ? "text-rose-400" : "text-amber-400"}`}>
           {item.isOutOfStock ? "Out of stock" : `Low stock — ${item.quantity} left`}
         </p>

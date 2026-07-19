@@ -45,19 +45,19 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
   const dayKeys = Object.keys(groupedData);
 
   return (
-    <div className="min-h-screen bg-[#0A0C10] text-slate-200 p-4 sm:p-6 lg:p-8 pb-24">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 p-4 sm:p-6 lg:p-8 pb-24">
       <div className="max-w-3xl mx-auto">
-        <Link href="/owner/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-white mb-6 lg:mb-8 w-fit text-sm font-semibold">
+        <Link href="/owner/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-[var(--text-primary)] mb-6 lg:mb-8 w-fit text-sm font-semibold">
           <ArrowLeft size={18} /> Back Dashboard
         </Link>
 
-        <h1 className="text-2xl sm:text-3xl font-bold mb-6 lg:mb-8 text-white flex items-center gap-3">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-6 lg:mb-8 text-[var(--text-primary)] flex items-center gap-3">
           <History className="text-blue-500" /> Management Order History
         </h1>
 
         {orders.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-[#1a1d24]/30">
-            <Receipt className="mx-auto mb-3 text-slate-700" size={32} />
+          <div className="p-12 text-center text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-[var(--bg-surface)]/30">
+            <Receipt className="mx-auto mb-3 text-slate-300 dark:text-slate-700" size={32} />
             No business sales recorded yet.
           </div>
         ) : (
@@ -68,7 +68,7 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
               return (
                 <div key={day}>
                   {/* Daily Section Heading Summary Block */}
-                  <div className="flex items-end justify-between mb-3 px-1 border-b border-slate-800/40 pb-2">
+                  <div className="flex items-end justify-between mb-3 px-1 border-b border-slate-200/40 dark:border-slate-800/40 pb-2">
                     <div>
                       <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{day}</h2>
                     </div>
@@ -95,15 +95,15 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
                       return (
                         <div
                           key={order.id}
-                          className="bg-[#1a1d24] border border-slate-800/80 rounded-2xl overflow-hidden transition-all hover:border-slate-700"
+                          className="bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl overflow-hidden transition-all hover:border-slate-300 hover:dark:border-slate-700"
                         >
                           <button
                             onClick={() => toggleExpand(order.id)}
-                            className="w-full p-4 flex items-center justify-between gap-3 hover:bg-slate-800/20 transition-colors text-left"
+                            className="w-full p-4 flex items-center justify-between gap-3 hover:bg-slate-200/20 hover:dark:bg-slate-800/20 transition-colors text-left"
                           >
                             <div className="min-w-0 flex-1 flex items-center justify-between pr-2">
                               <div>
-                                <p className="font-bold text-white text-base">
+                                <p className="font-bold text-[var(--text-primary)] text-base">
                                   ₦{Number(order.total || 0).toLocaleString()}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-0.5">
@@ -119,23 +119,23 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
                               </div>
                             </div>
                             {isExpanded ? (
-                              <ChevronUp size={16} className="text-slate-400 shrink-0" />
+                              <ChevronUp size={16} className="text-slate-600 dark:text-slate-400 shrink-0" />
                             ) : (
-                              <ChevronDown size={16} className="text-slate-400 shrink-0" />
+                              <ChevronDown size={16} className="text-slate-600 dark:text-slate-400 shrink-0" />
                             )}
                           </button>
 
                           {/* Expanded item breakdown drawer */}
                           {isExpanded && (
-                            <div className="border-t border-slate-800/60 p-4 bg-[#0A0C10]/60 space-y-2.5">
+                            <div className="border-t border-slate-200/60 dark:border-slate-800/60 p-4 bg-[var(--bg-app)]/60 space-y-2.5">
                               {(order.items || []).map((item: any, idx: number) => {
                                 const currentCost = item.costPriceAtTime ?? item.inventory?.costPrice ?? 0;
                                 const currentMargin = Number(item.priceAtTime) - Number(currentCost);
                                 
                                 return (
-                                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs border-b border-slate-900 pb-2 last:border-0 last:pb-0">
+                                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs border-b border-slate-100 dark:border-slate-900 pb-2 last:border-0 last:pb-0">
                                     <div className="min-w-0">
-                                      <span className="font-medium text-slate-300 block truncate">
+                                      <span className="font-medium text-slate-700 dark:text-slate-300 block truncate">
                                         {item.inventory?.name || "Deleted Item"}
                                       </span>
                                       <span className="text-[10px] text-slate-500">
@@ -143,7 +143,7 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
                                       </span>
                                     </div>
                                     <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center text-[11px] font-semibold shrink-0">
-                                      <span className="text-slate-400">
+                                      <span className="text-slate-600 dark:text-slate-400">
                                         Total: ₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}
                                       </span>
                                       <span className={currentMargin >= 0 ? "text-emerald-500/90 text-[10px]" : "text-rose-500/90 text-[10px]"}>

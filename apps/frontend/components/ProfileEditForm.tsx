@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
+import { compressImage } from "@/lib/image-compress";
 import { ArrowLeft, Camera } from "lucide-react";
 import { updateProfileWithPhoto } from "@/lib/profile.actions";
 
@@ -40,8 +41,10 @@ export default function ProfileEditForm({ initialFullName, initialPhone, initial
 
     try {
       if (selectedFile) {
+        setStatus("Optimizing photo...");
+        const compressed = await compressImage(selectedFile, { maxDimension: 800, quality: 0.82 });
         setStatus("Uploading photo...");
-        const blob = await upload(selectedFile.name, selectedFile, {
+        const blob = await upload(compressed.name, compressed, {
           access: "public",
           handleUploadUrl: "/api/blob/upload",
         });
@@ -65,9 +68,9 @@ export default function ProfileEditForm({ initialFullName, initialPhone, initial
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0a0c12] text-slate-200 flex flex-col">
-      <header className="flex items-center gap-4 p-4 border-b border-slate-800">
-        <a href="/owner/profile" className="p-2 -ml-2 hover:bg-slate-800 rounded-full">
+    <div className="fixed inset-0 bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col">
+      <header className="flex items-center gap-4 p-4 border-b border-slate-200 dark:border-slate-800">
+        <a href="/owner/profile" className="p-2 -ml-2 hover:bg-slate-200 hover:dark:bg-slate-800 rounded-full">
           <ArrowLeft size={20} />
         </a>
         <h1 className="text-lg font-bold">Update Profile</h1>
@@ -77,15 +80,15 @@ export default function ProfileEditForm({ initialFullName, initialPhone, initial
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
           <div className="flex justify-center py-4">
             <label className="relative cursor-pointer group">
-              <div className="h-24 w-24 rounded-full bg-slate-800 flex items-center justify-center font-bold text-3xl overflow-hidden border-2 border-slate-700">
+              <div className="h-24 w-24 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center font-bold text-3xl overflow-hidden border-2 border-slate-300 dark:border-slate-700">
                 {imagePreview ? (
                   <img src={imagePreview} alt="Profile" className="h-full w-full object-cover" />
                 ) : (
                   initialFullName?.charAt(0).toUpperCase()
                 )}
               </div>
-              <div className="absolute bottom-0 right-0 h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center border-2 border-[#0a0c12]">
-                <Camera size={14} className="text-white" />
+              <div className="absolute bottom-0 right-0 h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center border-2 border-[var(--border-subtle)]">
+                <Camera size={14} className="text-[var(--text-primary)]" />
               </div>
               <input type="file" name="image" accept="image/*" onChange={handleFileChange} className="hidden" />
             </label>
@@ -100,7 +103,7 @@ export default function ProfileEditForm({ initialFullName, initialPhone, initial
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-blue-600 disabled:bg-slate-700 disabled:cursor-not-allowed p-4 rounded-2xl font-bold mt-6 hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20"
+            className="w-full bg-blue-600 disabled:bg-slate-300 disabled:dark:bg-slate-700 disabled:cursor-not-allowed p-4 rounded-2xl font-bold mt-6 hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20"
           >
             {isSubmitting ? status || "Saving..." : "Save Changes"}
           </button>
@@ -118,7 +121,7 @@ function InputField({ label, name, defaultValue, disabled }: any) {
         name={name}
         defaultValue={defaultValue}
         disabled={disabled}
-        className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl mt-1 text-sm focus:border-blue-500 outline-none transition-all disabled:opacity-50"
+        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4 rounded-xl mt-1 text-sm focus:border-blue-500 outline-none transition-all disabled:opacity-50"
       />
     </div>
   );

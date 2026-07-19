@@ -60,10 +60,10 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0f1117] text-white p-4">
-      <div className="max-w-md w-full p-6 sm:p-8 bg-[#161922] rounded-3xl border border-slate-800 shadow-xl">
-        <h1 className="text-xl font-bold mb-1 tracking-tight text-white">Update Password</h1>
-        <p className="text-slate-400 text-xs mb-6">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-app)] text-[var(--text-primary)] p-4">
+      <div className="max-w-md w-full p-6 sm:p-8 bg-[var(--bg-surface)] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl">
+        <h1 className="text-xl font-bold mb-1 tracking-tight text-[var(--text-primary)]">Update Password</h1>
+        <p className="text-slate-600 dark:text-slate-400 text-xs mb-6">
           For security, please verify your identity and set a strong new password.
         </p>
 
@@ -83,7 +83,7 @@ export default function ChangePasswordPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Old Password Input */}
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
               Current Password
             </label>
             <div className="relative">
@@ -94,23 +94,23 @@ export default function ChangePasswordPage() {
                 value={oldPassword}
                 onChange={(e) => setOldPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[#0f1117] border border-slate-800 rounded-xl py-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 pl-10 pr-10 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
               />
               <button
                 type="button"
                 onClick={() => setShowOld(!showOld)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 hover:dark:text-slate-300 transition-colors"
               >
                 {showOld ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
 
-          <hr className="border-slate-800/60 my-2" />
+          <hr className="border-slate-200/60 dark:border-slate-800/60 my-2" />
 
           {/* New Password Input */}
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
               New Password
             </label>
             <div className="relative">
@@ -121,12 +121,12 @@ export default function ChangePasswordPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[#0f1117] border border-slate-800 rounded-xl py-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 pl-10 pr-10 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
               />
               <button
                 type="button"
                 onClick={() => setShowNew(!showNew)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 hover:dark:text-slate-300 transition-colors"
               >
                 {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -135,7 +135,7 @@ export default function ChangePasswordPage() {
 
           {/* Confirm Password Input */}
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
               Confirm New Password
             </label>
             <div className="relative">
@@ -146,12 +146,12 @@ export default function ChangePasswordPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[#0f1117] border border-slate-800 rounded-xl py-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 pl-10 pr-10 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 hover:dark:text-slate-300 transition-colors"
               >
                 {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -162,7 +162,7 @@ export default function ChangePasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 mt-6 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:text-slate-400 text-white font-semibold text-sm py-2.5 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed shadow-lg shadow-blue-600/10"
+            className="w-full flex items-center justify-center gap-2 mt-6 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:text-slate-600 disabled:dark:text-slate-400 text-white font-semibold text-sm py-2.5 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed shadow-lg shadow-blue-600/10"
           >
             {loading ? (
               <>

@@ -27,19 +27,19 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
   const dayKeys = Object.keys(grouped);
 
   return (
-    <div className="min-h-screen bg-[#0f1117] text-slate-200 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 p-4 sm:p-6 lg:p-8">
       <div className="max-w-3xl mx-auto">
-        <Link href="/staff/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-white mb-6 lg:mb-8 w-fit">
+        <Link href="/staff/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-[var(--text-primary)] mb-6 lg:mb-8 w-fit">
           <ArrowLeft size={20} /> Back
         </Link>
 
-        <h1 className="text-2xl sm:text-3xl font-bold mb-6 lg:mb-8 text-white flex items-center gap-3">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-6 lg:mb-8 text-[var(--text-primary)] flex items-center gap-3">
           <History className="text-indigo-500" /> Order History
         </h1>
 
         {orders.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl">
-            <Receipt className="mx-auto mb-3 text-slate-700" size={32} />
+          <div className="p-12 text-center text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+            <Receipt className="mx-auto mb-3 text-slate-300 dark:text-slate-700" size={32} />
             No sales recorded yet.
           </div>
         ) : (
@@ -65,14 +65,14 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                       return (
                         <div
                           key={order.id}
-                          className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden"
+                          className="bg-slate-100/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden"
                         >
                           <button
                             onClick={() => toggleExpand(order.id)}
-                            className="w-full p-4 flex items-center justify-between gap-3 hover:bg-slate-800/30 active:scale-[0.99] transition-all text-left"
+                            className="w-full p-4 flex items-center justify-between gap-3 hover:bg-slate-200/30 hover:dark:bg-slate-800/30 active:scale-[0.99] transition-all text-left"
                           >
                             <div className="min-w-0 flex-1">
-                              <p className="font-semibold text-white">
+                              <p className="font-semibold text-[var(--text-primary)]">
                                 ₦{Number(order.total).toLocaleString()}
                               </p>
                               <p className="text-xs text-slate-500 mt-0.5">
@@ -88,13 +88,13 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                           </button>
 
                           {isExpanded && (
-                            <div className="border-t border-slate-800 p-4 bg-[#0a0c10] space-y-2">
+                            <div className="border-t border-slate-200 dark:border-slate-800 p-4 bg-[var(--bg-app)] space-y-2">
                               {order.items.map((item: any, idx: number) => (
                                 <div key={idx} className="flex justify-between text-sm">
-                                  <span className="text-slate-300 truncate pr-2">
+                                  <span className="text-slate-700 dark:text-slate-300 truncate pr-2">
                                     {item.inventory?.name || "Unknown item"} × {item.quantity}
                                   </span>
-                                  <span className="text-slate-400 shrink-0">
+                                  <span className="text-slate-600 dark:text-slate-400 shrink-0">
                                     ₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}
                                   </span>
                                 </div>

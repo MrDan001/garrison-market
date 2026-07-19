@@ -101,21 +101,21 @@ export default async function PendingPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0f1117] px-4 font-sans text-slate-200">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-app)] px-4 font-sans text-slate-800 dark:text-slate-200">
       <div className="fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
         <div className={`absolute top-[10%] left-[20%] h-[500px] w-[500px] rounded-full blur-[150px] transition-colors duration-1000 ${isDeclined ? 'bg-red-900/10' : isSuspended ? 'bg-rose-900/10' : 'bg-amber-900/10'}`} />
       </div>
 
-      <div className="w-full max-w-[420px] rounded-[2.5rem] border border-slate-800 bg-slate-900/30 backdrop-blur-3xl shadow-2xl p-10 text-center">
+      <div className="w-full max-w-[420px] rounded-[2.5rem] border border-slate-200 dark:border-slate-800 bg-slate-100/30 dark:bg-slate-900/30 backdrop-blur-3xl shadow-2xl p-10 text-center">
         <div className={`mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-[2rem] shadow-inner ${isDeclined ? 'bg-red-950/30 text-red-500' : isSuspended ? 'bg-rose-950/30 text-rose-500' : 'bg-amber-950/30 text-amber-500'}`}>
           {isDeclined || isSuspended ? <AlertCircle size={44} strokeWidth={1.5} /> : <Clock size={44} strokeWidth={1.5} className="animate-pulse" />}
         </div>
         
-        <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">{content.title}</h1>
+        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-3 tracking-tight">{content.title}</h1>
         
-        <p className="text-slate-400 text-sm mb-8 leading-relaxed max-w-[300px] mx-auto">{content.text}</p>
+        <p className="text-slate-600 dark:text-slate-400 text-sm mb-8 leading-relaxed max-w-[300px] mx-auto">{content.text}</p>
 
-        <div className="flex items-center justify-center gap-3 py-3 px-6 mb-8 bg-slate-950/50 rounded-full border border-slate-800">
+        <div className="flex items-center justify-center gap-3 py-3 px-6 mb-8 bg-slate-50/50 dark:bg-slate-950/50 rounded-full border border-slate-200 dark:border-slate-800">
   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Status</span>
   
   <div className="flex items-center gap-2">
@@ -133,12 +133,12 @@ export default async function PendingPage() {
 
         <div className="flex flex-col gap-3">
           <form action={refreshStatus}>
-            <button className="w-full flex items-center justify-center gap-2 py-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] border border-slate-700/50 text-white font-semibold rounded-2xl transition-all">
-              <RefreshCw size={18} className="text-slate-400" /> Check Status
+            <button className="w-full flex items-center justify-center gap-2 py-4 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 active:scale-[0.98] border border-slate-300/50 dark:border-slate-700/50 text-[var(--text-primary)] font-semibold rounded-2xl transition-all">
+              <RefreshCw size={18} className="text-slate-600 dark:text-slate-400" /> Check Status
             </button>
           </form>
 
-          <a href="/login" className="w-full flex items-center justify-center gap-2 py-4 bg-transparent hover:bg-slate-800/40 border border-transparent text-slate-400 hover:text-white font-semibold rounded-2xl transition-all">
+          <a href="/login" className="w-full flex items-center justify-center gap-2 py-4 bg-transparent hover:bg-slate-200/40 hover:dark:bg-slate-800/40 border border-transparent text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] font-semibold rounded-2xl transition-all">
             <LogIn size={18} /> Back to Login
           </a>
         </div>

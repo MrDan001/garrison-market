@@ -71,15 +71,15 @@ export default function StaffDetailClient({
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0C10] text-slate-200 p-4 sm:p-8">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 p-4 sm:p-8">
       <div className="max-w-2xl mx-auto space-y-6">
-        <Link href="/owner/staff" className="flex items-center gap-2 text-slate-500 hover:text-white w-fit transition-colors text-sm">
+        <Link href="/owner/staff" className="flex items-center gap-2 text-slate-500 hover:text-[var(--text-primary)] w-fit transition-colors text-sm">
           <ArrowLeft size={16} /> Back to Staff
         </Link>
 
         {/* Header card */}
-        <div className="bg-[#161821] border border-slate-800 rounded-2xl p-6 flex items-center gap-4">
-          <div className="h-16 w-16 rounded-full bg-slate-800 flex items-center justify-center text-xl font-bold text-white overflow-hidden border-2 border-slate-700 shrink-0">
+        <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex items-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xl font-bold text-[var(--text-primary)] overflow-hidden border-2 border-slate-300 dark:border-slate-700 shrink-0">
             {staff.image ? (
               <img src={staff.image} alt={staff.fullName || "Staff"} className="h-full w-full object-cover" />
             ) : (
@@ -87,7 +87,7 @@ export default function StaffDetailClient({
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold text-white truncate">{staff.fullName || "Unnamed Staff"}</h1>
+            <h1 className="text-lg font-bold text-[var(--text-primary)] truncate">{staff.fullName || "Unnamed Staff"}</h1>
             <p className="text-sm text-slate-500 truncate">{staff.email}</p>
             <span
               className={`inline-block mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
@@ -103,41 +103,41 @@ export default function StaffDetailClient({
 
         {/* This month stats */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-[#161821] border border-slate-800 rounded-2xl p-4">
+          <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-1.5">
               <TrendingUp size={13} className="text-emerald-400" />
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Sales This Month</p>
             </div>
-            <p className="text-lg font-bold text-white">₦{monthSales.toLocaleString()}</p>
+            <p className="text-lg font-bold text-[var(--text-primary)]">₦{monthSales.toLocaleString()}</p>
           </div>
-          <div className="bg-[#161821] border border-slate-800 rounded-2xl p-4">
+          <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-1.5">
               <ShieldCheck size={13} className="text-blue-400" />
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Orders This Month</p>
             </div>
-            <p className="text-lg font-bold text-white">{monthOrders}</p>
+            <p className="text-lg font-bold text-[var(--text-primary)]">{monthOrders}</p>
           </div>
         </div>
 
         {/* Contact info */}
-        <div className="bg-[#161821] border border-slate-800 rounded-2xl p-6 space-y-3">
+        <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-3">
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Contact</h2>
           <div className="flex items-center gap-3 text-sm">
-            <Mail size={15} className="text-slate-600 shrink-0" />
-            <span className="text-slate-300">{staff.email}</span>
+            <Mail size={15} className="text-slate-400 dark:text-slate-600 shrink-0" />
+            <span className="text-slate-700 dark:text-slate-300">{staff.email}</span>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <Phone size={15} className="text-slate-600 shrink-0" />
-            <span className="text-slate-300">{staff.phoneNumber || "Not provided"}</span>
+            <Phone size={15} className="text-slate-400 dark:text-slate-600 shrink-0" />
+            <span className="text-slate-700 dark:text-slate-300">{staff.phoneNumber || "Not provided"}</span>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <Calendar size={15} className="text-slate-600 shrink-0" />
-            <span className="text-slate-300">Joined {new Date(staff.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</span>
+            <Calendar size={15} className="text-slate-400 dark:text-slate-600 shrink-0" />
+            <span className="text-slate-700 dark:text-slate-300">Joined {new Date(staff.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</span>
           </div>
         </div>
 
         {/* Store assignment */}
-        <div className="bg-[#161821] border border-slate-800 rounded-2xl p-6 space-y-3">
+        <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-3">
           <div className="flex items-center gap-2 mb-1">
             <Store size={14} className="text-blue-400" />
             <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Store Assignment</h2>
@@ -154,7 +154,7 @@ export default function StaffDetailClient({
               value={selectedStore}
               onChange={(e) => handleStoreChange(Number(e.target.value))}
               disabled={isPending}
-              className="w-full appearance-none bg-[#1a1d24] border border-slate-800 rounded-xl px-4 py-3 pr-9 text-sm text-white focus:outline-none focus:border-blue-600 disabled:opacity-50 transition-colors"
+              className="w-full appearance-none bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 pr-9 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600 disabled:opacity-50 transition-colors"
             >
               <option value="" disabled>Select a store...</option>
               {stores.map((store) => (
@@ -171,7 +171,7 @@ export default function StaffDetailClient({
         </div>
 
         {/* Actions */}
-        <div className="bg-[#161821] border border-slate-800 rounded-2xl p-6 space-y-3">
+        <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-3">
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Actions</h2>
           <div className="flex flex-col sm:flex-row gap-3">
             <button

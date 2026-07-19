@@ -71,13 +71,13 @@ export default function AdminSupportClient({
     };
 
     return (
-      <div className="h-screen bg-[#0A0C12] text-slate-200 flex flex-col">
-        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-800 shrink-0">
-          <button onClick={() => setActive(null)} className="h-8 w-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center">
+      <div className="h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col">
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 shrink-0">
+          <button onClick={() => setActive(null)} className="h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 flex items-center justify-center">
             <ArrowLeft size={16} />
           </button>
           <div>
-            <h1 className="text-sm font-bold text-white">
+            <h1 className="text-sm font-bold text-[var(--text-primary)]">
               {isOwner ? info?.storeName || info?.fullName : info?.fullName}
             </h1>
             <p className="text-[11px] text-slate-500">
@@ -115,31 +115,31 @@ export default function AdminSupportClient({
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0C12] text-slate-200">
-      <div className="sticky top-0 z-10 bg-[#11131A] border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center gap-3">
-        <Link href="/admin/dashboard" className="h-8 w-8 rounded-lg bg-[#161a29] hover:bg-slate-800 flex items-center justify-center transition-colors">
+    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
+      <div className="sticky top-0 z-10 bg-[var(--bg-surface)] border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3 flex items-center gap-3">
+        <Link href="/admin/dashboard" className="h-8 w-8 rounded-lg bg-[var(--bg-surface)] hover:bg-slate-200 hover:dark:bg-slate-800 flex items-center justify-center transition-colors">
           <ArrowLeft size={16} />
         </Link>
-        <h1 className="text-sm font-bold text-white">Support Inbox</h1>
+        <h1 className="text-sm font-bold text-[var(--text-primary)]">Support Inbox</h1>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 space-y-6">
         <div className="space-y-2">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Store Owners</p>
           {ownerThreads.length === 0 ? (
-            <p className="text-xs text-slate-600 px-1">No owner conversations yet.</p>
+            <p className="text-xs text-slate-400 dark:text-slate-600 px-1">No owner conversations yet.</p>
           ) : (
             ownerThreads.map(({ owner, lastMessage, unreadCount }) => (
               <button
                 key={owner.id}
                 onClick={() => openOwnerThread(owner.id)}
-                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-[#11131A] border border-slate-800 hover:border-slate-700 transition-colors"
+                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 hover:border-slate-300 hover:dark:border-slate-700 transition-colors"
               >
-                <div className="h-11 w-11 rounded-xl bg-slate-800 flex items-center justify-center text-sm font-bold text-blue-400 shrink-0 overflow-hidden">
+                <div className="h-11 w-11 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-sm font-bold text-blue-400 shrink-0 overflow-hidden">
                   {owner.image ? <img src={owner.image} alt="" className="h-full w-full object-cover" /> : owner.fullName?.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 text-left min-w-0">
-                  <p className="text-sm font-semibold text-white">{owner.storeName || owner.fullName}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{owner.storeName || owner.fullName}</p>
                   <p className="text-xs text-slate-500 truncate">{lastMessage?.content}</p>
                 </div>
                 {unreadCount > 0 && (
@@ -155,19 +155,19 @@ export default function AdminSupportClient({
         <div className="space-y-2">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">Staff (Direct)</p>
           {staffThreads.length === 0 ? (
-            <p className="text-xs text-slate-600 px-1">No direct staff messages yet.</p>
+            <p className="text-xs text-slate-400 dark:text-slate-600 px-1">No direct staff messages yet.</p>
           ) : (
             staffThreads.map(({ staff, lastMessage, unreadCount }) => (
               <button
                 key={staff.id}
                 onClick={() => openStaffThread(staff.id)}
-                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-[#11131A] border border-slate-800 hover:border-slate-700 transition-colors"
+                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 hover:border-slate-300 hover:dark:border-slate-700 transition-colors"
               >
-                <div className="h-11 w-11 rounded-xl bg-slate-800 flex items-center justify-center text-sm font-bold text-purple-400 shrink-0 overflow-hidden">
+                <div className="h-11 w-11 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-sm font-bold text-purple-400 shrink-0 overflow-hidden">
                   {staff.image ? <img src={staff.image} alt="" className="h-full w-full object-cover" /> : staff.fullName?.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 text-left min-w-0">
-                  <p className="text-sm font-semibold text-white">{staff.fullName}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{staff.fullName}</p>
                   <p className="text-xs text-slate-500 truncate">{lastMessage?.content}</p>
                 </div>
                 {unreadCount > 0 && (

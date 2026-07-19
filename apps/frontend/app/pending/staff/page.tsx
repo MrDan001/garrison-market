@@ -17,7 +17,7 @@ export default async function StaffPendingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0C10] flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-[var(--bg-app)] flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm flex flex-col items-center text-center">
         
         {/* Top Icon Circle Accent */}
@@ -26,12 +26,12 @@ export default async function StaffPendingPage() {
         </div>
 
         {/* Heading */}
-        <h1 className="text-4xl font-bold text-white tracking-tight mb-4">
+        <h1 className="text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4">
           Account Suspended
         </h1>
         
         {/* Main Content Description */}
-        <div className="text-slate-400 text-sm max-w-xs leading-relaxed mb-8">
+        <div className="text-slate-600 dark:text-slate-400 text-sm max-w-xs leading-relaxed mb-8">
           Your access has been restricted. Please contact your store Owner at 
           <a href="mailto:support@garrison.com" className="text-rose-500 hover:underline font-semibold ml-1">
             support@garrison.com
@@ -41,7 +41,7 @@ export default async function StaffPendingPage() {
 
         {/* Status Badge Pill */}
         <div className="flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-semibold tracking-wider uppercase mb-12 bg-rose-950/40 border-rose-900/30 text-rose-400">
-          <span className="text-[10px] opacity-50 text-white tracking-widest font-medium">STATUS</span>
+          <span className="text-[10px] opacity-50 text-[var(--text-primary)] tracking-widest font-medium">STATUS</span>
           <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
           <span>SUSPENDED</span>
         </div>
@@ -50,7 +50,7 @@ export default async function StaffPendingPage() {
         <div className="w-full space-y-3 px-4">
           <Link 
             href="/pending/staff"
-            className="w-full flex items-center justify-center py-3.5 px-6 rounded-xl bg-slate-900/80 border border-slate-800 hover:bg-slate-800/60 text-white font-medium text-sm transition-all"
+            className="w-full flex items-center justify-center py-3.5 px-6 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 hover:bg-slate-200/60 hover:dark:bg-slate-800/60 text-[var(--text-primary)] font-medium text-sm transition-all"
           >
             Check Status
           </Link>
@@ -58,7 +58,7 @@ export default async function StaffPendingPage() {
           <form action={logoutAction} className="w-full">
             <button 
               type="submit" 
-              className="w-full py-2 px-6 text-slate-500 hover:text-slate-400 text-sm font-medium transition-colors"
+              className="w-full py-2 px-6 text-slate-500 hover:text-slate-600 hover:dark:text-slate-400 text-sm font-medium transition-colors"
             >
               Back to Login
             </button>
