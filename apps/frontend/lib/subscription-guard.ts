@@ -6,6 +6,29 @@
 import prisma from "@/lib/prisma";
 import { getPlanConfig, type PlanId } from "@/lib/plans";
 
+/**
+ * The plan to use for feature/limit checks is NOT always the same as the
+ * plan stored on the account. While an owner is on an active (non-expired)
+ * trial, they get full Premium access regardless of what `plan` says —
+ * trial means "everything unlocked", so a new signup isn't quietly capped
+ * at Basic limits before they've even had a chance to pick a plan. Once the
+ * trial ends, this collapses back to whatever they've actually paid for
+ * (defaulting to Basic if nothing was purchased).
+ */
+export function resolveEffectivePlanId(account: {
+  plan: string | null;
+  subscriptionStatus: string | null;
+  trialEndsAt: Date | null;
+}): PlanId {
+  const isActiveTrial =
+    account.subscriptionStatus === "trialing" &&
+    !!account.trialEndsAt &&
+    account.trialEndsAt > new Date();
+
+  if (isActiveTrial) return "premium";
+  return (account.plan as PlanId) || "basic";
+}
+
 export interface BillingStatus {
   plan: PlanId;
   subscriptionStatus: string; // "trialing" | "active" | "expired" | "cancelled"
@@ -112,6 +135,9 @@ export async function getBillingStatus(idParam: number): Promise<BillingStatus> 
       isLocked = true;
     } else {
       trialDaysLeft = Math.ceil((account.trialEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      // Active trial: everything unlocked, same as Premium, regardless of
+      // whichever plan is stored on the account.
+      plan = "premium";
     }
   } else if (currentStatus === "active") {
     if (currentPeriodEnd && currentPeriodEnd < now) {
@@ -164,15 +190,19 @@ export async function checkPlanLimit(
   
   const user = await prisma.user.findUnique({ 
     where: { id: idParam }, 
-    select: { role: true, ownerId: true, plan: true } 
+    select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true } 
   });
   
   if (user && user.role === "staff" && user.ownerId) {
     resolvedOwnerId = user.ownerId;
   }
 
-  const owner = resolvedOwnerId === idParam ? user : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true } });
-  const plan = getPlanConfig(owner?.plan);
+  const owner = resolvedOwnerId === idParam
+    ? user
+    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true } });
+  const plan = getPlanConfig(
+    owner ? resolveEffectivePlanId(owner) : undefined
+  );
 
   if (kind === "stores") {
     const count = await prisma.store.count({ where: { ownerId: resolvedOwnerId } });
@@ -206,14 +236,16 @@ export async function assertFeatureAllowed(
   feature: "businessSummaryChart" | "consignment"
 ): Promise<void> {
   let resolvedOwnerId = idParam;
-  const user = await prisma.user.findUnique({ where: { id: idParam }, select: { role: true, ownerId: true, plan: true } });
+  const user = await prisma.user.findUnique({ where: { id: idParam }, select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true } });
   
   if (user && user.role === "staff" && user.ownerId) {
     resolvedOwnerId = user.ownerId;
   }
 
-  const owner = resolvedOwnerId === idParam ? user : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true } });
-  const plan = getPlanConfig(owner?.plan);
+  const owner = resolvedOwnerId === idParam
+    ? user
+    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true } });
+  const plan = getPlanConfig(owner ? resolveEffectivePlanId(owner) : undefined);
   
   if (!plan[feature]) {
     throw new Error(

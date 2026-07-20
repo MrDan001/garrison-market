@@ -7,7 +7,7 @@ import { getBillingStatus } from "@/lib/subscription-guard";
 import { TrialBanner, PremiumFeatureLock } from "@/components/TrialBanner";
 import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
-import { cookies } from "next/headers";
+import { getActiveStoreId } from "@/lib/store-context";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -47,12 +47,13 @@ export default async function OwnerDashboardPage() {
 
     const billingStatus = await getBillingStatus(user.id);
 
-    // 2. Safely read the active store cookie
-    const cookieStore = await cookies();
-    const activeStoreCookie = cookieStore.get("activeStoreId")?.value;
-    const activeStoreId = activeStoreCookie ? parseInt(activeStoreCookie, 10) : null;
+    // 2. Resolve the active store the same way /owner/stores does — falls
+    // back to the owner's oldest store when no "activeStoreId" cookie has
+    // been set yet (e.g. a brand-new account that's never switched stores),
+    // instead of bouncing them back to /owner/stores for having no cookie.
+    const activeStoreId = await getActiveStoreId();
 
-    if (!activeStoreId || isNaN(activeStoreId)) {
+    if (!activeStoreId) {
       redirect("/owner/stores");
     }
 

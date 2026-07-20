@@ -31,6 +31,7 @@ export default async function MorePage() {
       notificationsEnabled: true,
       discountEnabled: true,
       consignmentEnabled: true,
+      screenshotProtectionEnabled: true,
       // 👇 The real, stored referral token — generated once at registration
       // and guaranteed unique. Do NOT recompute this from the store name;
       // the store name can be renamed later and would drift out of sync
@@ -287,6 +288,7 @@ export default async function MorePage() {
               notificationsEnabled={user.notificationsEnabled}
               discountEnabled={user.discountEnabled}
               consignmentEnabled={user.consignmentEnabled}
+              screenshotProtectionEnabled={user.screenshotProtectionEnabled}
             />
           </div>
         </div>

@@ -63,3 +63,34 @@ export async function updateNotificationPreference(enabled: boolean) {
   revalidatePath("/owner/profile");
   return { success: true };
 }
+
+export async function updateScreenshotProtectionPreference(enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session?.email) throw new Error("Unauthorized");
+
+  await prisma.user.update({
+    where: { email: session.email },
+    data: { screenshotProtectionEnabled: enabled },
+  });
+
+  revalidatePath("/staff/profile");
+  revalidatePath("/owner/profile");
+  return { success: true };
+}
+
+/**
+ * Lightweight read used by ScreenshotGuard (mounted globally) to decide
+ * whether to arm the deterrents for the current user, without needing to
+ * fetch the whole profile.
+ */
+export async function getScreenshotProtectionEnabled(): Promise<boolean> {
+  const session = await getSessionUser();
+  if (!session?.email) return false;
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.email },
+    select: { screenshotProtectionEnabled: true },
+  });
+
+  return user?.screenshotProtectionEnabled ?? false;
+}

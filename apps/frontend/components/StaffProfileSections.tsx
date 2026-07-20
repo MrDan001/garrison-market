@@ -17,10 +17,11 @@ import {
   Info,
   LogOut,
   Truck,
+  ShieldOff,
 } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/auth.actions";
-import { updateNotificationPreference } from "@/lib/profile.actions";
+import { updateNotificationPreference, updateScreenshotProtectionPreference } from "@/lib/profile.actions";
 import { APP_VERSION } from "@/lib/version";
 import { InstallAppCard, PushNotificationCard } from "@/components/SettingsExtras";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -32,6 +33,7 @@ interface Props {
   monthSales: number;
   monthOrders: number;
   notificationsEnabled: boolean;
+  screenshotProtectionEnabled: boolean;
 }
 
 interface RowData {
@@ -139,10 +141,13 @@ export default function StaffProfileSections({
   monthSales,
   monthOrders,
   notificationsEnabled,
+  screenshotProtectionEnabled,
 }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({ account: true });
   const [notifOn, setNotifOn] = useState(notificationsEnabled);
   const [savingNotif, setSavingNotif] = useState(false);
+  const [screenshotProtectionOn, setScreenshotProtectionOn] = useState(screenshotProtectionEnabled);
+  const [savingScreenshotProtection, setSavingScreenshotProtection] = useState(false);
 
   const toggleSection = (id: string) => setOpen((prev) => ({ ...prev, [id]: !prev[id] }));
 
@@ -157,6 +162,20 @@ export default function StaffProfileSections({
       setNotifOn(!next); // revert on failure
     } finally {
       setSavingNotif(false);
+    }
+  };
+
+  const toggleScreenshotProtection = async () => {
+    const next = !screenshotProtectionOn;
+    setScreenshotProtectionOn(next); // optimistic
+    setSavingScreenshotProtection(true);
+    try {
+      await updateScreenshotProtectionPreference(next);
+    } catch (err) {
+      console.error("Failed to update screenshot protection preference:", err);
+      setScreenshotProtectionOn(!next); // revert on failure
+    } finally {
+      setSavingScreenshotProtection(false);
     }
   };
 
@@ -203,6 +222,20 @@ export default function StaffProfileSections({
           label: "Printing",
           sub: "Use the Print button on the invoice page — your device handles the printer",
           icon: Printer,
+        },
+      ] as RowData[],
+    },
+    {
+      id: "security",
+      title: "Security",
+      icon: ShieldOff,
+      rows: [
+        {
+          label: "Screenshot Protection",
+          sub: savingScreenshotProtection ? "Saving..." : screenshotProtectionOn ? "On" : "Off",
+          icon: ShieldOff,
+          toggleValue: screenshotProtectionOn,
+          onToggle: toggleScreenshotProtection,
         },
       ] as RowData[],
     },

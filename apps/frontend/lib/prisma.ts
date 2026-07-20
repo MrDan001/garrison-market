@@ -12,7 +12,7 @@ const pool =
   globalForPrisma.pool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 5, // prevents overwhelming Supabase's connection limit
+    max: 10, // headroom for Supabase's transaction pooler (port 6543) — the session pooler (5432) caps at 15 total, so keep this modest even here
     idleTimeoutMillis: 30000,
     ssl: {
       // Supabase's pooler presents a cert chain that Node's default strict

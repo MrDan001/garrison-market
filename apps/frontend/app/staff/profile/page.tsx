@@ -31,6 +31,7 @@ export default async function StaffProfilePage() {
       image: true,
       createdAt: true,
       notificationsEnabled: true,
+      screenshotProtectionEnabled: true,
     },
   });
 
@@ -89,6 +90,7 @@ export default async function StaffProfilePage() {
             monthSales={monthSales}
             monthOrders={monthOrders}
             notificationsEnabled={staff.notificationsEnabled}
+            screenshotProtectionEnabled={staff.screenshotProtectionEnabled}
           />
         </div>
       </div>

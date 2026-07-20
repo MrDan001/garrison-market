@@ -258,15 +258,18 @@ export default function HomePage() {
                 </p>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                   <Link
-                    href="/login"
+                    href="/register"
                     className="inline-flex items-center justify-center gap-3 bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] px-8 py-5 rounded-none font-bold uppercase tracking-wider hover:translate-x-1 hover:-translate-y-1 hover:shadow-[-5px_5px_0px_0px_rgba(241,238,227,0.9)] transition-all duration-300 w-full sm:w-auto text-sm"
                   >
-                    Start managing your shop <ArrowUpRight size={18} />
+                    Start Free Trial <ArrowUpRight size={18} />
                   </Link>
                   <Link href="/login" className="text-sm font-bold text-[var(--text-primary)] underline underline-offset-8 decoration-2 decoration-[#E55345]/50 hover:decoration-[#E55345] hover:text-[var(--text-primary)] transition text-center sm:text-left py-2">
                     I already have an account
                   </Link>
                 </div>
+                <p className="mt-4 text-xs font-semibold text-[var(--text-primary)]/50 uppercase tracking-wider">
+                  14-day free trial · Full access to every feature · No card required
+                </p>
               </div>
 
               {/* Signature Live Receipt Widget */}
@@ -503,7 +506,7 @@ export default function HomePage() {
                         ))}
                       </ul>
                       <Link
-                        href={`/login?plan=${plan.plan}`}
+                        href={`/register?plan=${plan.plan}`}
                         className={`w-full text-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 ${
                           plan.popular 
                           ? 'bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] shadow-[0_4px_15px_rgba(229,83,69,0.3)]' 
@@ -562,10 +565,10 @@ export default function HomePage() {
                   <Typewriter text="Set up your shop in minutes. No card required to start." active={active} speed={15} />
                 </p>
                 <Link
-                  href="/login"
+                  href="/register"
                   className="inline-flex items-center gap-3 bg-[var(--bg-app)] text-[var(--text-primary)] px-10 py-5 rounded-none font-black uppercase tracking-wider text-sm hover:bg-[var(--bg-surface)] hover:shadow-[0_10px_30px_rgba(10,15,29,0.4)] transition-all duration-300"
                 >
-                  Start managing your shop <ArrowUpRight size={18} />
+                  Start Free Trial <ArrowUpRight size={18} />
                 </Link>
               </div>
             </section>

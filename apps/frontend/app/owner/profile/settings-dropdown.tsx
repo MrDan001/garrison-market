@@ -5,13 +5,14 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Settings, ChevronDown, ChevronUp,
-  Bell, Tag, Truck, CheckCircle2, Loader2, Lock, ChevronRight,
+  Bell, Tag, Truck, CheckCircle2, Loader2, Lock, ChevronRight, ShieldOff,
 } from "lucide-react";
 import {
   toggleDiscountAction,
   toggleNotificationsAction,
   toggleConsignmentAction,
 } from "@/lib/settings.actions";
+import { updateScreenshotProtectionPreference } from "@/lib/profile.actions";
 import { InstallAppCard, PushNotificationCard } from "@/components/SettingsExtras";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -19,19 +20,22 @@ interface Props {
   notificationsEnabled: boolean;
   discountEnabled: boolean;
   consignmentEnabled: boolean;
+  screenshotProtectionEnabled: boolean;
 }
 
 export default function SettingsDropdown({
   notificationsEnabled,
   discountEnabled,
   consignmentEnabled,
+  screenshotProtectionEnabled,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState(notificationsEnabled);
   const [discount, setDiscount] = useState(discountEnabled);
   const [consignment, setConsignment] = useState(consignmentEnabled);
+  const [screenshotProtection, setScreenshotProtection] = useState(screenshotProtectionEnabled);
   const [isPending, startTransition] = useTransition();
-  const [lastChanged, setLastChanged] = useState<"notifications" | "discount" | "consignment" | null>(null);
+  const [lastChanged, setLastChanged] = useState<"notifications" | "discount" | "consignment" | "screenshotProtection" | null>(null);
 
   const handleToggleNotifications = () => {
     const newVal = !notifications;
@@ -59,6 +63,16 @@ export default function SettingsDropdown({
     setLastChanged("consignment");
     startTransition(async () => {
       await toggleConsignmentAction(newVal);
+      setLastChanged(null);
+    });
+  };
+
+  const handleToggleScreenshotProtection = () => {
+    const newVal = !screenshotProtection;
+    setScreenshotProtection(newVal);
+    setLastChanged("screenshotProtection");
+    startTransition(async () => {
+      await updateScreenshotProtectionPreference(newVal);
       setLastChanged(null);
     });
   };
@@ -151,6 +165,17 @@ export default function SettingsDropdown({
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">
             Security
           </p>
+
+          {/* Screenshot protection toggle */}
+          <ToggleRow
+            icon={<ShieldOff size={16} />}
+            label="Screenshot Protection"
+            description="Blur the screen and discourage screenshots on this device"
+            value={screenshotProtection}
+            loading={isPending && lastChanged === "screenshotProtection"}
+            onToggle={handleToggleScreenshotProtection}
+            accent="violet"
+          />
 
           <Link
             href="/change-password"

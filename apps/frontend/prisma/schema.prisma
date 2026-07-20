@@ -57,6 +57,7 @@ model User {
   notificationsEnabled Boolean @default(true)
   discountEnabled      Boolean @default(false)
   consignmentEnabled   Boolean @default(false)
+  screenshotProtectionEnabled Boolean @default(false)
 
   stores         Store[]   @relation("OwnerStores")
   staffStoreId   Int?

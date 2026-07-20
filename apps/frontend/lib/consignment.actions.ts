@@ -5,7 +5,7 @@ import { getSessionUser } from "./auth.actions";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "./notification.actions";
 import { getActiveStoreId } from "./store-context";
-import { assertSubscriptionActive } from "./subscription-guard";
+import { assertSubscriptionActive, resolveEffectivePlanId } from "./subscription-guard";
 import { getPlanConfig } from "./plans";
 
 type SignOutItem = { inventoryId: number; quantityOut: number };
@@ -19,12 +19,13 @@ export async function isConsignmentEnabledForStaff() {
 
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
-    select: { consignmentEnabled: true, plan: true },
+    select: { consignmentEnabled: true, plan: true, subscriptionStatus: true, trialEndsAt: true },
   });
 
-  // Both the owner's manual toggle AND their plan must allow it — Basic
-  // plan owners never see consignment regardless of the toggle state.
-  const planAllows = getPlanConfig(owner?.plan).consignment;
+  // Both the owner's manual toggle AND their (effective) plan must allow it
+  // — Basic plan owners never see consignment regardless of the toggle
+  // state, but an active trial counts as Premium.
+  const planAllows = owner ? getPlanConfig(resolveEffectivePlanId(owner)).consignment : false;
   return (owner?.consignmentEnabled ?? false) && planAllows;
 }
 
