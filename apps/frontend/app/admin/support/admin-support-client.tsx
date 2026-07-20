@@ -3,12 +3,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import ChatPanel from "@/components/ChatPanel";
 import {
   getAdminOwnerThread, sendAdminReply, setAdminTypingInOwnerThread,
   getAdminStaffThread, sendAdminReplyToStaff, setAdminTypingInStaffThread,
 } from "@/lib/support.actions";
+import { adminCloseIntake } from "@/lib/support-intake.actions";
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -24,6 +25,18 @@ export default function AdminSupportClient({
   const [active, setActive] = useState<{ type: "owner" | "staff"; id: number } | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [justResolved, setJustResolved] = useState(false);
+
+  const handleMarkResolved = async () => {
+    if (!active) return;
+    if (active.type === "owner") {
+      await adminCloseIntake("owner_admin", active.id);
+    } else {
+      await adminCloseIntake("staff_admin", 0, active.id);
+    }
+    setJustResolved(true);
+    setTimeout(() => setJustResolved(false), 2500);
+  };
 
   const openOwnerThread = async (ownerId: number) => {
     setActive({ type: "owner", id: ownerId });
@@ -84,6 +97,13 @@ export default function AdminSupportClient({
               {isOwner ? `Owner — ${info?.fullName}` : `Staff — ${info?.owner?.storeName ?? ""}`}
             </p>
           </div>
+          <button
+            onClick={handleMarkResolved}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-500 hover:bg-emerald-500/10 border border-emerald-500/30 transition-colors shrink-0"
+          >
+            <CheckCircle2 size={13} />
+            {justResolved ? "Resolved ✓" : "Mark resolved"}
+          </button>
         </div>
         <div className="flex-1 overflow-hidden">
           <ChatPanel

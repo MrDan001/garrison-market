@@ -57,8 +57,8 @@ model User {
   notificationsEnabled Boolean @default(true)
   discountEnabled      Boolean @default(false)
   consignmentEnabled   Boolean @default(false)
-  screenshotProtectionEnabled Boolean @default(false)
-
+  screenshotProtectionEnabled  Boolean @default(false)
+  
   stores         Store[]   @relation("OwnerStores")
   staffStoreId   Int?
   staffStore     Store?    @relation("StoreStaff", fields: [staffStoreId], references: [id])
@@ -284,6 +284,29 @@ model SupportMessage {
   @@index([ownerId, createdAt])
   @@index([senderId])
   @@index([threadType, ownerId])
+}
+
+model SupportIntake {
+  id             Int       @id @default(autoincrement())
+  threadType     String    // "owner_admin" | "staff_admin"
+  ownerId        Int
+  staffId        Int?
+  name           String
+  storeName      String?
+  email          String
+  category       String
+  urgency        String
+  blockingSales  String?
+  detailAnswer   String?
+  triedSelfHelp  String?
+  extraNotes     String?
+  status         String    @default("open") // "open" | "closed"
+  resolvedBySelf Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  closedAt       DateTime?
+
+  @@index([threadType, ownerId, status])
+  @@index([threadType, staffId, status])
 }
 
 model Payment {

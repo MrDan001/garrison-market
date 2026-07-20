@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Headphones, ChevronRight } from "lucide-react";
 import ChatPanel from "@/components/ChatPanel";
+import SupportIntakeWizard from "@/components/SupportIntakeWizard";
 import {
   getOwnerStaffThread,
   sendOwnerToStaffMessage,
@@ -13,6 +14,7 @@ import {
   sendOwnerToAdminMessage,
   setOwnerTypingInAdminThread,
 } from "@/lib/support.actions";
+import type { IntakeContext } from "@/lib/support-intake.actions";
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -20,17 +22,28 @@ export default function OwnerSupportClient({
   currentUserId,
   staffThreads,
   adminMessages,
+  adminIntake,
 }: {
   currentUserId: number;
   staffThreads: any[];
   adminMessages: any[];
+  adminIntake: IntakeContext | null;
 }) {
   const [activeView, setActiveView] = useState<"list" | "admin" | number>("list");
   const [messages, setMessages] = useState<any[]>(adminMessages);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [needsIntake, setNeedsIntake] = useState(adminIntake?.needsIntake ?? false);
 
   const openAdmin = async () => {
     setActiveView("admin");
+    if (needsIntake) return;
+    const data = await getOwnerAdminThread();
+    setMessages(data.messages);
+    setOtherTyping(data.otherTyping);
+  };
+
+  const handleIntakeEscalated = async () => {
+    setNeedsIntake(false);
     const data = await getOwnerAdminThread();
     setMessages(data.messages);
     setOtherTyping(data.otherTyping);
@@ -46,6 +59,7 @@ export default function OwnerSupportClient({
   // Poll for new messages + the other party's typing status while a thread is open.
   useEffect(() => {
     if (activeView === "list") return;
+    if (activeView === "admin" && needsIntake) return;
 
     const poll = async () => {
       const data =
@@ -58,7 +72,7 @@ export default function OwnerSupportClient({
 
     const interval = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [activeView]);
+  }, [activeView, needsIntake]);
 
   if (activeView !== "list") {
     const isAdmin = activeView === "admin";
@@ -83,6 +97,16 @@ export default function OwnerSupportClient({
             <p className="text-[11px] text-slate-500">{isAdmin ? "App support & assistance" : "Staff conversation"}</p>
           </div>
         </div>
+        {isAdmin && needsIntake ? (
+          <SupportIntakeWizard
+            threadType="owner_admin"
+            role="owner"
+            prefill={adminIntake?.prefill ?? { name: "", email: "", storeName: "" }}
+            trialDaysLeft={adminIntake?.trialDaysLeft ?? null}
+            subscriptionStatus={adminIntake?.subscriptionStatus ?? "trialing"}
+            onEscalated={handleIntakeEscalated}
+          />
+        ) : (
         <div className="flex-1 overflow-hidden">
           <ChatPanel
             messages={messages}
@@ -108,6 +132,7 @@ export default function OwnerSupportClient({
             emptyStateSub={isAdmin ? "Questions about the app, billing, or an issue? We're here." : "Reply to their questions or send updates."}
           />
         </div>
+        )}
       </div>
     );
   }

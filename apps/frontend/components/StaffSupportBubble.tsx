@@ -6,7 +6,9 @@ import {
   getStaffOwnerThread, sendStaffMessage, setStaffTypingInOwnerThread,
   getStaffAdminThread, sendStaffToAdminMessage, setStaffTypingInAdminThread,
 } from "@/lib/support.actions";
+import { getIntakeContext, type IntakeContext } from "@/lib/support-intake.actions";
 import ChatPanel from "./ChatPanel";
+import SupportIntakeWizard from "./SupportIntakeWizard";
 
 type View = "closed" | "choose" | "owner" | "admin";
 
@@ -18,6 +20,8 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [otherTyping, setOtherTyping] = useState(false);
   const [totalUnread, setTotalUnread] = useState(0);
+  const [adminIntake, setAdminIntake] = useState<IntakeContext | null>(null);
+  const [needsIntake, setNeedsIntake] = useState(false);
   const prevCountRef = useRef(0);
 
   const pollBadge = async () => {
@@ -39,6 +43,7 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
   // Poll for new messages + the other party's typing status while a thread is open.
   useEffect(() => {
     if (view !== "owner" && view !== "admin") return;
+    if (view === "admin" && needsIntake) return;
 
     const poll = async () => {
       if (view === "owner") {
@@ -54,7 +59,7 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
 
     const interval = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [view]);
+  }, [view, needsIntake]);
 
   const openChooser = () => {
     setView("choose");
@@ -70,6 +75,20 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
 
   const openAdmin = async () => {
     setView("admin");
+    const intake = await getIntakeContext("staff_admin");
+    setAdminIntake(intake);
+    if (intake?.needsIntake) {
+      setNeedsIntake(true);
+      return;
+    }
+    setNeedsIntake(false);
+    const data = await getStaffAdminThread();
+    setAdminMessages(JSON.parse(JSON.stringify(data.messages)));
+    setOtherTyping(data.otherTyping);
+  };
+
+  const handleIntakeEscalated = async () => {
+    setNeedsIntake(false);
     const data = await getStaffAdminThread();
     setAdminMessages(JSON.parse(JSON.stringify(data.messages)));
     setOtherTyping(data.otherTyping);
@@ -197,6 +216,16 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                     <p className="text-[11px] text-slate-500">For urgent or app-related issues</p>
                   </div>
                 </div>
+                {needsIntake ? (
+                  <SupportIntakeWizard
+                    threadType="staff_admin"
+                    role="staff"
+                    prefill={adminIntake?.prefill ?? { name: "", email: "", storeName: "" }}
+                    trialDaysLeft={adminIntake?.trialDaysLeft ?? null}
+                    subscriptionStatus={adminIntake?.subscriptionStatus ?? "trialing"}
+                    onEscalated={handleIntakeEscalated}
+                  />
+                ) : (
                 <div className="flex-1 overflow-hidden">
                   <ChatPanel
                     messages={adminMessages}
@@ -214,6 +243,7 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                     emptyStateSub="Reserved for issues your store owner can't resolve — we're here to help."
                   />
                 </div>
+                )}
               </>
             )}
           </div>
