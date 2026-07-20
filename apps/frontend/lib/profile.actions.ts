@@ -78,6 +78,7 @@ export async function updateScreenshotProtectionPreference(enabled: boolean) {
   return { success: true };
 }
 
+
 /**
  * Lightweight read used by ScreenshotGuard (mounted globally) to decide
  * whether to arm the deterrents for the current user, without needing to
