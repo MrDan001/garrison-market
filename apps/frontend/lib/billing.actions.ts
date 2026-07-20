@@ -115,8 +115,17 @@ export async function syncPaymentDirectly(reference: string) {
         prisma.user.update({
           where: { id: payment.ownerId },
           data: {
-            subscriptionStatus: payment.plan,
+            // 👇 FIXED: this previously wrote the plan name ("basic"/"premium")
+            // into subscriptionStatus, and never touched the `plan` field at
+            // all. That meant a successful payment never actually upgraded
+            // the account — plan stayed "basic" forever, which silently
+            // blocked every plan-gated feature (like consignment) even
+            // after the owner paid for Premium.
+            plan: payment.plan,
+            subscriptionStatus: "active",
             currentPeriodEnd: payment.periodEnd,
+            paystackCustomerCode: paystackData.data.customer?.customer_code || undefined,
+            paystackAuthorizationCode: paystackData.data.authorization?.authorization_code || undefined,
           },
         }),
       ]);

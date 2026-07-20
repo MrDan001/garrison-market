@@ -14,7 +14,7 @@ export async function toggleDiscountAction(enabled: boolean) {
     data: { discountEnabled: enabled },
   });
 
-  revalidatePath("/owner/more");
+  revalidatePath("/owner/profile");
 }
 
 export async function toggleNotificationsAction(enabled: boolean) {
@@ -26,7 +26,7 @@ export async function toggleNotificationsAction(enabled: boolean) {
     data: { notificationsEnabled: enabled },
   });
 
-  revalidatePath("/owner/more");
+  revalidatePath("/owner/profile");
 }
 
 export async function toggleConsignmentAction(enabled: boolean) {
@@ -38,5 +38,5 @@ export async function toggleConsignmentAction(enabled: boolean) {
     data: { consignmentEnabled: enabled },
   });
 
-  revalidatePath("/owner/more");
+  revalidatePath("/owner/profile");
 }
