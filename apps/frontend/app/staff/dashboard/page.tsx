@@ -1,12 +1,17 @@
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck } from "lucide-react";
+import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck, Lock } from "lucide-react";
 import Link from "next/link";
 import NotificationBell from "@/components/NotificationBell";
 import StaffSupportBubble from "@/components/StaffSupportBubble";
 // FIXED: Changed to a named import to resolve TS2613
 import { TrialBanner } from "@/components/TrialBanner"; 
+// FIXED: Use the single shared billing calculation (handles trialEndsAt vs
+// currentPeriodEnd correctly) instead of a duplicated, incorrect local
+// calculation that only looked at currentPeriodEnd — which is null while
+// an owner is still trialing, causing staff to see the wrong day count.
+import { getBillingStatus } from "@/lib/subscription-guard";
 
 type ActivityItem =
   | { type: "sale"; id: string; date: Date; amount: number }
@@ -29,27 +34,11 @@ export default async function StaffDashboard() {
   if (!staff || userRole !== "staff") redirect("/login");
   if (userStatus === "suspended" || userStatus === "pending") redirect("/pending/staff");
 
-  // FIXED: Fetch billing values directly from the Owner's User row instead of an unmapped subscription table
-  const ownerRow = staff.ownerId 
-    ? await prisma.user.findUnique({
-        where: { id: staff.ownerId },
-        select: { subscriptionStatus: true, currentPeriodEnd: true }
-      })
-    : null;
-
-  // Calculate if the account is locked based on the period end date
-  const isLocked = ownerRow?.currentPeriodEnd ? new Date() > new Date(ownerRow.currentPeriodEnd) : false;
-  
-  // Calculate trial days left if they are trialing
-  const trialDaysLeft = ownerRow?.currentPeriodEnd 
-    ? Math.max(0, Math.ceil((new Date(ownerRow.currentPeriodEnd).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
-    : 0;
-
-  const billingStatus = {
-    isLocked,
-    subscriptionStatus: ownerRow?.subscriptionStatus || "trialing",
-    trialDaysLeft,
-  };
+  // FIXED: getBillingStatus already resolves staff -> owner internally and
+  // correctly picks trialEndsAt while trialing, or currentPeriodEnd once
+  // paid — same logic the owner-side billing page uses, so the numbers
+  // always match between owner and staff views.
+  const billingStatus = await getBillingStatus(staff.ownerId ?? staff.id);
 
   const nameParts = staff.fullName?.split(" ") ?? ["Staff"];
   const firstName = nameParts[0] ?? "Staff";
@@ -61,6 +50,49 @@ export default async function StaffDashboard() {
   // FIX: Safe Localized Midnight Construction (Avoids UTC reset shifts)
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // If the owner's subscription/trial has expired, don't even bother
+  // fetching dashboard data — staff should see a full lockout screen, not
+  // sales figures or quick actions they can no longer act on.
+  if (billingStatus.isLocked) {
+    return (
+      <div className="h-screen w-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col overflow-hidden">
+        <header className="sticky top-0 z-50 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 flex-shrink-0">
+          <div className="max-w-3xl mx-auto px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
+                <Store size={15} className="text-[var(--text-primary)]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-slate-500 leading-none">Staff Portal</p>
+                <p className="text-sm font-semibold text-[var(--text-primary)] truncate leading-none mt-0.5">{staff.fullName}</p>
+              </div>
+            </div>
+            <Link
+              href="/login"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-200 dark:border-slate-800 transition-all duration-150"
+            >
+              <LogOut size={13} />
+              <span className="hidden sm:inline">Sign out</span>
+            </Link>
+          </div>
+        </header>
+
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div className="max-w-sm w-full text-center">
+            <div className="h-14 w-14 rounded-2xl bg-rose-500/10 flex items-center justify-center mx-auto mb-4">
+              <Lock size={26} className="text-rose-400" />
+            </div>
+            <h1 className="text-lg font-bold text-[var(--text-primary)] mb-2">Store access is locked</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+              This store's subscription or free trial has ended. Sales, reports, and inventory actions are
+              paused until the store owner renews. Please contact your store owner to reactivate access.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const [todayAgg, recentSales, recentReports, inventoryItems] = await Promise.all([
     prisma.order.aggregate({

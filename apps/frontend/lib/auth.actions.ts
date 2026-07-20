@@ -103,6 +103,42 @@ export async function loginAction(formData: FormData) {
   return { redirectUrl };
 }
 
+// Sanitize a shop name into a referral-code-safe token: uppercase,
+// alphanumeric only. This must match the format used by the one-time
+// SQL backfill that set referralCode for pre-existing owners, so old
+// and new codes look and behave consistently.
+function sanitizeToReferralToken(input: string): string {
+  return input.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+// Generates a referralCode that doesn't collide with an existing one.
+// Tries the base sanitized store name first (e.g. "GARRISON MARKET" ->
+// "GARRISONMARKET"), then appends 2, 3, 4... until a free one is found.
+// Falls back to STORE + a random suffix if the name sanitizes to "".
+async function generateUniqueReferralCode(storeName: string): Promise<string> {
+  const base = sanitizeToReferralToken(storeName || "");
+  const root = base !== "" ? base : `STORE${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+
+  let candidate = root;
+  let suffix = 1;
+
+  // Bounded loop: extremely unlikely to need more than a handful of tries,
+  // but capped so a pathological case can't loop forever.
+  while (suffix < 1000) {
+    const existing = await prisma.user.findUnique({
+      where: { referralCode: candidate },
+      select: { id: true },
+    });
+    if (!existing) return candidate;
+    suffix += 1;
+    candidate = `${root}${suffix}`;
+  }
+
+  // Last-resort fallback if somehow 1000 collisions happened (practically
+  // impossible) — guarantees uniqueness via a random suffix.
+  return `${root}${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
+}
+
 export async function registerOwnerAction(formData: FormData) {
   const data = Object.fromEntries(formData.entries());
 
@@ -113,7 +149,7 @@ export async function registerOwnerAction(formData: FormData) {
     let referrerId: number | null = null;
 
     if (appliedCodeInput && appliedCodeInput.trim() !== "") {
-      const formattedToken = appliedCodeInput.trim().toUpperCase().replace(/\s+/g, "");
+      const formattedToken = sanitizeToReferralToken(appliedCodeInput.trim());
 
       const referrer = await prisma.user.findUnique({
         where: { referralCode: formattedToken },
@@ -126,9 +162,7 @@ export async function registerOwnerAction(formData: FormData) {
     }
 
     const targetStoreName = (data.storeName as string) || "";
-    const cleanNewCodeForUser = targetStoreName.trim() !== ""
-      ? targetStoreName.trim().toUpperCase().replace(/\s+/g, "")
-      : `STORE_${Math.floor(1000 + Math.random() * 9000)}`;
+    const cleanNewCodeForUser = await generateUniqueReferralCode(targetStoreName);
 
     const newUser = await prisma.user.create({
       data: {
@@ -170,7 +204,18 @@ export async function registerOwnerAction(formData: FormData) {
 
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return { error: "An account with this email or custom store token already exists." };
+      // Distinguish which unique field collided so we don't wrongly tell
+      // a brand-new owner their email is taken when it's actually a rare
+      // race-condition collision on referralCode (generateUniqueReferralCode
+      // checks first, but two requests could theoretically race).
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(",") : String(error.meta?.target || "");
+      if (target.includes("email")) {
+        return { error: "An account with this email already exists." };
+      }
+      if (target.includes("referralCode")) {
+        return { error: "Please try registering again — a temporary conflict occurred generating your store token." };
+      }
+      return { error: "An account with these details already exists." };
     }
     console.error("Registration error:", error);
     return { error: "An unexpected error occurred." };

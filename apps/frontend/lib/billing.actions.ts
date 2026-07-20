@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { initializeTransaction } from "@/lib/paystack";
 import { PLANS, BILLING_CYCLES, getCyclePrice, type PlanId, type BillingCycleId } from "@/lib/plans";
 import { getBillingStatus } from "@/lib/subscription-guard";
+import { creditReferralReward } from "@/lib/referral.actions";
 import { headers } from "next/headers";
 import crypto from "crypto";
 
@@ -119,6 +120,18 @@ export async function syncPaymentDirectly(reference: string) {
           },
         }),
       ]);
+
+      // ADDED: previously, a real successful payment (this direct-sync path,
+      // and presumably the webhook path too, if one exists) never credited
+      // the referrer's +7 day bonus — only a manual admin extension did.
+      // This means referral rewards would only ever trigger via manual
+      // admin action, never from an actual paying customer. Credit it here,
+      // same as extendSubscriptionAction does, non-fatal if it fails.
+      try {
+        await creditReferralReward(payment.ownerId);
+      } catch (refError) {
+        console.error("Referral reward crediting failed after payment sync:", refError);
+      }
 
       return { success: true, status: "success" };
     }

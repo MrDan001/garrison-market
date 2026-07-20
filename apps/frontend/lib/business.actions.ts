@@ -114,6 +114,10 @@ export async function createOrderAction(inventoryId: number) {
   const session = await getSessionUser();
   if (!session || !session.ownerId) throw new Error("Unauthorized");
 
+  // ADDED: this action creates a real order/sale — must be blocked once
+  // the owner's subscription/trial has expired, same as processSaleAction.
+  await assertSubscriptionActive(session.ownerId);
+
   const item = await prisma.inventory.findUnique({
     where: { id: inventoryId, ownerId: session.ownerId }
   });
@@ -176,6 +180,11 @@ export async function addInventoryAction(formData: FormData) {
   const session = await getSessionUser();
   if (!session || session.role !== 'owner') throw new Error("Unauthorized");
 
+  // ADDED: this is a separate/legacy inventory-creation path from
+  // addItemAction below — it was missing the subscription gate entirely,
+  // meaning a locked-out owner could still add products through it.
+  await assertSubscriptionActive(session.id);
+
   const name = formData.get("name") as string;
   const quantity = parseInt(formData.get("quantity") as string, 10);
   const price = parseFloat(formData.get("price") as string);
@@ -234,6 +243,10 @@ export async function addItemAction(formData: FormData) {
 export async function updateItemAction(formData: FormData) {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  // ADDED: editing existing products is still a mutation that should be
+  // blocked once the subscription is locked.
+  await assertSubscriptionActive(session.id);
 
   const id = parseInt(formData.get("id") as string, 10);
   if (isNaN(id)) throw new Error("Invalid product ID");
@@ -411,6 +424,21 @@ export async function getTodaySales() {
 }
 
 export async function updateReportStatus(reportId: number, status: "approved" | "declined") {
+  // FIXED: this function previously had NO authentication or ownership
+  // check at all — any authenticated (or even just any) caller could
+  // approve/decline an arbitrary report belonging to any owner. Added a
+  // proper owner check, ownership verification, and subscription gate.
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  await assertSubscriptionActive(session.id);
+
+  const existingReport = await prisma.report.findUnique({
+    where: { id: reportId },
+    select: { ownerId: true },
+  });
+  if (!existingReport || existingReport.ownerId !== session.id) throw new Error("Unauthorized");
+
   const report = await prisma.report.update({
     where: { id: reportId },
     data: { status: status }
@@ -431,6 +459,10 @@ export async function requestReportRevision(reportId: number, note: string) {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") throw new Error("Unauthorized");
   if (!note.trim()) throw new Error("Please explain what needs correcting");
+
+  // ADDED: was missing the subscription gate other report-mutation
+  // actions have.
+  await assertSubscriptionActive(session.id);
 
   const report = await prisma.report.update({
     where: { id: reportId },
@@ -454,6 +486,10 @@ export async function resubmitReportAction(reportId: number, clarification: stri
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
   if (!clarification.trim()) throw new Error("Please add a clarification note");
+
+  // ADDED: staff resubmitting a report is still a mutation tied to the
+  // owner's subscription status.
+  await assertSubscriptionActive(session.ownerId ?? session.id);
 
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw new Error("Report not found");
@@ -483,6 +519,20 @@ export async function resubmitReportAction(reportId: number, clarification: stri
 }
 
 export async function updateInventoryQuantity(id: number, change: number) {
+  // FIXED: this function previously had NO authentication check at all —
+  // any caller could adjust any inventory item's quantity for any store.
+  // Added owner check, ownership verification, and subscription gate.
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  await assertSubscriptionActive(session.id);
+
+  const existingItem = await prisma.inventory.findUnique({
+    where: { id },
+    select: { ownerId: true },
+  });
+  if (!existingItem || existingItem.ownerId !== session.id) throw new Error("Unauthorized");
+
   await prisma.inventory.update({
     where: { id },
     data: { quantity: { increment: change } }
@@ -555,6 +605,10 @@ export async function createStoreAction(
 export async function deleteInventoryAction(formData: FormData) {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  // ADDED: deleting/archiving inventory is a mutation and should be
+  // blocked once the subscription is locked.
+  await assertSubscriptionActive(session.id);
 
   const id = parseInt(formData.get("id") as string, 10);
   if (isNaN(id)) throw new Error("Invalid product ID");

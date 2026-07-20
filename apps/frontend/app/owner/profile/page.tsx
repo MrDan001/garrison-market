@@ -2,7 +2,7 @@ import {
   ChevronRight, Store, LayoutDashboard,
   Activity, CreditCard, Users, Receipt,
   LogOut, ArrowLeft, History,
-  MessageSquare, Zap, Calendar, Gift
+  MessageSquare, Zap, Calendar, Gift, ChevronDown, UserPlus
 } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -31,23 +31,26 @@ export default async function MorePage() {
       notificationsEnabled: true,
       discountEnabled: true,
       consignmentEnabled: true,
-      // 👇 Fetch their stores to build the custom code dynamically
-      stores: {
+      // 👇 The real, stored referral token — generated once at registration
+      // and guaranteed unique. Do NOT recompute this from the store name;
+      // the store name can be renamed later and would drift out of sync
+      // with the code that was actually matched against at signup.
+      referralCode: true,
+      // 👇 Full list of owners this user referred, so we can show more
+      // than just a count.
+      referrals: {
+        where: { role: "owner" },
         select: {
-          name: true
+          id: true,
+          fullName: true,
+          storeName: true,
+          status: true,
+          subscriptionStatus: true,
+          hasTriggeredReferralReward: true,
+          createdAt: true,
         },
-        take: 1 // Just grab the primary store
+        orderBy: { createdAt: "desc" },
       },
-      _count: {
-        select: {
-          referrals: {
-            where: {
-              status: "approved",
-              hasTriggeredReferralReward: true
-            }
-          }
-        }
-      }
     },
   });
 
@@ -57,12 +60,10 @@ export default async function MorePage() {
     ? new Date(currentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : "N/A";
 
-  // 👇 Generate clean token: Store name in all CAPS, or fallback if they haven't set up a store yet
-  const shortCode = user.stores[0]?.name 
-    ? user.stores[0].name.toUpperCase().replace(/\s+/g, "") 
-    : "NO_STORE_YET";
-    
-  const referralCount = user._count?.referrals || 0;
+  const shortCode = user.referralCode || "NO_CODE_YET";
+
+  const referredList = user.referrals;
+  const rewardedCount = referredList.filter((r) => r.hasTriggeredReferralReward).length;
 
   return (
     <div className="fixed inset-0 bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col pb-20">
@@ -93,79 +94,145 @@ export default async function MorePage() {
           </div>
         </a>
 
-        {/* Subscription Info Card */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Subscription Info</h3>
-          <a href="/owner/billing" className="p-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 dark:from-blue-950/20 dark:to-indigo-950/10 flex items-center justify-between hover:border-blue-400 dark:hover:border-blue-700 transition-all block">
-            <div className="flex items-start gap-4">
-              <div className={`p-3 rounded-xl shrink-0 ${isLocked ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400'}`}>
-                <Zap size={22} className={!isLocked ? "fill-blue-500 dark:fill-blue-400 animate-pulse" : ""} />
+        {/* Subscription + Growth & Rewards — combined dropdown */}
+        <details className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/40 dark:bg-slate-900/40 overflow-hidden">
+          <summary className="list-none cursor-pointer flex items-center justify-between p-4 select-none">
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-xl shrink-0 ${isLocked ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400'}`}>
+                <Zap size={18} className={!isLocked ? "fill-blue-500 dark:fill-blue-400" : ""} />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm text-[var(--text-primary)] capitalize">
-                    {plan || "Free / Trial"} Plan
-                  </span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${isLocked ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'}`}>
-                    {isLocked ? "Expired" : "Active"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  <Calendar size={13} />
-                  <span>Expires: <strong className="text-[var(--text-primary)]">{expiryDateString}</strong></span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
-              <span>Manage</span>
-              <ChevronRight size={16} />
-            </div>
-          </a>
-        </div>
-
-        {/* Referral Program Section */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Growth & Rewards</h3>
-          <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-gradient-to-br from-emerald-50/40 via-transparent to-transparent dark:from-emerald-950/10 space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 shrink-0">
-                <Gift size={22} />
-              </div>
-              <div className="space-y-0.5">
-                <h4 className="font-bold text-sm text-[var(--text-primary)]">Invite & Earn Plan Days</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-normal">
-                  Share your code. For each store owner who signs up and secures verification using this code, you gain <strong className="text-emerald-500 dark:text-emerald-400">+7 premium days</strong> added directly to your current period end.
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">Subscription & Rewards</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {plan || "Free / Trial"} plan &middot; {referredList.length} referral{referredList.length !== 1 ? "s" : ""}
                 </p>
               </div>
             </div>
+            <ChevronDown size={18} className="text-slate-400 dark:text-slate-600 transition-transform duration-200 group-open:rotate-180 shrink-0" />
+          </summary>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              {/* Native Server Component Safe Token Block */}
-              <div className="p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Your Referral Code</p>
-                <div className="mt-1 flex items-center justify-between">
-                  <code className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded select-all cursor-pointer tracking-wider">
-                    {shortCode}
-                  </code>
-                  <span className="text-[10px] text-slate-400 italic">Double-click to select</span>
+          <div className="px-4 pb-4 pt-1 space-y-5 border-t border-slate-200 dark:border-slate-800">
+            {/* Subscription Info */}
+            <a href="/owner/billing" className="mt-4 p-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 dark:from-blue-950/20 dark:to-indigo-950/10 flex items-center justify-between hover:border-blue-400 dark:hover:border-blue-700 transition-all block">
+              <div className="flex items-start gap-4">
+                <div className={`p-3 rounded-xl shrink-0 ${isLocked ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400'}`}>
+                  <Zap size={22} className={!isLocked ? "fill-blue-500 dark:fill-blue-400 animate-pulse" : ""} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-[var(--text-primary)] capitalize">
+                      {plan || "Free / Trial"} Plan
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${isLocked ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'}`}>
+                      {isLocked ? "Expired" : "Active"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-600 dark:text-slate-400">
+                    <Calendar size={13} />
+                    <span>Expires: <strong className="text-[var(--text-primary)]">{expiryDateString}</strong></span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 shrink-0">
+                <span>Manage</span>
+                <ChevronRight size={16} />
+              </div>
+            </a>
+
+            {/* Growth & Rewards */}
+            <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-gradient-to-br from-emerald-50/40 via-transparent to-transparent dark:from-emerald-950/10 space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 shrink-0">
+                  <Gift size={22} />
+                </div>
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-sm text-[var(--text-primary)]">Invite & Earn Plan Days</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-normal">
+                    Share your code. For each store owner who signs up and secures verification using this code, you gain <strong className="text-emerald-500 dark:text-emerald-400">+7 premium days</strong> added directly to your current period end.
+                  </p>
                 </div>
               </div>
 
-              {/* Metrics Read-Only Box */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Subscribed Referrals</p>
-                  <p className="text-xs font-bold text-[var(--text-primary)] mt-0.5">
-                    {referralCount} Active Enterprise{referralCount !== 1 ? 's' : ''}
-                  </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Your Referral Code</p>
+                  <div className="mt-1 flex items-center justify-between">
+                    <code className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded select-all cursor-pointer tracking-wider">
+                      {shortCode}
+                    </code>
+                    <span className="text-[10px] text-slate-400 italic">Double-click to select</span>
+                  </div>
                 </div>
-                <div className="h-7 px-2.5 rounded-lg bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center shrink-0">
-                  +{referralCount * 7} Days Earned
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Subscribed Referrals</p>
+                    <p className="text-xs font-bold text-[var(--text-primary)] mt-0.5">
+                      {rewardedCount} Active Enterprise{rewardedCount !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className="h-7 px-2.5 rounded-lg bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center shrink-0">
+                    +{rewardedCount * 7} Days Earned
+                  </div>
                 </div>
+              </div>
+
+              {/* Referred clients list */}
+              <div className="pt-1">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-2">
+                  People You've Referred ({referredList.length})
+                </p>
+
+                {referredList.length === 0 ? (
+                  <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+                    <UserPlus size={16} className="shrink-0" />
+                    <span>No one has signed up with your code yet. Share it to start earning days.</span>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden">
+                    {referredList.map((r) => {
+                      const joinedDate = new Date(r.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      });
+
+                      let badgeLabel = "Pending Approval";
+                      let badgeClass = "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
+
+                      if (r.hasTriggeredReferralReward) {
+                        badgeLabel = "Reward Earned";
+                        badgeClass = "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400";
+                      } else if (r.status?.toLowerCase() === "approved") {
+                        badgeLabel = "Approved · Awaiting Subscription";
+                        badgeClass = "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400";
+                      } else if (r.status?.toLowerCase() === "declined") {
+                        badgeLabel = "Declined";
+                        badgeClass = "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400";
+                      }
+
+                      return (
+                        <div key={r.id} className="p-3 flex items-center justify-between gap-3 bg-slate-100/40 dark:bg-slate-900/40">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                              {r.fullName || "Unnamed Owner"}
+                            </p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                              {r.storeName || "No store name"} &middot; Joined {joinedDate}
+                            </p>
+                          </div>
+                          <span className={`text-[10px] px-2 py-1 rounded-full font-bold whitespace-nowrap shrink-0 ${badgeClass}`}>
+                            {badgeLabel}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
+        </details>
 
         {/* Business section */}
         <MenuSection
