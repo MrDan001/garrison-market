@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type TransitionStartFunction } from "react";
 import { useRouter } from "next/navigation";
-import { updateOwnerStatus, deleteUser, extendSubscriptionAction } from "@/lib/auth.actions";
-import { CalendarPlus } from "lucide-react";
+import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction } from "@/lib/auth.actions";
+import { CalendarPlus, Tag } from "lucide-react";
+
+const naira = (n: number) =>
+  new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n);
 
 // Added productsSold to the TypeScript interface
 interface OwnerActionsProps {
@@ -11,9 +14,24 @@ interface OwnerActionsProps {
   status: string;
   productsSold?: string | null;
   ownerId?: number;
+  customPriceBasicNaira?: number | null;
+  customPriceBasicNote?: string | null;
+  customPricePremiumNaira?: number | null;
+  customPricePremiumNote?: string | null;
+  customPriceUpdatedAt?: string | null;
 }
 
-export function OwnerActions({ email, status, productsSold, ownerId }: OwnerActionsProps) {
+export function OwnerActions({
+  email,
+  status,
+  productsSold,
+  ownerId,
+  customPriceBasicNaira,
+  customPriceBasicNote,
+  customPricePremiumNaira,
+  customPricePremiumNote,
+  customPriceUpdatedAt,
+}: OwnerActionsProps) {
   const [isPending, startTransition] = useTransition();
   const [days, setDays] = useState("7");
   const [extendMsg, setExtendMsg] = useState<string | null>(null);
@@ -99,6 +117,46 @@ export function OwnerActions({ email, status, productsSold, ownerId }: OwnerActi
           {extendMsg && <span className="text-[11px] text-slate-400">{extendMsg}</span>}
         </div>
       )}
+      {ownerId && (
+        <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-4">
+          <div className="flex items-center gap-2">
+            <Tag size={14} className="text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-400">Negotiated monthly pricing</span>
+            {customPriceUpdatedAt && (
+              <span className="text-[11px] text-slate-500">
+                · last updated {new Date(customPriceUpdatedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+
+          <RateRow
+            ownerId={ownerId}
+            plan="basic"
+            label="Basic"
+            currentPrice={customPriceBasicNaira ?? null}
+            currentNote={customPriceBasicNote ?? null}
+            isPending={isPending}
+            startTransition={startTransition}
+            router={router}
+          />
+
+          <RateRow
+            ownerId={ownerId}
+            plan="premium"
+            label="Premium"
+            currentPrice={customPricePremiumNaira ?? null}
+            currentNote={customPricePremiumNote ?? null}
+            isPending={isPending}
+            startTransition={startTransition}
+            router={router}
+          />
+
+          <p className="text-[10px] text-slate-500">
+            Each rate overrides that plan's standard price for this owner only — quarterly/bi-annual/annual discounts
+            still apply on top of it. It appears on the owner's billing page and is what they'll be charged for that plan.
+          </p>
+        </div>
+      )}
       <button
         disabled={isPending}
         onClick={() => {
@@ -110,6 +168,100 @@ export function OwnerActions({ email, status, productsSold, ownerId }: OwnerActi
       >
         Delete
       </button>
+    </div>
+  );
+}
+
+function RateRow({
+  ownerId,
+  plan,
+  label,
+  currentPrice,
+  currentNote,
+  isPending,
+  startTransition,
+  router,
+}: {
+  ownerId: number;
+  plan: "basic" | "premium";
+  label: string;
+  currentPrice: number | null;
+  currentNote: string | null;
+  isPending: boolean;
+  startTransition: TransitionStartFunction;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const [priceInput, setPriceInput] = useState(currentPrice ? String(currentPrice) : "");
+  const [noteInput, setNoteInput] = useState(currentNote || "");
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const handleSet = () => {
+    const n = parseInt(priceInput, 10);
+    if (!n || n <= 0) {
+      setMsg("Enter a valid monthly price in Naira.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await setCustomPriceAction(ownerId, plan, n, noteInput.trim() || undefined);
+      setMsg(result.success ? `${label} rate set to ${naira(n)}/mo.` : result.error || "Failed to set price.");
+      router.refresh();
+    });
+  };
+
+  const handleClear = () => {
+    startTransition(async () => {
+      const result = await setCustomPriceAction(ownerId, plan, null);
+      setMsg(result.success ? `${label} rate cleared — back to standard pricing.` : result.error || "Failed to clear price.");
+      setPriceInput("");
+      setNoteInput("");
+      router.refresh();
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold text-slate-300">{label} plan</span>
+        {currentPrice ? (
+          <span className="text-[11px] text-emerald-400 font-medium">Currently {naira(currentPrice)}/mo</span>
+        ) : (
+          <span className="text-[11px] text-slate-500">Using standard plan pricing</span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          placeholder="e.g. 4500"
+          value={priceInput}
+          onChange={(e) => setPriceInput(e.target.value)}
+          className="w-28 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200"
+        />
+        <input
+          type="text"
+          placeholder="Reason (optional, e.g. smaller store capacity)"
+          value={noteInput}
+          onChange={(e) => setNoteInput(e.target.value)}
+          className="flex-1 min-w-[180px] bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200"
+        />
+        <button
+          disabled={isPending}
+          onClick={handleSet}
+          className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 rounded-lg text-xs font-bold text-white transition-colors"
+        >
+          Save Rate
+        </button>
+        {currentPrice ? (
+          <button
+            disabled={isPending}
+            onClick={handleClear}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 rounded-lg text-xs font-bold text-slate-300 transition-colors"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {msg && <span className="text-[11px] text-slate-400">{msg}</span>}
     </div>
   );
 }

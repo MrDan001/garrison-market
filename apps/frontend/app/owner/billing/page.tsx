@@ -30,6 +30,19 @@ export default function BillingPage() {
       .finally(() => setLoading(false));
   }, [router]);
 
+  const customPriceBasicNaira: number | null = info?.customPriceBasicNaira ?? null;
+  const customPriceBasicNote: string | null = info?.customPriceBasicNote ?? null;
+  const customPricePremiumNaira: number | null = info?.customPricePremiumNaira ?? null;
+  const customPricePremiumNote: string | null = info?.customPricePremiumNote ?? null;
+
+  const customPriceForPlan = (planId: PlanId) =>
+    planId === "premium" ? customPricePremiumNaira : customPriceBasicNaira;
+  const customNoteForPlan = (planId: PlanId) =>
+    planId === "premium" ? customPricePremiumNote : customPriceBasicNote;
+
+  const selectedCustomPrice = customPriceForPlan(selectedPlan);
+  const selectedCustomNote = customNoteForPlan(selectedPlan);
+
   async function handleCheckout() {
     setCheckingOut(true);
     setError(null);
@@ -109,11 +122,22 @@ export default function BillingPage() {
           </div>
         )}
 
+        {selectedCustomPrice && (
+          <div className="rounded-xl bg-teal-500/10 border border-teal-500/30 px-4 py-3 text-sm">
+            <p className="font-semibold text-teal-600 dark:text-teal-400">
+              You have a negotiated rate for {PLANS[selectedPlan].name}: {naira(selectedCustomPrice)}/mo
+            </p>
+            {selectedCustomNote && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{selectedCustomNote}</p>}
+            <p className="text-xs text-slate-500 mt-1">This rate applies below, in place of standard plan pricing.</p>
+          </div>
+        )}
+
         {/* Plan picker */}
         <div className="grid grid-cols-2 gap-3">
           {(Object.keys(PLANS) as PlanId[]).map((planId) => {
             const plan = PLANS[planId];
             const isSelected = selectedPlan === planId;
+            const displayMonthly = customPriceForPlan(planId) || plan.priceNaira;
             return (
               <button
                 key={planId}
@@ -126,7 +150,7 @@ export default function BillingPage() {
               >
                 <p className="font-bold text-[var(--text-primary)] mb-1">{plan.name}</p>
                 <p className="text-2xl font-black text-[var(--text-primary)] mb-3">
-                  {naira(plan.priceNaira)}
+                  {naira(displayMonthly)}
                   <span className="text-xs font-medium text-slate-500">/mo</span>
                 </p>
                 <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
@@ -151,7 +175,7 @@ export default function BillingPage() {
           <div className="space-y-2">
             {(Object.keys(BILLING_CYCLES) as BillingCycleId[]).map((cycleId) => {
               const cycle = BILLING_CYCLES[cycleId];
-              const price = getCyclePrice(selectedPlan, cycleId);
+              const price = getCyclePrice(selectedPlan, cycleId, selectedCustomPrice);
               const discountPct = getCycleDiscountPct(selectedPlan, cycleId);
               const isSelected = selectedCycle === cycleId;
               return (
@@ -190,7 +214,7 @@ export default function BillingPage() {
             </>
           ) : (
             <>
-              <CreditCard size={18} /> Pay {naira(getCyclePrice(selectedPlan, selectedCycle))} with Paystack
+              <CreditCard size={18} /> Pay {naira(getCyclePrice(selectedPlan, selectedCycle, selectedCustomPrice))} with Paystack
             </>
           )}
         </button>

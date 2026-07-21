@@ -63,8 +63,12 @@ export const BILLING_CYCLES: Record<BillingCycleId, BillingCycleConfig> = {
   annual: { id: "annual", label: "Annual (12 months)", months: 12 },
 };
 
-export function getCyclePrice(plan: PlanId, cycle: BillingCycleId): number {
-  const { priceNaira: monthly, discounts } = PLANS[plan];
+export function getCyclePrice(plan: PlanId, cycle: BillingCycleId, customMonthlyNaira?: number | null): number {
+  // A negotiated monthly rate (set by admin per owner) replaces the plan's
+  // standard priceNaira here — the cycle's discount % still applies on top,
+  // so a custom rate still gets cheaper the longer the owner commits.
+  const monthly = customMonthlyNaira && customMonthlyNaira > 0 ? customMonthlyNaira : PLANS[plan].priceNaira;
+  const { discounts } = PLANS[plan];
   const { months } = BILLING_CYCLES[cycle];
   const discountPct = discounts[cycle];
   const raw = monthly * months;

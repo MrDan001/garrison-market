@@ -33,6 +33,18 @@ model User {
   paystackAuthorizationCode String?
   currentStoreId           Int?      // last store the owner was viewing, for "return to same store"
 
+  // --- Negotiated pricing (admin-set override) ---
+  // When set, these replace the plan's standard monthly price for this
+  // owner at checkout — cycle discounts still apply on top. Separate rates
+  // per plan since an owner may negotiate Basic and Premium differently
+  // (not every store has the same capacity/volume).
+  customPriceBasicNaira    Int?
+  customPriceBasicNote     String?
+  customPricePremiumNaira  Int?
+  customPricePremiumNote   String?
+  customPriceSetBy         String?   // admin email who last set either rate
+  customPriceUpdatedAt     DateTime?
+
   // --- Referral Engine Tracks ---
   // 👇 REMOVED @default(uuid()). We will manage this cleanly with application code!
   referralCode               String?   @unique 

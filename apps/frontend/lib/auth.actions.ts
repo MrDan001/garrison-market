@@ -521,6 +521,47 @@ export async function extendSubscriptionAction(ownerId: number, days: number, re
   }
 }
 
+export async function setCustomPriceAction(ownerId: number, plan: "basic" | "premium", priceNaira: number | null, note?: string) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+
+  if (priceNaira !== null && (!priceNaira || priceNaira <= 0)) {
+    return { success: false, error: "Enter a valid price, or clear it to remove the negotiated rate." };
+  }
+
+  try {
+    const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+    if (!owner) return { success: false, error: "Owner not found." };
+
+    const data =
+      plan === "premium"
+        ? {
+            customPricePremiumNaira: priceNaira,
+            customPricePremiumNote: priceNaira === null ? null : note || null,
+          }
+        : {
+            customPriceBasicNaira: priceNaira,
+            customPriceBasicNote: priceNaira === null ? null : note || null,
+          };
+
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: {
+        ...data,
+        customPriceSetBy: priceNaira === null ? undefined : session.email,
+        customPriceUpdatedAt: new Date(),
+      },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    revalidatePath("/owner/billing");
+    return { success: true };
+  } catch (error) {
+    console.error("Set custom price error:", error);
+    return { success: false, error: "Failed to update negotiated price." };
+  }
+}
+
 export async function deleteUser(email: string) {
   const session = await getSessionUser();
   if (!session || session.role.toLowerCase() !== "admin") {

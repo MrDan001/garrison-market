@@ -20,11 +20,19 @@ export async function getOwnerBillingInfo() {
     orderBy: { createdAt: "desc" },
     take: 20,
   });
+  const owner = await prisma.user.findUnique({
+    where: { id: ownerId },
+    select: { customPriceBasicNaira: true, customPriceBasicNote: true, customPricePremiumNaira: true, customPricePremiumNote: true },
+  });
 
   return {
     status,
     payments: JSON.parse(JSON.stringify(payments)),
     isOwner: session.role === "owner",
+    customPriceBasicNaira: owner?.customPriceBasicNaira ?? null,
+    customPriceBasicNote: owner?.customPriceBasicNote ?? null,
+    customPricePremiumNaira: owner?.customPricePremiumNaira ?? null,
+    customPricePremiumNote: owner?.customPricePremiumNote ?? null,
   };
 }
 
@@ -37,7 +45,16 @@ export async function startCheckoutAction(plan: PlanId, cycle: BillingCycleId) {
   if (!PLANS[plan]) return { error: "Invalid plan selected." };
   if (!BILLING_CYCLES[cycle]) return { error: "Invalid billing cycle selected." };
 
-  const amount = getCyclePrice(plan, cycle);
+  const user = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { email: true, customPriceBasicNaira: true, customPricePremiumNaira: true },
+  });
+  if (!user) return { error: "User not found." };
+
+  // A negotiated rate (set by admin for this owner, per plan) overrides the
+  // plan's standard price here — same discount schedule still applies per cycle.
+  const customMonthly = plan === "premium" ? user.customPricePremiumNaira : user.customPriceBasicNaira;
+  const amount = getCyclePrice(plan, cycle, customMonthly);
   const reference = `gm_${session.id}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
 
   const headerList = await headers();
@@ -46,9 +63,6 @@ export async function startCheckoutAction(plan: PlanId, cycle: BillingCycleId) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
 
   try {
-    const user = await prisma.user.findUnique({ where: { id: session.id }, select: { email: true } });
-    if (!user) return { error: "User not found." };
-
     const tx = await initializeTransaction({
       email: user.email,
       amountNaira: amount,
