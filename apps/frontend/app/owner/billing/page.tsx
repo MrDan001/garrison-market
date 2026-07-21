@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard, Loader2 } from "lucide-react";
 import { getOwnerBillingInfo, startCheckoutAction } from "@/lib/billing.actions";
-import { PLANS, BILLING_CYCLES, getCyclePrice, type PlanId, type BillingCycleId } from "@/lib/plans";
+import { PLANS, BILLING_CYCLES, getCyclePrice, getCycleDiscountPct, type PlanId, type BillingCycleId } from "@/lib/plans";
 
 const naira = (n: number) =>
   new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n);
@@ -152,6 +152,7 @@ export default function BillingPage() {
             {(Object.keys(BILLING_CYCLES) as BillingCycleId[]).map((cycleId) => {
               const cycle = BILLING_CYCLES[cycleId];
               const price = getCyclePrice(selectedPlan, cycleId);
+              const discountPct = getCycleDiscountPct(selectedPlan, cycleId);
               const isSelected = selectedCycle === cycleId;
               return (
                 <button
@@ -165,9 +166,9 @@ export default function BillingPage() {
                 >
                   <span className="text-sm font-medium text-[var(--text-primary)]">
                     {cycle.label}
-                    {cycle.discountPct > 0 && (
+                    {discountPct > 0 && (
                       <span className="ml-2 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                        SAVE {cycle.discountPct}%
+                        SAVE {discountPct}%
                       </span>
                     )}
                   </span>

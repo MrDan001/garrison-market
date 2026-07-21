@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import prisma from "@/lib/prisma";
 
 const SECRET = new TextEncoder().encode(process.env.SESSION_SECRET);
@@ -24,7 +25,11 @@ export async function verifyToken(token: string) {
 
 // --- Session Helpers ---
 
-export async function getSessionUser() {
+// cache() memoizes this per request (not globally, not across users) — so
+// when both a layout and its page call getSessionUser() during the same
+// render, the second call reuses the first's result instead of re-hitting
+// the database. Safe: the cache is scoped to a single request's render pass.
+export const getSessionUser = cache(async function getSessionUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get("session-token")?.value;
   if (!token) return null;
@@ -56,7 +61,7 @@ export async function getSessionUser() {
   } catch {
     return null;
   }
-}
+});
 
 export async function auth() {
   return await getSessionUser();

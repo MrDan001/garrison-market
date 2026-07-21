@@ -5,6 +5,7 @@
 
 import prisma from "@/lib/prisma";
 import { getPlanConfig, type PlanId } from "@/lib/plans";
+import { cache } from "react";
 
 /**
  * The plan to use for feature/limit checks is NOT always the same as the
@@ -40,8 +41,14 @@ export interface BillingStatus {
 
 /**
  * Computes the live billing status for an owner or inherited staff member.
+ *
+ * cache()-wrapped: this is called once by app/owner/layout.tsx (for the
+ * trial bar) and again by the page it wraps (dashboard, etc). Without this,
+ * every owner page load runs this whole resolution — including its DB
+ * reads and self-healing write below — twice. cache() collapses repeat
+ * calls with the same idParam into one, scoped to a single request.
  */
-export async function getBillingStatus(idParam: number): Promise<BillingStatus> {
+export const getBillingStatus = cache(async function getBillingStatus(idParam: number): Promise<BillingStatus> {
   if (!idParam) {
     return {
       plan: "basic",
@@ -155,7 +162,7 @@ export async function getBillingStatus(idParam: number): Promise<BillingStatus> 
     isLocked,
     trialDaysLeft,
   };
-}
+});
 
 /**
  * Throws if the owner's subscription is locked (trial or paid period
