@@ -7,7 +7,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { signToken, verifyToken } from "@/lib/auth";
-import { sendPasswordResetEmail } from "@/lib/email";
+import {
+  sendPasswordResetEmail,
+  sendOwnerWelcomeEmail,
+  sendOwnerApprovedEmail,
+  sendOwnerDeclinedEmail,
+  sendOwnerSuspendedEmail,
+  sendStaffInviteEmail,
+} from "@/lib/email";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { assertSubscriptionActive, checkPlanLimit } from "@/lib/subscription-guard";
 import { creditReferralReward } from "@/lib/referral.actions"; // 👇 Safely imported
@@ -20,6 +27,13 @@ function isNextRedirectError(error: unknown): boolean {
     typeof (error as any).digest === "string" &&
     (error as any).digest.startsWith("NEXT_REDIRECT")
   );
+}
+
+async function getBaseUrl(): Promise<string> {
+  const headerList = await headers();
+  const host = headerList.get("host");
+  const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
+  return process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
 }
 
 export async function safeRedirect(url: string): Promise<never> {
@@ -200,6 +214,14 @@ export async function registerOwnerAction(formData: FormData) {
     });
 
     revalidatePath('/admin/users');
+
+    // sendOwnerWelcomeEmail never throws (it returns { success, error }
+    // internally), so it can't block or fail registration — but we still
+    // await it, since on serverless hosts (Vercel) an un-awaited promise
+    // can get frozen/killed right after the response is sent, before the
+    // Resend call actually completes.
+    await sendOwnerWelcomeEmail(newUser.email, newUser.fullName || "there");
+
     return { redirectUrl: '/pending' };
 
   } catch (error: any) {
@@ -352,11 +374,12 @@ export async function registerStaffAction(formData: FormData) {
 
   try {
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    const cleanEmail = email.toLowerCase().trim();
 
     await prisma.user.create({
       data: {
         fullName,
-        email: email.toLowerCase().trim(),
+        email: cleanEmail,
         phoneNumber,
         password: hashedPassword,
         role: "staff",
@@ -364,6 +387,17 @@ export async function registerStaffAction(formData: FormData) {
         ownerId: session.id,
         staffStoreId: storeId && !isNaN(storeId) ? storeId : null,
       },
+    });
+
+    const owner = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { storeName: true },
+    });
+    const baseUrl = await getBaseUrl();
+    await sendStaffInviteEmail(cleanEmail, fullName, {
+      tempPassword,
+      loginUrl: `${baseUrl}/login`,
+      storeName: owner?.storeName || undefined,
     });
 
     revalidatePath("/owner/staff");
@@ -455,11 +489,21 @@ export async function updateOwnerStatus(email: string, status: 'approved' | 'dec
       }
     }
 
-    await prisma.user.update({ 
+    const updated = await prisma.user.update({ 
       where: { email }, 
       data: updateData
     });
-    
+
+    const fullName = updated.fullName || "there";
+    if (normalizedStatus === "approved") {
+      const baseUrl = await getBaseUrl();
+      await sendOwnerApprovedEmail(email, fullName, `${baseUrl}/login`);
+    } else if (normalizedStatus === "declined") {
+      await sendOwnerDeclinedEmail(email, fullName);
+    } else if (normalizedStatus === "suspended") {
+      await sendOwnerSuspendedEmail(email, fullName);
+    }
+
     revalidatePath("/admin/users");
     revalidatePath("/pending");
     return { success: true };

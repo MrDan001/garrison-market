@@ -3,10 +3,12 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "./auth.actions";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { createNotification } from "./notification.actions";
 import { getActiveStoreId } from "./store-context";
 import { assertSubscriptionActive, resolveEffectivePlanId } from "./subscription-guard";
 import { getPlanConfig } from "./plans";
+import { sendConsignmentSettlementEmail } from "./email";
 
 type SignOutItem = { inventoryId: number; quantityOut: number };
 
@@ -147,7 +149,11 @@ export async function settleConsignment(
 
   const consignment = await prisma.consignment.findUnique({
     where: { id: consignmentId },
-    include: { items: true },
+    include: {
+      items: { include: { inventory: { select: { name: true } } } },
+      owner: { select: { email: true, fullName: true } },
+      store: { select: { name: true } },
+    },
   });
   if (!consignment) throw new Error("Consignment not found");
   if (consignment.staffId !== session.id) throw new Error("Unauthorized");
@@ -223,6 +229,29 @@ export async function settleConsignment(
     message: `Consignment with ${consignment.recipientName} was settled — ₦${total.toLocaleString()} in sales.`,
     link: "/owner/consignments",
   });
+
+  if (consignment.owner?.email) {
+    const headerList = await headers();
+    const host = headerList.get("host");
+    const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
+
+    await sendConsignmentSettlementEmail(consignment.owner.email, consignment.owner.fullName || "there", {
+      recipientName: consignment.recipientName,
+      storeName: consignment.store?.name,
+      totalSales: total,
+      items: settlements.map((s) => {
+        const item = consignment.items.find((i) => i.id === s.itemId)!;
+        return {
+          name: item.inventory.name,
+          quantitySold: s.quantitySold,
+          quantityReturned: s.quantityReturned,
+          subtotal: Number(item.priceAtTime) * s.quantitySold,
+        };
+      }),
+      link: `${baseUrl}/owner/consignments`,
+    });
+  }
 
   revalidatePath("/staff/consignment");
   revalidatePath("/owner/consignments");
