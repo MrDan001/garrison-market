@@ -71,13 +71,13 @@ export function OwnerTable({ initialOwners }: { initialOwners: OwnerType[] }) {
       </div>
 
       {/* DESKTOP VIEW */}
-      <div className="hidden md:block overflow-x-auto bg-[var(--bg-app)] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl">
+      <div className="hidden md:block overflow-x-auto overflow-y-auto max-h-[70vh] bg-[var(--bg-app)] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-[var(--bg-surface)] text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
-              <th className="p-4">Owner</th>
-              <th className="p-4">Status</th>
-              <th className="p-4 text-right">Actions</th>
+            <tr className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
+              <th className="sticky top-0 z-10 bg-[var(--bg-surface)] p-4">Owner</th>
+              <th className="sticky top-0 z-10 bg-[var(--bg-surface)] p-4">Status</th>
+              <th className="sticky top-0 z-10 bg-[var(--bg-surface)] p-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">

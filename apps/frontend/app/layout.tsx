@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { ThemeAntiFlashScript } from './theme-anti-flash';
 import SessionTimeoutGuard from '@/components/SessionTimeoutGuard';
 import ScreenshotGuard from '@/components/ScreenshotGuard';
+import PwaServiceWorkerRegister from '@/components/PwaServiceWorkerRegister';
 import "./styles.css";
 
 export const metadata: Metadata = {
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <SessionTimeoutGuard />
         <ScreenshotGuard />
+        <PwaServiceWorkerRegister />
       </body>
     </html>
   );

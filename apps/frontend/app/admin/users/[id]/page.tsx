@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, MapPin, Store, Phone, Mail, Calendar, Package } from "lucide-react";
+import { ArrowLeft, MapPin, Store, Phone, Mail, Calendar, Package, Users, Gift } from "lucide-react";
 import { OwnerActions } from "./OwnerActions";
 import Image from "next/image"; // Replaced raw img tag with Next.js Image for optimization
 
@@ -14,9 +14,30 @@ export default async function OwnerDetailsPage({
 
   const owner = await prisma.user.findUnique({
     where: { id: parseInt(id) },
+    include: {
+      // Who referred this owner in (if anyone)
+      referredBy: {
+        select: { id: true, fullName: true, email: true },
+      },
+      // Everyone this owner referred (the "referees"), newest first
+      referrals: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          status: true,
+          createdAt: true,
+          subscriptionStatus: true,
+          hasTriggeredReferralReward: true,
+        },
+      },
+    },
   });
 
   if (!owner) notFound();
+
+  const subscribedCount = owner.referrals.filter((r) => r.hasTriggeredReferralReward).length;
 
   const statusStyles: Record<string, string> = {
     approved: "bg-emerald-900/30 text-emerald-400 border-emerald-500/20",
@@ -86,6 +107,77 @@ export default async function OwnerDetailsPage({
             <InfoRow icon={Package} label="Sells" value={owner.productsSold || "Not provided"} />
           </div>
         </div>
+      </div>
+
+      {/* Referral network: who this owner was referred by, and everyone they referred */}
+      <div className="bg-[var(--bg-surface)] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 mb-6">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+            <Users size={14} /> Referrals
+          </h2>
+          {owner.referrals.length > 0 && (
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-900/30 text-emerald-400 border border-emerald-500/20">
+              {subscribedCount} of {owner.referrals.length} subscribed
+            </span>
+          )}
+        </div>
+
+        {owner.referredBy && (
+          <div className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+            <p className="text-[10px] text-slate-400 dark:text-slate-600 uppercase tracking-wider mb-1">Referred by</p>
+            <Link
+              href={`/admin/users/${owner.referredBy.id}`}
+              className="text-sm font-semibold text-[var(--text-primary)] hover:underline"
+            >
+              {owner.referredBy.fullName || "No Name"}
+            </Link>
+            <span className="text-xs text-slate-500 ml-2">{owner.referredBy.email}</span>
+          </div>
+        )}
+
+        <p className="text-[10px] text-slate-400 dark:text-slate-600 uppercase tracking-wider mb-2">
+          Referees ({owner.referrals.length})
+        </p>
+
+        {owner.referrals.length === 0 ? (
+          <p className="text-sm text-slate-500">This owner hasn&apos;t referred anyone yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {owner.referrals.map((referee) => (
+              <Link
+                key={referee.id}
+                href={`/admin/users/${referee.id}`}
+                className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-200/20 hover:dark:bg-slate-800/20 transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                    {referee.fullName || "No Name"}
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">{referee.email}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                    referee.status.toLowerCase().trim() === "approved" ? "bg-emerald-900/30 text-emerald-400" :
+                    referee.status.toLowerCase().trim() === "declined" ? "bg-red-900/30 text-red-400" :
+                    referee.status.toLowerCase().trim() === "suspended" ? "bg-rose-900/30 text-rose-400" :
+                    "bg-amber-900/30 text-amber-400"
+                  }`}>
+                    {referee.status}
+                  </span>
+                  {referee.hasTriggeredReferralReward ? (
+                    <span className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-bold uppercase bg-emerald-900/30 text-emerald-400">
+                      <Gift size={10} /> Subscribed
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 rounded text-[9px] font-bold uppercase bg-slate-200 dark:bg-slate-800 text-slate-500">
+                      Not yet
+                    </span>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Approve / decline / suspend / delete actions */}
