@@ -71,7 +71,7 @@ export async function sendStaffMessage(content: string) {
       staffId: session.id,
       senderId: session.id,
       senderRole: "staff",
-    content: content.trim(),
+      content: content.trim(),
     },
   });
 
@@ -195,8 +195,11 @@ export async function getOwnerAdminThread() {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") return { messages: [], otherTyping: false };
 
+  // isIntakeSummary excludes the auto-posted form recap from the owner's
+  // own view — the questions they filled in "disappear" on their end once
+  // submitted, while admin still has the full answers in the inbox.
   const messages = await prisma.supportMessage.findMany({
-    where: { threadType: "owner_admin", ownerId: session.id },
+    where: { threadType: "owner_admin", ownerId: session.id, isIntakeSummary: false },
     orderBy: { createdAt: "asc" },
     include: { sender: { select: { fullName: true, role: true, image: true } } },
   });
@@ -362,8 +365,9 @@ export async function getStaffAdminThread() {
   const session = await getSessionUser();
   if (!session || session.role !== "staff") return { messages: [], otherTyping: false };
 
+  // Same intake-summary exclusion as the owner thread — see comment there.
   const messages = await prisma.supportMessage.findMany({
-    where: { threadType: "staff_admin", staffId: session.id },
+    where: { threadType: "staff_admin", staffId: session.id, isIntakeSummary: false },
     orderBy: { createdAt: "asc" },
     include: { sender: { select: { fullName: true, role: true, image: true } } },
   });
@@ -399,13 +403,13 @@ export async function setStaffTypingInAdminThread() {
 
 export async function sendStaffToAdminMessage(content: string) {
   const session = await getSessionUser();
-  if (!session || session.role !== "staff") throw new Error("Unauthorized");
+  if (!session || session.role !== "staff" || !session.ownerId) throw new Error("Unauthorized");
   if (!content.trim()) throw new Error("Message cannot be empty");
 
   await prisma.supportMessage.create({
     data: {
       threadType: "staff_admin",
-      ownerId: session.ownerId!,
+      ownerId: session.ownerId,
       staffId: session.id,
       senderId: session.id,
       senderRole: "staff",

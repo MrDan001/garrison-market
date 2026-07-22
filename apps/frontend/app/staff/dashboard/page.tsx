@@ -200,7 +200,7 @@ export default async function StaffDashboard() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <NotificationBell notificationsEnabled={staff.notificationsEnabled} />
+            <NotificationBell notificationsEnabled={staff.notificationsEnabled} userRole="staff" />
 
             <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-[var(--text-primary)] shrink-0 overflow-hidden border border-slate-300 dark:border-slate-700">
               {staff?.image ? (

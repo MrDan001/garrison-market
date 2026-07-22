@@ -156,7 +156,7 @@ export default function AdminLayout({
 
           <div className="flex items-center gap-4 ml-auto">
             {/* Unified Notification Bell */}
-            <NotificationBell notificationsEnabled={true} />
+            <NotificationBell notificationsEnabled={true} userRole="admin" />
             
             {/* Admin Profile Miniature */}
             <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300/60 dark:border-slate-700/60 flex items-center justify-center text-xs font-bold text-blue-400">

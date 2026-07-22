@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { toggleStaffStatus, deleteStaff } from "@/lib/auth.actions";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
+import { getActiveStoreId } from "@/lib/store-context";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +20,12 @@ export default async function ManageStaffPage() {
 
   if (!user || user.status !== "approved") redirect("/pending");
 
-  // 2. Safely read the active store cookie
-  const cookieStore = await cookies();
-  const activeStoreCookie = cookieStore.get("activeStoreId")?.value;
-  const activeStoreId = activeStoreCookie ? parseInt(activeStoreCookie, 10) : null;
+  // 2. Resolve the active store — falls back to the owner's first/only
+  // store when no switcher cookie is set (e.g. single-outlet owners who
+  // never touched the store switcher), instead of bouncing them out.
+  const activeStoreId = await getActiveStoreId();
 
-  if (!activeStoreId || isNaN(activeStoreId)) {
+  if (!activeStoreId) {
     redirect("/owner/stores");
   }
 

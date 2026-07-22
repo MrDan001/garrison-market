@@ -236,6 +236,22 @@ export async function addItemAction(formData: FormData) {
     link: "/staff/inventory",
   });
 
+  // The low-stock check in processSaleAction only fires on the exact sale
+  // that crosses the threshold, so an item added already at/below its own
+  // restock level (or already at 0) would otherwise never trigger an alert.
+  if (restockLevel != null && !isNaN(restockLevel) && newItem.quantity <= restockLevel) {
+    await createNotification({
+      ownerId: session.id,
+      recipientId: null,
+      storeId: storeId ?? null,
+      type: "low_stock",
+      message: newItem.quantity <= 0
+        ? `${newItem.name} was added already out of stock.`
+        : `${newItem.name} was added below its restock level (${newItem.quantity} left).`,
+      link: "/staff/inventory",
+    });
+  }
+
   revalidatePath("/owner/inventory");
   return { success: true };
 }
@@ -265,11 +281,48 @@ export async function updateItemAction(formData: FormData) {
     updateData.image = imageUrl;
   }
 
+  // Snapshot stock before the edit so we can tell whether this update
+  // crosses the restock threshold in either direction (going low, or
+  // being restocked back to healthy) — owner-driven quantity edits
+  // previously never generated any notification at all.
+  const before = await prisma.inventory.findUnique({
+    where: { id },
+    select: { quantity: true, restockLevel: true, storeId: true },
+  });
+
+  let updated;
   try {
-    await prisma.inventory.update({ where: { id }, data: updateData });
+    updated = await prisma.inventory.update({ where: { id }, data: updateData });
   } catch (dbError) {
     console.error("Database update failed:", dbError);
     throw dbError;
+  }
+
+  if (before && updated.restockLevel != null) {
+    const wasLow = before.restockLevel != null && before.quantity <= before.restockLevel;
+    const isLowNow = updated.quantity <= updated.restockLevel;
+
+    if (!wasLow && isLowNow) {
+      await createNotification({
+        ownerId: session.id,
+        recipientId: null,
+        storeId: before.storeId ?? null,
+        type: "low_stock",
+        message: updated.quantity <= 0
+          ? `${updated.name} is now out of stock.`
+          : `${updated.name} is running low (${updated.quantity} left).`,
+        link: "/staff/inventory",
+      });
+    } else if (wasLow && !isLowNow) {
+      await createNotification({
+        ownerId: session.id,
+        recipientId: null,
+        storeId: before.storeId ?? null,
+        type: "restock",
+        message: `${updated.name} was restocked (${updated.quantity} now available).`,
+        link: "/staff/inventory",
+      });
+    }
   }
 
   revalidatePath("/owner/inventory");

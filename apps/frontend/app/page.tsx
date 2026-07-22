@@ -455,8 +455,8 @@ export default function HomePage() {
           )}
         </ScrollUnfurl>
 
-        {/* Section 5: Pricing */}
-        <ScrollUnfurl>
+{/* Section 5: Pricing */}
+<ScrollUnfurl>
           {() => (
             <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10">
               <div className="border border-[var(--border-subtle)]/15 rounded-none p-8 md:p-16 bg-[var(--bg-surface)] shadow-2xl relative overflow-hidden">
@@ -472,16 +472,28 @@ export default function HomePage() {
                 <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
                   {[
                     {
-                      title: "Standard",
+                      title: "Basic",
                       price: "₦---",
-                      features: ["Up to 10 inventory items", "1 staff account", "Daily sales dashboard"],
-                      plan: "standard",
+                      features: [
+                        { text: "Up to 1 store", included: true },
+                        { text: "2 staff accounts", included: true },
+                        { text: "Up to 10 products", included: true },
+                        { text: "Business summary chart", included: false },
+                        { text: "Consignment management", included: false },
+                      ],
+                      plan: "basic",
                     },
                     {
-                      title: "Pro",
+                      title: "Premium",
                       price: "₦---",
-                      features: ["Up to 20 inventory items", "2 staff accounts", "Full staff management"],
-                      plan: "pro",
+                      features: [
+                        { text: "Up to 2 stores", included: true },
+                        { text: "4 staff accounts", included: true },
+                        { text: "Up to 30 products", included: true },
+                        { text: "Business summary chart", included: true },
+                        { text: "Consignment management", included: true },
+                      ],
+                      plan: "premium",
                       popular: true,
                     },
                   ].map((plan) => (
@@ -500,8 +512,11 @@ export default function HomePage() {
                       </div>
                       <ul className="space-y-4 flex-1">
                         {plan.features.map((f) => (
-                          <li key={f} className="text-sm flex items-start gap-2.5 text-[var(--text-primary)]/80">
-                            <span className="text-[#E55345] mt-0.5 font-black">—</span> {f}
+                          <li key={f.text} className={`text-sm flex items-start gap-2.5 ${f.included ? 'text-[var(--text-primary)]/80' : 'text-[var(--text-primary)]/30 line-through'}`}>
+                            <span className={f.included ? 'text-[#E55345] mt-0.5 font-black' : 'text-[var(--text-primary)]/30 mt-0.5 font-black'}>
+                              {f.included ? '—' : '✕'}
+                            </span> 
+                            {f.text}
                           </li>
                         ))}
                       </ul>

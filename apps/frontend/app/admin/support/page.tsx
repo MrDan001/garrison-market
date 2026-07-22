@@ -1,6 +1,6 @@
 import { getSessionUser } from "@/lib/auth.actions";
 import { redirect } from "next/navigation";
-import { getAdminThreads, getAdminStaffThreads } from "@/lib/support.actions";
+import { getAdminIntakeInbox } from "@/lib/support-intake.actions";
 import AdminSupportClient from "./admin-support-client";
 
 export const dynamic = "force-dynamic";
@@ -9,16 +9,12 @@ export default async function AdminSupportPage() {
   const session = await getSessionUser();
   if (!session || session.role !== "admin") redirect("/login");
 
-  const [ownerThreads, staffThreads] = await Promise.all([
-    getAdminThreads(),
-    getAdminStaffThreads(),
-  ]);
+  const inbox = await getAdminIntakeInbox();
 
   return (
     <AdminSupportClient
       currentUserId={session.id}
-      ownerThreads={JSON.parse(JSON.stringify(ownerThreads))}
-      staffThreads={JSON.parse(JSON.stringify(staffThreads))}
+      inbox={inbox}
     />
   );
 }

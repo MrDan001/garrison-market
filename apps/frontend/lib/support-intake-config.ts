@@ -1,138 +1,140 @@
-// lib/support-intake-config.ts
-// Single source of truth for the pre-chat "why are you contacting admin"
-// triage flow. Edit the options/deflection text here — the wizard and the
-// summary message sent to admin both read from this file.
+export type IntakeCategory =
+  | "billing"
+  | "inventory"
+  | "orders"
+  | "staff"
+  | "technical"
+  | "other";
 
-export type IntakeCategory = "billing" | "login" | "bug" | "howto" | "staff_mgmt" | "other";
-
-export interface Option {
+export interface DetailOption {
   value: string;
   label: string;
-}
-
-export const CATEGORY_OPTIONS: Option[] = [
-  { value: "billing", label: "Billing, payment, or free trial" },
-  { value: "login", label: "Login or account access" },
-  { value: "bug", label: "Something's broken / a bug" },
-  { value: "howto", label: "How do I do something?" },
-  { value: "staff_mgmt", label: "Staff or store management" },
-  { value: "other", label: "Something else" },
-];
-
-export const URGENCY_OPTIONS: Option[] = [
-  { value: "urgent", label: "Urgent — I can't work right now" },
-  { value: "important", label: "Important, but not blocking" },
-  { value: "question", label: "Just a general question" },
-];
-
-export const YES_NO_OPTIONS: Option[] = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-];
-
-export const SELF_HELP_OPTIONS: Option[] = [
-  { value: "yes_no_luck", label: "Yes, already tried — didn't help" },
-  { value: "no", label: "No, haven't tried anything yet" },
-  { value: "na", label: "Not applicable" },
-];
-
-export interface DetailOption extends Option {
-  /** Static deflection text. Use dynamicTrialInfo for a live trial-days answer instead. */
-  deflection?: string;
-  deflectionLink?: { href: string; label: string; ownerOnly?: boolean };
-  /** Special-cased in the wizard to inject the live trial-days-left count. */
   dynamicTrialInfo?: boolean;
+  deflection?: string;
+  deflectionLink?: {
+    href: string;
+    label: string;
+    ownerOnly?: boolean;
+  };
 }
 
-export const DETAIL_QUESTIONS: Record<IntakeCategory, { question: string; options: DetailOption[] }> = {
+interface DetailQuestionConfig {
+  question: string;
+  options: DetailOption[];
+}
+
+export const CATEGORY_OPTIONS: { id: IntakeCategory; label: string }[] = [
+  { id: "billing", label: "Billing & subscription" },
+  { id: "inventory", label: "Inventory & stock" },
+  { id: "orders", label: "Orders & sales" },
+  { id: "staff", label: "Staff accounts" },
+  { id: "technical", label: "Something's not working" },
+  { id: "other", label: "Something else" },
+];
+
+export const URGENCY_OPTIONS: { id: string; label: string }[] = [
+  { id: "urgent", label: "Urgent — I need help right now" },
+  { id: "important", label: "Important, but it can wait a bit" },
+  { id: "question", label: "Just a question" },
+];
+
+export const YES_NO_OPTIONS: { id: string; label: string }[] = [
+  { id: "yes", label: "Yes" },
+  { id: "no", label: "No" },
+];
+
+export const SELF_HELP_OPTIONS: { id: string; label: string }[] = [
+  { id: "none", label: "No, haven't tried anything" },
+  { id: "some", label: "Yes, tried a few things" },
+  { id: "everything", label: "Yes, tried everything I could think of" },
+];
+
+export const DETAIL_QUESTIONS: Record<IntakeCategory, DetailQuestionConfig> = {
   billing: {
-    question: "What specifically about billing?",
+    question: "What's going on with billing?",
     options: [
-      { value: "trial_days", label: "How many trial days do I have left?", dynamicTrialInfo: true },
+      { value: "trial_status", label: "How much time is left on my trial?", dynamicTrialInfo: true },
       {
-        value: "upgrade",
+        value: "change_plan",
         label: "I want to upgrade or change my plan",
-        deflection: "You can compare plans and upgrade any time from the Billing page — it takes about a minute.",
+        deflection: "You can change plans anytime from the Billing page.",
         deflectionLink: { href: "/owner/billing", label: "Go to Billing", ownerOnly: true },
       },
-      { value: "payment_failed", label: "My payment didn't go through" },
-      { value: "other_billing", label: "Something else about billing" },
-    ],
-  },
-  login: {
-    question: "What's happening?",
-    options: [
       {
-        value: "forgot_password",
-        label: "I forgot my password",
-        deflection: 'Tap "Forgot password" on the login screen to reset it by email — no need to wait for us.',
-        deflectionLink: { href: "/login", label: "Go to Login" },
-      },
-      {
-        value: "pending_approval",
-        label: "My account is pending approval",
+        value: "payment_failed",
+        label: "My payment didn't go through",
         deflection:
-          "New owner accounts are reviewed before activation. This usually clears within a business day — check your status page for the latest.",
-        deflectionLink: { href: "/pending", label: "Check status", ownerOnly: true },
+          "Double check your card details and try again from the Billing page. If it keeps failing, let us know your bank so we can look into it.",
+        deflectionLink: { href: "/owner/billing", label: "Go to Billing", ownerOnly: true },
       },
-      { value: "other_login", label: "Something else" },
     ],
   },
-  bug: {
-    question: "What were you trying to do when it broke?",
-    options: [
-      { value: "sale", label: "Making a sale / using the POS" },
-      { value: "inventory", label: "Adding or editing inventory" },
-      { value: "report", label: "Viewing or generating a report" },
-      { value: "other_bug", label: "Something else" },
-    ],
-  },
-  howto: {
-    question: "What do you need to do?",
+  inventory: {
+    question: "What's the issue with inventory?",
     options: [
       {
-        value: "add_staff",
-        label: "Add a staff member",
-        deflection: "Go to Staff → Add Staff, fill in their details, and they'll get login access right away.",
-        deflectionLink: { href: "/owner/staff/register", label: "Add staff", ownerOnly: true },
-      },
-      {
-        value: "add_inventory",
-        label: "Add inventory / products",
-        deflection: "Go to Inventory → Add Item to create a new product with stock, price, and photo.",
-        deflectionLink: { href: "/owner/inventory/add", label: "Add inventory", ownerOnly: true },
-      },
-      {
-        value: "apply_discount",
-        label: "Apply a discount on a sale",
+        value: "low_stock",
+        label: "Stock counts look wrong",
         deflection:
-          "Discounts can be applied right from the sale screen once the discount permission toggle is enabled in Settings.",
+          "Check the Inventory page — quantities update automatically after each sale, so a mismatch usually means an order or restock wasn't logged there yet.",
+        deflectionLink: { href: "/owner/inventory", label: "Go to Inventory" },
       },
       {
-        value: "generate_report",
-        label: "Generate a report",
-        deflection: "Go to Reports to create or view a report for any date range.",
-        deflectionLink: { href: "/owner/report", label: "Go to Reports", ownerOnly: true },
+        value: "cant_add_item",
+        label: "I can't add or edit an item",
+        deflection:
+          "Make sure required fields (name, price, quantity) are filled in — the save button stays disabled until they are.",
       },
-      { value: "other_howto", label: "Something else" },
     ],
   },
-  staff_mgmt: {
-    question: "What's this about?",
+  orders: {
+    question: "What's going on with orders?",
     options: [
       {
-        value: "remove_staff",
-        label: "Remove or deactivate a staff member",
-        deflection: "Open the staff member's profile from the Staff page — you'll find that option there.",
+        value: "missing_order",
+        label: "An order isn't showing up",
+        deflection: "Check the Orders page filters — orders are scoped to the store currently selected.",
+        deflectionLink: { href: "/owner/orders", label: "Go to Orders" },
+      },
+      {
+        value: "wrong_total",
+        label: "An order total looks wrong",
+        deflection:
+          "Totals include any per-item discounts applied at checkout — open the order to see the breakdown.",
+      },
+    ],
+  },
+  staff: {
+    question: "What's the issue with staff accounts?",
+    options: [
+      {
+        value: "cant_login",
+        label: "A staff member can't log in",
+        deflection:
+          "Check the Staff page to confirm their account status is active, not pending or suspended.",
         deflectionLink: { href: "/owner/staff", label: "Go to Staff", ownerOnly: true },
       },
       {
-        value: "discount_toggle",
-        label: "Staff discount permissions",
-        deflection: "You can turn staff discount access on or off from Settings.",
-        deflectionLink: { href: "/owner/settings", label: "Go to Settings", ownerOnly: true },
+        value: "permissions",
+        label: "I need to change what a staff member can access",
+        deflection: "Staff permissions can be toggled per person from the Staff page.",
+        deflectionLink: { href: "/owner/staff", label: "Go to Staff", ownerOnly: true },
       },
-      { value: "other_staff", label: "Something else" },
+    ],
+  },
+  technical: {
+    question: "What's not working?",
+    options: [
+      {
+        value: "error_message",
+        label: "I'm seeing an error message",
+        deflection: "Try refreshing the page first — if it keeps happening, tell us exactly what it says.",
+      },
+      {
+        value: "slow_or_stuck",
+        label: "The app is slow or stuck loading",
+        deflection: "Try refreshing, or logging out and back in if a page won't load.",
+      },
     ],
   },
   other: {
@@ -141,15 +143,15 @@ export const DETAIL_QUESTIONS: Record<IntakeCategory, { question: string; option
   },
 };
 
-export function labelForCategory(value: string) {
-  return CATEGORY_OPTIONS.find((o) => o.value === value)?.label ?? value;
+export function labelForCategory(category: string): string {
+  return CATEGORY_OPTIONS.find((c) => c.id === category)?.label ?? category;
 }
 
-export function labelForUrgency(value: string) {
-  return URGENCY_OPTIONS.find((o) => o.value === value)?.label ?? value;
+export function labelForUrgency(urgency: string): string {
+  return URGENCY_OPTIONS.find((u) => u.id === urgency)?.label ?? urgency;
 }
 
-export function labelForDetail(category: string, value: string) {
-  const q = DETAIL_QUESTIONS[category as IntakeCategory];
-  return q?.options.find((o) => o.value === value)?.label ?? value;
+export function labelForDetail(category: string, detailAnswer: string): string {
+  const config = DETAIL_QUESTIONS[category as IntakeCategory];
+  return config?.options.find((o) => o.value === detailAnswer)?.label ?? detailAnswer;
 }

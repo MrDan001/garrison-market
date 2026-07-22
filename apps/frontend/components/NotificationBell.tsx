@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bell, ClipboardCheck, PackageX,
-  Sparkles, Megaphone, Inbox, CheckCheck, Banknote, FileText,
+  Sparkles, Megaphone, Inbox, CheckCheck, Banknote, FileText, PackageCheck,
 } from "lucide-react";
 import { getNotificationsForStaff, markAllNotificationsRead } from "@/lib/notification.actions";
 
-type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted";
+type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock";
 
 const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label: string }> = {
   report_status: { icon: ClipboardCheck, bg: "bg-blue-500/10", text: "text-blue-400", label: "Report" },
@@ -16,6 +16,7 @@ const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label
   announcement: { icon: Megaphone, bg: "bg-purple-500/10", text: "text-purple-400", label: "Announcement" },
   sale_made: { icon: Banknote, bg: "bg-emerald-500/10", text: "text-emerald-400", label: "Sale" },
   report_submitted: { icon: FileText, bg: "bg-blue-500/10", text: "text-blue-400", label: "Report Submitted" },
+  restock: { icon: PackageCheck, bg: "bg-sky-500/10", text: "text-sky-400", label: "Restocked" },
 };
 
 function timeAgo(dateStr: string) {
@@ -36,7 +37,51 @@ function isToday(dateStr: string) {
   return d.toDateString() === now.toDateString();
 }
 
-export default function NotificationBell({ notificationsEnabled }: { notificationsEnabled: boolean }) {
+type UserRole = "owner" | "staff" | "admin";
+
+// Some notifications are broadcast to both owners and staff (recipientId:
+// null) but carry a single hardcoded link written from one role's point of
+// view (e.g. "/staff/inventory"). The route middleware blocks cross-role
+// access (owner hitting /staff/* or staff hitting /owner/*) and bounces the
+// user to /login, which is exactly the bug this map exists to prevent.
+// Known equivalent pages are listed here; anything without a known
+// equivalent falls back to the viewer's own dashboard instead of a route
+// they aren't allowed to load.
+const ROUTE_EQUIVALENTS: Record<string, Partial<Record<UserRole, string>>> = {
+  "/owner/inventory": { owner: "/owner/inventory", staff: "/staff/inventory" },
+  "/staff/inventory": { owner: "/owner/inventory", staff: "/staff/inventory" },
+  "/owner/report": { owner: "/owner/report", staff: "/staff/report" },
+  "/staff/report": { owner: "/owner/report", staff: "/staff/report" },
+  "/owner/dashboard": { owner: "/owner/dashboard", staff: "/staff/dashboard" },
+  "/staff/dashboard": { owner: "/owner/dashboard", staff: "/staff/dashboard" },
+};
+
+function resolveNotificationLink(link: string | undefined | null, userRole: UserRole): string | null {
+  if (!link) return null;
+  if (userRole === "admin") return link;
+
+  const equivalent = ROUTE_EQUIVALENTS[link]?.[userRole];
+  if (equivalent) return equivalent;
+
+  // No known equivalent — never follow a link into the other role's
+  // route space (proxy.ts will just redirect to /login). Fall back to
+  // this viewer's own dashboard instead.
+  const isOwnerLink = link.startsWith("/owner/");
+  const isStaffLink = link.startsWith("/staff/");
+  if ((isOwnerLink && userRole !== "owner") || (isStaffLink && userRole !== "staff")) {
+    return userRole === "owner" ? "/owner/dashboard" : "/staff/dashboard";
+  }
+
+  return link;
+}
+
+export default function NotificationBell({
+  notificationsEnabled,
+  userRole = "owner",
+}: {
+  notificationsEnabled: boolean;
+  userRole?: UserRole;
+}) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -195,7 +240,7 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
                     <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider px-1">Today</p>
                     <div className="space-y-1.5">
                       {todayNotifs.map((n) => (
-                        <NotificationCard key={n.id} notification={n} />
+                        <NotificationCard key={n.id} notification={n} userRole={userRole} />
                       ))}
                     </div>
                   </div>
@@ -205,7 +250,7 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
                     <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider px-1">Earlier</p>
                     <div className="space-y-1.5">
                       {earlierNotifs.map((n) => (
-                        <NotificationCard key={n.id} notification={n} />
+                        <NotificationCard key={n.id} notification={n} userRole={userRole} />
                       ))}
                     </div>
                   </div>
@@ -227,7 +272,7 @@ export default function NotificationBell({ notificationsEnabled }: { notificatio
   );
 }
 
-function NotificationCard({ notification }: { notification: any }) {
+function NotificationCard({ notification, userRole }: { notification: any; userRole: UserRole }) {
   const config = typeConfig[notification.type as NotifType] ?? typeConfig.announcement;
   const Icon = config.icon;
   const isUnread = !notification.read;
@@ -267,9 +312,11 @@ function NotificationCard({ notification }: { notification: any }) {
     </div>
   );
 
-  if (notification.link) {
+  const resolvedLink = resolveNotificationLink(notification.link, userRole);
+
+  if (resolvedLink) {
     return (
-      <a href={notification.link} className="block">
+      <a href={resolvedLink} className="block">
         {content}
       </a>
     );

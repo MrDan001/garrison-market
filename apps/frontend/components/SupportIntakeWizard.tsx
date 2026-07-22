@@ -1,3 +1,4 @@
+// components/SupportIntakeWizard.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -195,12 +196,12 @@ export default function SupportIntakeWizard({
       {/* ── Q1: CATEGORY ── */}
       {step === "category" && (
         <QuestionBlock title="What's this about?">
-          {CATEGORY_OPTIONS.map((opt) => (
+          {CATEGORY_OPTIONS.map((opt: { id: IntakeCategory; label: string }) => (
             <OptionButton
-              key={opt.value}
+              key={opt.id}
               label={opt.label}
               onClick={() => {
-                update("category", opt.value);
+                update("category", opt.id);
                 setStep("urgency");
               }}
             />
@@ -211,12 +212,12 @@ export default function SupportIntakeWizard({
       {/* ── Q2: URGENCY ── */}
       {step === "urgency" && (
         <QuestionBlock title="How urgent is this?" onBack={() => setStep("category")}>
-          {URGENCY_OPTIONS.map((opt) => (
+          {URGENCY_OPTIONS.map((opt: { id: string; label: string }) => (
             <OptionButton
-              key={opt.value}
+              key={opt.id}
               label={opt.label}
               onClick={() => {
-                update("urgency", opt.value);
+                update("urgency", opt.id);
                 setStep("impact");
               }}
             />
@@ -230,12 +231,12 @@ export default function SupportIntakeWizard({
           title="Is this stopping you from making sales or using the app right now?"
           onBack={() => setStep("urgency")}
         >
-          {YES_NO_OPTIONS.map((opt) => (
+          {YES_NO_OPTIONS.map((opt: { id: string; label: string }) => (
             <OptionButton
-              key={opt.value}
+              key={opt.id}
               label={opt.label}
               onClick={() => {
-                update("blockingSales", opt.value);
+                update("blockingSales", opt.id);
                 goToDetailOrSkip();
               }}
             />
@@ -246,7 +247,7 @@ export default function SupportIntakeWizard({
       {/* ── Q4: CATEGORY DETAIL ── */}
       {step === "detail" && detailConfig && (
         <QuestionBlock title={detailConfig.question} onBack={() => setStep("impact")}>
-          {detailConfig.options.map((opt) => (
+          {detailConfig.options.map((opt: DetailOption) => (
             <OptionButton key={opt.value} label={opt.label} onClick={() => pickDetail(opt)} />
           ))}
         </QuestionBlock>
@@ -299,9 +300,9 @@ export default function SupportIntakeWizard({
           title="Have you already tried anything to fix this yourself?"
           onBack={() => (hasDetailStep ? setStep("detail") : setStep("impact"))}
         >
-          {SELF_HELP_OPTIONS.map((opt) => (
+          {SELF_HELP_OPTIONS.map((opt: { id: string; label: string }) => (
             <OptionButton
-              key={opt.value}
+              key={opt.id}
               label={opt.label}
               onClick={() => {
                 update("triedSelfHelp", opt.label);

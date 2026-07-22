@@ -16,12 +16,6 @@ export interface IntakeContext {
   subscriptionStatus: string;
 }
 
-/**
- * Decides whether the owner/staff needs to go through the intake wizard
- * before they can see the admin chat. They skip it if they already have an
- * open (unresolved) intake, or an existing message history predating this
- * feature — so nobody's past conversation gets hidden behind a form.
- */
 export async function getIntakeContext(threadType: IntakeThreadType): Promise<IntakeContext | null> {
   const session = await getSessionUser();
   if (!session) return null;
@@ -55,9 +49,6 @@ export async function getIntakeContext(threadType: IntakeThreadType): Promise<In
     getBillingStatus(ownerId),
   ]);
 
-  // Grandfather conversations that started before this feature existed: if
-  // there's message history but no intake record was ever created for it,
-  // don't hide that history behind a form.
   const isLegacyThread = anyIntakeCount === 0 && messageCount > 0;
 
   let storeName = user?.storeName ?? "";
@@ -100,11 +91,6 @@ function buildIntakeSummary(a: IntakeAnswers) {
   return lines.filter(Boolean).join("\n");
 }
 
-/**
- * Called when the owner/staff hits a self-serve deflection and confirms it
- * solved their problem. Logs the intake as closed/resolved but does NOT
- * open a chat thread or notify admin — keeps the inbox to real issues only.
- */
 export async function resolveIntakeSelfServed(threadType: IntakeThreadType, answers: IntakeAnswers) {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
@@ -135,11 +121,6 @@ export async function resolveIntakeSelfServed(threadType: IntakeThreadType, answ
   return { success: true };
 }
 
-/**
- * Called when the owner/staff has no self-serve deflection or still needs
- * help after seeing one. Logs the intake as open and posts a formatted
- * summary as the first message so admin has full context immediately.
- */
 export async function submitIntakeAndEscalate(threadType: IntakeThreadType, answers: IntakeAnswers) {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
@@ -173,6 +154,7 @@ export async function submitIntakeAndEscalate(threadType: IntakeThreadType, answ
       senderId: session.id,
       senderRole: session.role,
       content: buildIntakeSummary(answers),
+      isIntakeSummary: true,
     },
   });
 
@@ -182,10 +164,6 @@ export async function submitIntakeAndEscalate(threadType: IntakeThreadType, answ
   return { success: true };
 }
 
-/**
- * Admin action: marks the conversation resolved so the owner/staff goes
- * through a fresh intake next time they reach out about a new issue.
- */
 export async function adminCloseIntake(threadType: IntakeThreadType, ownerId: number, staffId?: number) {
   const session = await getSessionUser();
   if (!session || session.role !== "admin") throw new Error("Unauthorized");
@@ -196,6 +174,51 @@ export async function adminCloseIntake(threadType: IntakeThreadType, ownerId: nu
         ? { threadType, ownerId, status: "open" }
         : { threadType, staffId, status: "open" },
     data: { status: "closed", closedAt: new Date() },
+  });
+
+  revalidatePath("/admin/support");
+  return { success: true };
+}
+
+export interface IntakeInboxRow {
+  id: number;
+  threadType: IntakeThreadType;
+  ownerId: number;
+  staffId: number | null;
+  name: string;
+  storeName: string | null;
+  email: string;
+  category: string;
+  urgency: string;
+  blockingSales: string | null;
+  detailAnswer: string | null;
+  triedSelfHelp: string | null;
+  extraNotes: string | null;
+  status: string;
+  resolvedBySelf: boolean;
+  adminRead: boolean;
+  createdAt: string;
+  closedAt: string | null;
+}
+
+export async function getAdminIntakeInbox(): Promise<IntakeInboxRow[]> {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return [];
+
+  const rows = await prisma.supportIntake.findMany({
+    orderBy: { createdAt: "desc" },
+  });
+
+  return JSON.parse(JSON.stringify(rows));
+}
+
+export async function markIntakeRead(intakeId: number) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") throw new Error("Unauthorized");
+
+  await prisma.supportIntake.update({
+    where: { id: intakeId },
+    data: { adminRead: true },
   });
 
   revalidatePath("/admin/support");

@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
-type NotificationType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted";
+type NotificationType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock";
 
 export async function createNotification(params: {
   ownerId: number;

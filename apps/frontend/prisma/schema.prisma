@@ -288,6 +288,11 @@ model SupportMessage {
   senderRole String
   content    String
   read       Boolean  @default(false)
+  // True only for the auto-generated summary bubble posted by
+  // submitIntakeAndEscalate. Hidden from the owner/staff's own thread view
+  // (their filled-in form "disappears" on their end) but still visible to
+  // admin, and the full structured answers live in SupportIntake regardless.
+  isIntakeSummary Boolean @default(false)
   createdAt  DateTime @default(now())
 
   owner      User @relation("SupportOwnerScope", fields: [ownerId], references: [id], onDelete: Cascade)
@@ -314,6 +319,10 @@ model SupportIntake {
   extraNotes     String?
   status         String    @default("open") // "open" | "closed"
   resolvedBySelf Boolean   @default(false)
+  // Tracks whether admin has opened this submission in the inbox yet —
+  // independent of chat "read" state, since a self-resolved intake has
+  // no chat thread at all.
+  adminRead      Boolean   @default(false)
   createdAt      DateTime  @default(now())
   closedAt       DateTime?
 

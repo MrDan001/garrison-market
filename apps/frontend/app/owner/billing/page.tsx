@@ -45,7 +45,6 @@ export default function BillingPage() {
     planId === "premium" ? customPricePremiumNote : customPriceBasicNote;
 
   const selectedCustomPrice = customPriceForPlan(selectedPlan);
-  const selectedCustomNote = customNoteForPlan(selectedPlan);
 
   async function handleCheckout() {
     setCheckingOut(true);
@@ -123,24 +122,6 @@ export default function BillingPage() {
         {error && (
           <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm font-semibold text-rose-500">
             {error}
-          </div>
-        )}
-
-        {selectedCustomPrice ? (
-          <div className="rounded-xl bg-teal-500/10 border border-teal-500/30 px-4 py-3 text-sm">
-            <p className="font-semibold text-teal-600 dark:text-teal-400">
-              You have a negotiated rate for {PLANS[selectedPlan].name}: {naira(selectedCustomPrice)}/mo
-            </p>
-            {selectedCustomNote && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{selectedCustomNote}</p>}
-          </div>
-        ) : (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm">
-            <p className="font-semibold text-amber-600 dark:text-amber-400">
-              No rate set for {PLANS[selectedPlan].name} yet
-            </p>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-              Contact the admin to negotiate a price for this plan — you won't be able to pay until a rate is set.
-            </p>
           </div>
         )}
 
@@ -226,7 +207,7 @@ export default function BillingPage() {
               <Loader2 className="animate-spin" size={18} /> Redirecting to Paystack...
             </>
           ) : selectedCustomPrice === null ? (
-            <>No rate set yet — contact admin</>
+            <>contact admin</>
           ) : (
             <>
               <CreditCard size={18} /> Pay {naira(getCyclePrice(selectedPlan, selectedCycle, selectedCustomPrice)!)} with Paystack
