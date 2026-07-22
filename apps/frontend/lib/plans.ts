@@ -8,13 +8,17 @@ export type BillingCycleId = "quarterly" | "biannual" | "annual";
 export interface PlanConfig {
   id: PlanId;
   name: string;
-  priceNaira: number; // per month, in Naira
+  // NOTE: there is no static/default priceNaira anymore. Pricing is fully
+  // negotiated per owner — see customPriceBasicNaira / customPricePremiumNaira
+  // on the User model, set by an admin via setCustomPriceAction. Until an
+  // admin sets a rate for a given owner+plan, that plan has no price and
+  // cannot be checked out.
   maxStores: number;
   maxStaff: number;
   maxProducts: number;
   businessSummaryChart: boolean;
   consignment: boolean;
-  // Discount applied to (priceNaira x cycle months) for that cycle, 0-100.
+  // Discount applied to (negotiated monthly rate x cycle months) for that cycle, 0-100.
   // Premium carries deeper discounts on longer cycles than Basic on purpose
   // — it narrows the price gap between plans as commitment length grows,
   // so a subscriber comparing 12-month plans sees Premium as ~1.4x Basic
@@ -26,7 +30,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   basic: {
     id: "basic",
     name: "Basic",
-    priceNaira: 6000,
     maxStores: 1,
     maxStaff: 2,
     maxProducts: 10,
@@ -37,7 +40,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   premium: {
     id: "premium",
     name: "Premium",
-    priceNaira: 12000,
     maxStores: 2,
     maxStaff: 4,
     maxProducts: 30,
@@ -63,15 +65,18 @@ export const BILLING_CYCLES: Record<BillingCycleId, BillingCycleConfig> = {
   annual: { id: "annual", label: "Annual (12 months)", months: 12 },
 };
 
-export function getCyclePrice(plan: PlanId, cycle: BillingCycleId, customMonthlyNaira?: number | null): number {
-  // A negotiated monthly rate (set by admin per owner) replaces the plan's
-  // standard priceNaira here — the cycle's discount % still applies on top,
-  // so a custom rate still gets cheaper the longer the owner commits.
-  const monthly = customMonthlyNaira && customMonthlyNaira > 0 ? customMonthlyNaira : PLANS[plan].priceNaira;
+/**
+ * Returns the price for a plan+cycle, or null if this owner has no
+ * negotiated rate for that plan yet. There is no static fallback price —
+ * an admin must set a rate (via setCustomPriceAction) before an owner can
+ * see a price or check out for that plan.
+ */
+export function getCyclePrice(plan: PlanId, cycle: BillingCycleId, customMonthlyNaira?: number | null): number | null {
+  if (!customMonthlyNaira || customMonthlyNaira <= 0) return null;
   const { discounts } = PLANS[plan];
   const { months } = BILLING_CYCLES[cycle];
   const discountPct = discounts[cycle];
-  const raw = monthly * months;
+  const raw = customMonthlyNaira * months;
   return Math.round(raw * (1 - discountPct / 100));
 }
 

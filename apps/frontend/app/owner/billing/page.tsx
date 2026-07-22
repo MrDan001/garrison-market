@@ -10,6 +10,10 @@ import { PLANS, BILLING_CYCLES, getCyclePrice, getCycleDiscountPct, type PlanId,
 const naira = (n: number) =>
   new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n);
 
+// Pricing is fully negotiated — there's no standard price to fall back to.
+// Render a dash until an admin sets a rate for this owner+plan.
+const nairaOrDash = (n: number | null) => (n === null ? "—" : naira(n));
+
 export default function BillingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -122,13 +126,21 @@ export default function BillingPage() {
           </div>
         )}
 
-        {selectedCustomPrice && (
+        {selectedCustomPrice ? (
           <div className="rounded-xl bg-teal-500/10 border border-teal-500/30 px-4 py-3 text-sm">
             <p className="font-semibold text-teal-600 dark:text-teal-400">
               You have a negotiated rate for {PLANS[selectedPlan].name}: {naira(selectedCustomPrice)}/mo
             </p>
             {selectedCustomNote && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{selectedCustomNote}</p>}
-            <p className="text-xs text-slate-500 mt-1">This rate applies below, in place of standard plan pricing.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm">
+            <p className="font-semibold text-amber-600 dark:text-amber-400">
+              No rate set for {PLANS[selectedPlan].name} yet
+            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+              Contact the admin to negotiate a price for this plan — you won't be able to pay until a rate is set.
+            </p>
           </div>
         )}
 
@@ -137,7 +149,7 @@ export default function BillingPage() {
           {(Object.keys(PLANS) as PlanId[]).map((planId) => {
             const plan = PLANS[planId];
             const isSelected = selectedPlan === planId;
-            const displayMonthly = customPriceForPlan(planId) || plan.priceNaira;
+            const displayMonthly = customPriceForPlan(planId);
             return (
               <button
                 key={planId}
@@ -150,8 +162,8 @@ export default function BillingPage() {
               >
                 <p className="font-bold text-[var(--text-primary)] mb-1">{plan.name}</p>
                 <p className="text-2xl font-black text-[var(--text-primary)] mb-3">
-                  {naira(displayMonthly)}
-                  <span className="text-xs font-medium text-slate-500">/mo</span>
+                  {nairaOrDash(displayMonthly)}
+                  {displayMonthly !== null && <span className="text-xs font-medium text-slate-500">/mo</span>}
                 </p>
                 <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
                   <li>{plan.maxStores} store{plan.maxStores > 1 ? "s" : ""}</li>
@@ -182,7 +194,8 @@ export default function BillingPage() {
                 <button
                   key={cycleId}
                   onClick={() => setSelectedCycle(cycleId)}
-                  className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 transition-all ${
+                  disabled={price === null}
+                  className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                     isSelected
                       ? "border-blue-600 bg-blue-500/5"
                       : "border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)]"
@@ -196,7 +209,7 @@ export default function BillingPage() {
                       </span>
                     )}
                   </span>
-                  <span className="text-sm font-bold text-[var(--text-primary)]">{naira(price)}</span>
+                  <span className="text-sm font-bold text-[var(--text-primary)]">{nairaOrDash(price)}</span>
                 </button>
               );
             })}
@@ -205,16 +218,18 @@ export default function BillingPage() {
 
         <button
           onClick={handleCheckout}
-          disabled={checkingOut}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-bold py-4 rounded-xl transition-colors"
+          disabled={checkingOut || selectedCustomPrice === null}
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-colors"
         >
           {checkingOut ? (
             <>
               <Loader2 className="animate-spin" size={18} /> Redirecting to Paystack...
             </>
+          ) : selectedCustomPrice === null ? (
+            <>No rate set yet — contact admin</>
           ) : (
             <>
-              <CreditCard size={18} /> Pay {naira(getCyclePrice(selectedPlan, selectedCycle, selectedCustomPrice))} with Paystack
+              <CreditCard size={18} /> Pay {naira(getCyclePrice(selectedPlan, selectedCycle, selectedCustomPrice)!)} with Paystack
             </>
           )}
         </button>

@@ -47,14 +47,23 @@ export async function startCheckoutAction(plan: PlanId, cycle: BillingCycleId) {
 
   const user = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { email: true, customPriceBasicNaira: true, customPricePremiumNaira: true },
+    select: {
+      email: true,
+      customPriceBasicNaira: true,
+      customPricePremiumNaira: true,
+      currentPeriodEnd: true,
+    },
   });
   if (!user) return { error: "User not found." };
 
-  // A negotiated rate (set by admin for this owner, per plan) overrides the
-  // plan's standard price here — same discount schedule still applies per cycle.
+  // Pricing is fully negotiated — there is no standard/static price to fall
+  // back to. Until an admin sets a rate for this owner+plan, checkout is
+  // blocked.
   const customMonthly = plan === "premium" ? user.customPricePremiumNaira : user.customPriceBasicNaira;
   const amount = getCyclePrice(plan, cycle, customMonthly);
+  if (amount === null) {
+    return { error: "No price has been set for this plan yet. Please contact the admin to negotiate your rate." };
+  }
   const reference = `gm_${session.id}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
 
   const headerList = await headers();
@@ -71,7 +80,16 @@ export async function startCheckoutAction(plan: PlanId, cycle: BillingCycleId) {
       metadata: { ownerId: session.id, plan, cycle },
     });
 
-    const periodEnd = new Date(Date.now() + BILLING_CYCLES[cycle].months * 30 * 24 * 60 * 60 * 1000);
+    // If the owner still has time left on their current period, the new
+    // cycle stacks on top of it instead of overwriting it — e.g. 20 days
+    // left + a 3-month (90 day) renewal = 110 days from now, not 90.
+    // This is just the initial estimate for the pending Payment row; the
+    // authoritative value is recomputed the same way at verification time
+    // (see the webhook handler and syncPaymentDirectly below), since time
+    // may pass between starting checkout and completing payment.
+    const now = new Date();
+    const periodBase = user.currentPeriodEnd && user.currentPeriodEnd > now ? user.currentPeriodEnd : now;
+    const periodEnd = new Date(periodBase.getTime() + BILLING_CYCLES[cycle].months * 30 * 24 * 60 * 60 * 1000);
     await prisma.payment.create({
       data: {
         ownerId: session.id,
@@ -120,11 +138,29 @@ export async function syncPaymentDirectly(reference: string) {
     const paystackData = await paystackRes.json();
 
     if (paystackData.status === true && paystackData.data.status === "success") {
+      // Recompute periodEnd fresh at verification time rather than trusting
+      // payment.periodEnd — that value was only an estimate made when
+      // checkout started, and time may have passed since then (the owner
+      // could have completed payment minutes or days later, and/or an admin
+      // could have manually extended their period in the meantime). This
+      // mirrors the webhook handler's logic: stack the new cycle on top of
+      // whatever time the owner has left, instead of resetting it.
+      const owner = await prisma.user.findUnique({
+        where: { id: payment.ownerId },
+        select: { currentPeriodEnd: true },
+      });
+      const metadata = paystackData.data.metadata || {};
+      const cycle = (metadata.cycle as BillingCycleId) || "quarterly";
+      const months = BILLING_CYCLES[cycle]?.months || 3;
+      const now = new Date();
+      const base = owner?.currentPeriodEnd && owner.currentPeriodEnd > now ? owner.currentPeriodEnd : now;
+      const newPeriodEnd = new Date(base.getTime() + months * 30 * 24 * 60 * 60 * 1000);
+
       // Complete database state synchronizations inside a safe atomic isolation block
       await prisma.$transaction([
         prisma.payment.update({
           where: { reference },
-          data: { status: "success" },
+          data: { status: "success", periodEnd: newPeriodEnd },
         }),
         prisma.user.update({
           where: { id: payment.ownerId },
@@ -137,7 +173,7 @@ export async function syncPaymentDirectly(reference: string) {
             // after the owner paid for Premium.
             plan: payment.plan,
             subscriptionStatus: "active",
-            currentPeriodEnd: payment.periodEnd,
+            currentPeriodEnd: newPeriodEnd,
             paystackCustomerCode: paystackData.data.customer?.customer_code || undefined,
             paystackAuthorizationCode: paystackData.data.authorization?.authorization_code || undefined,
           },

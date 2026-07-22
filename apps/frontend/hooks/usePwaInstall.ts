@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 
+let globalDeferredPrompt: any = null;
+
 export function usePwaInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstallable, setIsInstallable] = useState(true);
   const [isInstalled, setIsInstalled] = useState(false);
   const [checked, setChecked] = useState(false);
 
@@ -16,21 +17,18 @@ export function usePwaInstall() {
       return;
     }
 
-    // Since your service worker & manifest are valid (confirmed by browser menu),
-    // force the button to be available immediately so owners don't get stuck!
-    setIsInstallable(true);
     setChecked(true);
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      globalDeferredPrompt = e;
       setIsInstallable(true);
     };
 
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setIsInstallable(false);
-      setDeferredPrompt(null);
+      globalDeferredPrompt = null;
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -43,25 +41,30 @@ export function usePwaInstall() {
   }, []);
 
   const install = async () => {
-    // If Chrome provided the live event, trigger it instantly
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setIsInstalled(true);
+    // 1. If Chrome has the event ready, trigger it instantly
+    if (globalDeferredPrompt) {
+      try {
+        globalDeferredPrompt.prompt();
+        const { outcome } = await globalDeferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setIsInstalled(true);
+        }
+        globalDeferredPrompt = null;
+      } catch (err) {
+        console.error("Install prompt error:", err);
       }
-      setDeferredPrompt(null);
       return;
     }
 
-    // If Chrome suppressed the live event on refresh, guide them cleanly or trigger browser menu
-    if (typeof window !== "undefined") {
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-      if (isIOS) {
-        alert("To install Garrison Market on iOS, tap the Share button in your browser and select 'Add to Home Screen'.");
-      } else {
-        alert("To install Garrison Market, please click your browser menu (the three dots ⋮ in the top-right corner) and select 'Install Garrison Market...'.");
-      }
+    // 2. Fallback: Programmatically select or highlight the text guidance block, 
+    // or toggle a local UI state so your instructions element pulses or draws user attention.
+    const guideElement = document.getElementById("pwa-install-instructions");
+    if (guideElement) {
+      guideElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      guideElement.classList.add("ring-2", "ring-primary", "transition-all");
+      setTimeout(() => {
+        guideElement.classList.remove("ring-2", "ring-primary");
+      }, 2000);
     }
   };
 

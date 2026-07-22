@@ -152,8 +152,9 @@ export function OwnerActions({
           />
 
           <p className="text-[10px] text-slate-500">
-            Each rate overrides that plan's standard price for this owner only — quarterly/bi-annual/annual discounts
-            still apply on top of it. It appears on the owner's billing page and is what they'll be charged for that plan.
+            There is no standard/default price — each plan is priced only once you set a rate here for this owner.
+            Quarterly/bi-annual/annual discounts still apply on top of it. Until a rate is set, the plan shows as
+            unpriced on the owner's billing page and they cannot check out for it.
           </p>
         </div>
       )}
@@ -225,7 +226,7 @@ function RateRow({
         {currentPrice ? (
           <span className="text-[11px] text-emerald-400 font-medium">Currently {naira(currentPrice)}/mo</span>
         ) : (
-          <span className="text-[11px] text-slate-500">Using standard plan pricing</span>
+          <span className="text-[11px] text-amber-500 font-medium">No rate set — owner can't pay for this plan yet</span>
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
