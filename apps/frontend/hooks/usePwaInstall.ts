@@ -1,45 +1,69 @@
-import { useState, useEffect } from 'react';
+"use client";
 
-function checkIsInstalled(): boolean {
-  if (typeof window === 'undefined') return false;
-  const isStandaloneDisplay = window.matchMedia('(display-mode: standalone)').matches;
-  const isIosStandalone = (window.navigator as any).standalone === true;
-  return isStandaloneDisplay || isIosStandalone;
-}
+import { useState, useEffect } from "react";
 
-export const usePwaInstall = () => {
+export function usePwaInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    setIsInstalled(checkIsInstalled());
+    const nav = window.navigator as Navigator & { standalone?: boolean };
+    if (window.matchMedia('(display-mode: standalone)').matches || nav.standalone) {
+      setIsInstalled(true);
+      setChecked(true);
+      return;
+    }
+
+    // Since your service worker & manifest are valid (confirmed by browser menu),
+    // force the button to be available immediately so owners don't get stuck!
+    setIsInstallable(true);
     setChecked(true);
 
-    const handler = (e: any) => {
+    const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      setIsInstallable(true);
     };
-    window.addEventListener('beforeinstallprompt', handler);
 
-    const installedHandler = () => {
+    const handleAppInstalled = () => {
       setIsInstalled(true);
+      setIsInstallable(false);
       setDeferredPrompt(null);
     };
-    window.addEventListener('appinstalled', installedHandler);
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
-      window.removeEventListener('appinstalled', installedHandler);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
-  const install = () => {
+  const install = async () => {
+    // If Chrome provided the live event, trigger it instantly
     if (deferredPrompt) {
       deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(() => setDeferredPrompt(null));
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setIsInstalled(true);
+      }
+      setDeferredPrompt(null);
+      return;
+    }
+
+    // If Chrome suppressed the live event on refresh, guide them cleanly or trigger browser menu
+    if (typeof window !== "undefined") {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      if (isIOS) {
+        alert("To install Garrison Market on iOS, tap the Share button in your browser and select 'Add to Home Screen'.");
+      } else {
+        alert("To install Garrison Market, please click your browser menu (the three dots ⋮ in the top-right corner) and select 'Install Garrison Market...'.");
+      }
     }
   };
 
-  return { isInstallable: !!deferredPrompt, isInstalled, checked, install };
-};
+  return { isInstallable, isInstalled, checked, install };
+}

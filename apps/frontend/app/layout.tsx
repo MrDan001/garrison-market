@@ -37,10 +37,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className="antialiased bg-[var(--bg-app)] text-[var(--text-primary)] transition-colors duration-200"
         suppressHydrationWarning={true}
       >
+        <PwaServiceWorkerRegister />
         {children}
         <SessionTimeoutGuard />
         <ScreenshotGuard />
-        <PwaServiceWorkerRegister />
       </body>
     </html>
   );
