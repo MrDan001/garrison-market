@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Store, Save, AlertCircle, MapPin, Phone, Package, Building2, ChevronDown } from "lucide-react";
 import { createStoreAction } from "@/lib/business.actions";
+import UpgradeLimitModal, { isLimitReachedError } from "@/components/UpgradeLimitModal";
 import { NIGERIAN_LOCATIONS } from "@/lib/nigeria-locations";
 
 const STATES = Object.keys(NIGERIAN_LOCATIONS).sort();
@@ -11,6 +12,7 @@ const STATES = Object.keys(NIGERIAN_LOCATIONS).sort();
 export default function CreateStorePage() {
   const [isPending, startTransition] = useTransition();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [limitModalMessage, setLimitModalMessage] = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
 
@@ -35,7 +37,11 @@ export default function CreateStorePage() {
         // of throwing — it only redirects (which throws NEXT_REDIRECT) on
         // success. So we must check the return value here.
         if (result && result.success === false) {
-          setErrorMessage(result.error);
+          if (isLimitReachedError(result.error)) {
+            setLimitModalMessage(result.error);
+          } else {
+            setErrorMessage(result.error);
+          }
         }
       } catch (err: any) {
         if (err.digest?.includes("NEXT_REDIRECT")) return;
@@ -46,6 +52,9 @@ export default function CreateStorePage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
+      {limitModalMessage && (
+        <UpgradeLimitModal message={limitModalMessage} onClose={() => setLimitModalMessage(null)} />
+      )}
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 py-4 flex items-center gap-4">
         <Link href="/owner/stores" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)] transition-colors">

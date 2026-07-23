@@ -4,11 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, Mail, Lock, Eye, EyeOff, Loader2, CheckCircle2, Phone, ArrowLeft } from "lucide-react";
 import { registerStaffAction } from "@/lib/auth.actions";
+import UpgradeLimitModal, { isLimitReachedError } from "@/components/UpgradeLimitModal";
 
 export default function StaffRegistrationForm({ storeId }: { storeId?: number | null }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [limitModalMessage, setLimitModalMessage] = useState<string | null>(null);
   const router = useRouter();
 
   async function handleSubmit(formData: FormData) {
@@ -22,7 +24,11 @@ export default function StaffRegistrationForm({ storeId }: { storeId?: number | 
       }, 2000);
     } else {
       setIsLoading(false);
-      alert(result?.error || "Something went wrong. Please try again.");
+      if (isLimitReachedError(result?.error)) {
+        setLimitModalMessage(result!.error!);
+      } else {
+        alert(result?.error || "Something went wrong. Please try again.");
+      }
     }
   }
 
@@ -40,6 +46,9 @@ export default function StaffRegistrationForm({ storeId }: { storeId?: number | 
 
   return (
     <div className="space-y-6">
+      {limitModalMessage && (
+        <UpgradeLimitModal message={limitModalMessage} onClose={() => setLimitModalMessage(null)} />
+      )}
 
       <form action={handleSubmit} className="space-y-6">
         {storeId != null && (

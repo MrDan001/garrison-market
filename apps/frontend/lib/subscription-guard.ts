@@ -6,6 +6,9 @@
 import prisma from "@/lib/prisma";
 import { getPlanConfig, type PlanId } from "@/lib/plans";
 import { cache } from "react";
+import { LIMIT_REACHED_PREFIX, formatLimitReachedMessage } from "@/lib/limit-message";
+
+export { LIMIT_REACHED_PREFIX, formatLimitReachedMessage };
 
 /**
  * The plan to use for feature/limit checks is NOT always the same as the
@@ -197,7 +200,7 @@ export async function checkPlanLimit(
   
   const user = await prisma.user.findUnique({ 
     where: { id: idParam }, 
-    select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true } 
+    select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true, fullName: true } 
   });
   
   if (user && user.role === "staff" && user.ownerId) {
@@ -206,16 +209,17 @@ export async function checkPlanLimit(
 
   const owner = resolvedOwnerId === idParam
     ? user
-    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true } });
+    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true, fullName: true } });
   const plan = getPlanConfig(
     owner ? resolveEffectivePlanId(owner) : undefined
   );
+  const limitReachedMessage = LIMIT_REACHED_PREFIX + formatLimitReachedMessage(owner?.fullName);
 
   if (kind === "stores") {
     const count = await prisma.store.count({ where: { ownerId: resolvedOwnerId } });
     const limit = plan.maxStores;
     return count >= limit
-      ? { allowed: false, reason: `Your ${plan.name} plan allows up to ${limit} store(s). Upgrade to add more.`, limit, current: count }
+      ? { allowed: false, reason: limitReachedMessage, limit, current: count }
       : { allowed: true, limit, current: count };
   }
 
@@ -223,7 +227,7 @@ export async function checkPlanLimit(
     const count = await prisma.user.count({ where: { ownerId: resolvedOwnerId, role: "staff" } });
     const limit = plan.maxStaff;
     return count >= limit
-      ? { allowed: false, reason: `Your ${plan.name} plan allows up to ${limit} staff member(s). Upgrade to add more.`, limit, current: count }
+      ? { allowed: false, reason: limitReachedMessage, limit, current: count }
       : { allowed: true, limit, current: count };
   }
 
@@ -231,7 +235,7 @@ export async function checkPlanLimit(
   const count = await prisma.inventory.count({ where: { ownerId: resolvedOwnerId } });
   const limit = plan.maxProducts;
   return count >= limit
-    ? { allowed: false, reason: `Your ${plan.name} plan allows up to ${limit} products. Upgrade to add more.`, limit, current: count }
+    ? { allowed: false, reason: limitReachedMessage, limit, current: count }
     : { allowed: true, limit, current: count };
 }
 

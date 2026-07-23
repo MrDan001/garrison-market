@@ -6,6 +6,7 @@ import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
 import { withTimeout } from "@/lib/with-timeout";
 import { addItemAction } from "@/lib/business.actions";
+import UpgradeLimitModal, { isLimitReachedError } from "@/components/UpgradeLimitModal";
 import { ArrowLeft, UploadCloud } from "lucide-react";
 import Link from "next/link";
 
@@ -15,6 +16,7 @@ export default function AddInventoryItemPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [limitModalMessage, setLimitModalMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
@@ -64,11 +66,23 @@ export default function AddInventoryItemPage() {
       formData.delete("image"); // raw file no longer needed by the action
 
       setUploadStatus("Saving item...");
-      await withTimeout(
+      const result: { success: true } | { success: false; error: string } = await withTimeout(
         addItemAction(formData),
         20000,
         "Saving timed out. Check your connection and try again."
       );
+
+      if (result && result.success === false) {
+        if (isLimitReachedError(result.error)) {
+          setLimitModalMessage(result.error);
+        } else {
+          setSubmitError(result.error);
+        }
+        setUploadStatus("");
+        setIsSubmitting(false);
+        return;
+      }
+
       router.push("/owner/inventory?status=added");
     } catch (err) {
       console.error("Submission failed:", err);
@@ -80,6 +94,9 @@ export default function AddInventoryItemPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
+      {limitModalMessage && (
+        <UpgradeLimitModal message={limitModalMessage} onClose={() => setLimitModalMessage(null)} />
+      )}
       <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-4 py-4 flex items-center gap-4">
         <Link href="/owner/inventory" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
           <ArrowLeft size={24} />

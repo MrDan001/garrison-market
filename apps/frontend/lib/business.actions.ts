@@ -196,13 +196,24 @@ export async function addInventoryAction(formData: FormData) {
   revalidatePath("/owner/inventory");
 }
 
-export async function addItemAction(formData: FormData) {
+export async function addItemAction(
+  formData: FormData
+): Promise<{ success: true } | { success: false; error: string }> {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") throw new Error("Unauthorized");
 
-  await assertSubscriptionActive(session.id);
+  // Limit/subscription failures are expected, user-facing conditions, not
+  // server faults — returned as data (not thrown) so Next.js doesn't redact
+  // the message in production. Same pattern as createStoreAction.
+  try {
+    await assertSubscriptionActive(session.id);
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Your trial or subscription has ended." };
+  }
   const limitCheck = await checkPlanLimit(session.id, "products");
-  if (!limitCheck.allowed) throw new Error(limitCheck.reason);
+  if (!limitCheck.allowed) {
+    return { success: false, error: limitCheck.reason || "Plan limit reached." };
+  }
 
   const name = formData.get("name") as string;
   const quantity = parseInt(formData.get("quantity") as string, 10);
