@@ -4,17 +4,31 @@ export const dynamic = "force-dynamic";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { logoutAction } from "@/lib/auth.actions";
+import prisma from "@/lib/prisma";
 import Link from "next/link";
 
 export default async function StaffPendingPage() {
-  const session = await getSessionUser() as { email: string; status: string; role: string } | null;  
-  
+  const session = await getSessionUser() as { email: string; status: string; role: string; ownerId: number | null } | null;
+
   if (!session) redirect("/login");
 
   // If the owner reinstated them, this live query catches it instantly and pushes them through
   if (session.status?.toUpperCase() === "ACTIVE") {
     redirect("/staff/dashboard");
   }
+
+  // Look up the store owner's email so the staff member can contact the
+  // person who actually controls their account, instead of a generic
+  // support address.
+  let ownerEmail: string | null = null;
+  if (session.ownerId) {
+    const owner = await prisma.user.findUnique({
+      where: { id: session.ownerId },
+      select: { email: true },
+    });
+    ownerEmail = owner?.email ?? null;
+  }
+  const contactEmail = ownerEmail || "support@garrison.com";
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] flex flex-col items-center justify-center p-4">
@@ -33,8 +47,8 @@ export default async function StaffPendingPage() {
         {/* Main Content Description */}
         <div className="text-slate-600 dark:text-slate-400 text-sm max-w-xs leading-relaxed mb-8">
           Your access has been restricted. Please contact your store Owner at 
-          <a href="mailto:support@garrison.com" className="text-rose-500 hover:underline font-semibold ml-1">
-            support@garrison.com
+          <a href={`mailto:${contactEmail}`} className="text-rose-500 hover:underline font-semibold ml-1">
+            {contactEmail}
           </a>{" "}
           to resolve this matter.
         </div>

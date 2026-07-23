@@ -79,5 +79,11 @@ export function verifyWebhookSignature(rawBody: string, signature: string | null
   if (!signature) return false;
   const crypto = require("crypto") as typeof import("crypto");
   const hash = crypto.createHmac("sha512", getSecretKey()).update(rawBody).digest("hex");
-  return hash === signature;
+
+  const hashBuffer = Buffer.from(hash, "hex");
+  const signatureBuffer = Buffer.from(signature, "hex");
+
+  if (hashBuffer.length !== signatureBuffer.length) return false;
+
+  return crypto.timingSafeEqual(hashBuffer, signatureBuffer);
 }

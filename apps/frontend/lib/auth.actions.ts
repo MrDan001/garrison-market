@@ -96,7 +96,7 @@ export async function loginAction(formData: FormData) {
 
     if (userStatus === "PENDING" || userStatus === "SUSPENDED" || userStatus === "DECLINED") {
       await setSessionCookie();
-      redirectUrl = userRole === "staff" ? "/pending/staff" : "/pending/staff";
+      redirectUrl = userRole === "staff" ? "/pending/staff" : "/pending";
     } else if (userStatus === "APPROVED" || userStatus === "ACTIVE") { 
       await setSessionCookie();
 
