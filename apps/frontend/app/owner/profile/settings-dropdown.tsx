@@ -5,12 +5,13 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Settings, ChevronDown, ChevronUp,
-  Bell, Tag, Truck, CheckCircle2, Loader2, Lock, ChevronRight, ShieldOff,
+  Bell, Tag, Truck, CheckCircle2, Loader2, Lock, ChevronRight, ShieldOff, Scale,
 } from "lucide-react";
 import {
   toggleDiscountAction,
   toggleNotificationsAction,
   toggleConsignmentAction,
+  toggleWastageVisibilityAction,
 } from "@/lib/settings.actions";
 import { updateScreenshotProtectionPreference } from "@/lib/profile.actions";
 import { InstallAppCard, PushNotificationCard } from "@/components/SettingsExtras";
@@ -21,6 +22,7 @@ interface Props {
   discountEnabled: boolean;
   consignmentEnabled: boolean;
   screenshotProtectionEnabled: boolean;
+  wastageVisibleToStaff: boolean;
 }
 
 export default function SettingsDropdown({
@@ -28,14 +30,16 @@ export default function SettingsDropdown({
   discountEnabled,
   consignmentEnabled,
   screenshotProtectionEnabled,
+  wastageVisibleToStaff,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState(notificationsEnabled);
   const [discount, setDiscount] = useState(discountEnabled);
   const [consignment, setConsignment] = useState(consignmentEnabled);
   const [screenshotProtection, setScreenshotProtection] = useState(screenshotProtectionEnabled);
+  const [wastageVisible, setWastageVisible] = useState(wastageVisibleToStaff);
   const [isPending, startTransition] = useTransition();
-  const [lastChanged, setLastChanged] = useState<"notifications" | "discount" | "consignment" | "screenshotProtection" | null>(null);
+  const [lastChanged, setLastChanged] = useState<"notifications" | "discount" | "consignment" | "screenshotProtection" | "wastageVisible" | null>(null);
 
   const handleToggleNotifications = () => {
     const newVal = !notifications;
@@ -73,6 +77,16 @@ export default function SettingsDropdown({
     setLastChanged("screenshotProtection");
     startTransition(async () => {
       await updateScreenshotProtectionPreference(newVal);
+      setLastChanged(null);
+    });
+  };
+
+  const handleToggleWastageVisible = () => {
+    const newVal = !wastageVisible;
+    setWastageVisible(newVal);
+    setLastChanged("wastageVisible");
+    startTransition(async () => {
+      await toggleWastageVisibilityAction(newVal);
       setLastChanged(null);
     });
   };
@@ -155,6 +169,26 @@ export default function SettingsDropdown({
             <div className="flex items-center gap-2 text-violet-400 text-xs font-medium bg-violet-500/8 border border-violet-500/20 rounded-xl px-3 py-2">
               <CheckCircle2 size={13} />
               Staff can now sign out goods on consignment
+            </div>
+          )}
+
+          {/* Wastage visibility toggle — staff can always SUBMIT a
+              wastage entry; this only controls whether they can also
+              see the wastage report (monthly totals + history). */}
+          <ToggleRow
+            icon={<Scale size={16} />}
+            label="Staff Can View Wastage Report"
+            description="Let staff see monthly wastage totals and history for scale items"
+            value={wastageVisible}
+            loading={isPending && lastChanged === "wastageVisible"}
+            onToggle={handleToggleWastageVisible}
+            accent="emerald"
+          />
+
+          {wastageVisible && (
+            <div className="flex items-center gap-2 text-emerald-500 text-xs font-medium bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-3 py-2">
+              <CheckCircle2 size={13} />
+              Staff can now view the wastage report
             </div>
           )}
 

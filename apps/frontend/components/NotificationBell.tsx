@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { getNotificationsForStaff, markAllNotificationsRead } from "@/lib/notification.actions";
 
-type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock";
+type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock" | "wastage_submitted" | "wastage_status";
 
 const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label: string }> = {
   report_status: { icon: ClipboardCheck, bg: "bg-blue-500/10", text: "text-blue-400", label: "Report" },
@@ -17,6 +17,8 @@ const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label
   sale_made: { icon: Banknote, bg: "bg-emerald-500/10", text: "text-emerald-400", label: "Sale" },
   report_submitted: { icon: FileText, bg: "bg-blue-500/10", text: "text-blue-400", label: "Report Submitted" },
   restock: { icon: PackageCheck, bg: "bg-sky-500/10", text: "text-sky-400", label: "Restocked" },
+  wastage_submitted: { icon: PackageX, bg: "bg-rose-500/10", text: "text-rose-400", label: "Wastage Logged" },
+  wastage_status: { icon: ClipboardCheck, bg: "bg-amber-500/10", text: "text-amber-400", label: "Wastage" },
 };
 
 function timeAgo(dateStr: string) {
@@ -50,6 +52,8 @@ type UserRole = "owner" | "staff" | "admin";
 const ROUTE_EQUIVALENTS: Record<string, Partial<Record<UserRole, string>>> = {
   "/owner/inventory": { owner: "/owner/inventory", staff: "/staff/inventory" },
   "/staff/inventory": { owner: "/owner/inventory", staff: "/staff/inventory" },
+  "/owner/wastage": { owner: "/owner/wastage", staff: "/staff/wastage" },
+  "/staff/wastage": { owner: "/owner/wastage", staff: "/staff/wastage" },
   "/owner/report": { owner: "/owner/report", staff: "/staff/report" },
   "/staff/report": { owner: "/owner/report", staff: "/staff/report" },
   "/owner/dashboard": { owner: "/owner/dashboard", staff: "/staff/dashboard" },

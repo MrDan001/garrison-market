@@ -1,7 +1,7 @@
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck, Lock } from "lucide-react";
+import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck, Lock, Scale as ScaleIcon } from "lucide-react";
 import Link from "next/link";
 import NotificationBell from "@/components/NotificationBell";
 import StaffSupportBubble from "@/components/StaffSupportBubble";
@@ -12,6 +12,7 @@ import { TrialBanner } from "@/components/TrialBanner";
 // calculation that only looked at currentPeriodEnd — which is null while
 // an owner is still trialing, causing staff to see the wrong day count.
 import { getBillingStatus } from "@/lib/subscription-guard";
+import { getActiveStore } from "@/lib/store-context";
 
 type ActivityItem =
   | { type: "sale"; id: string; date: Date; amount: number }
@@ -33,6 +34,9 @@ export default async function StaffDashboard() {
 
   if (!staff || userRole !== "staff") redirect("/login");
   if (userStatus === "suspended" || userStatus === "pending") redirect("/pending/staff");
+
+  const activeStore = await getActiveStore();
+  const isScaleStore = activeStore?.storeType === "scale";
 
   // FIXED: getBillingStatus already resolves staff -> owner internally and
   // correctly picks trialEndsAt while trialing, or currentPeriodEnd once
@@ -287,6 +291,18 @@ export default async function StaffDashboard() {
                   <p className="text-[11px] text-slate-500">Sign out or settle goods</p>
                 </div>
               </Link>
+
+              {isScaleStore && (
+                <Link href="/staff/wastage" className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
+                  <div className="h-9 w-9 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                    <ScaleIcon size={18} className="text-rose-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">Log Wastage</p>
+                    <p className="text-[11px] text-slate-500">Report trimming, spillage, spoilage</p>
+                  </div>
+                </Link>
+              )}
 
               <Link href="/staff/inventory" className="hidden sm:flex bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                 <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center">

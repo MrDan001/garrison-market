@@ -2,13 +2,14 @@ import {
   ChevronRight, Store, LayoutDashboard,
   Activity, CreditCard, Users, Receipt,
   LogOut, ArrowLeft, History,
-  MessageSquare, Zap, Calendar, Gift, ChevronDown, UserPlus
+  MessageSquare, Zap, Calendar, Gift, ChevronDown, UserPlus, Scale as ScaleIcon
 } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { logoutAction } from "@/lib/auth.actions";
 import { getOwnerBillingInfo } from "@/lib/billing.actions"; 
+import { getActiveStore } from "@/lib/store-context";
 import SettingsDropdown from "./settings-dropdown";
 import OwnerAnnouncementForm from "@/components/OwnerAnnouncementForm";
 
@@ -17,6 +18,9 @@ export const dynamic = "force-dynamic";
 export default async function MorePage() {
   const session = await getSessionUser();
   if (!session?.email) redirect("/login");
+
+  const activeStore = await getActiveStore();
+  const isScaleStore = activeStore?.storeType === "scale";
 
   const billingInfo = await getOwnerBillingInfo();
   const { isLocked, plan, currentPeriodEnd } = billingInfo.status;
@@ -32,6 +36,7 @@ export default async function MorePage() {
       discountEnabled: true,
       consignmentEnabled: true,
       screenshotProtectionEnabled: true,
+      wastageVisibleToStaff: true,
       // 👇 The real, stored referral token — generated once at registration
       // and guaranteed unique. Do NOT recompute this from the store name;
       // the store name can be renamed later and would drift out of sync
@@ -245,6 +250,7 @@ export default async function MorePage() {
             { label: "Reports",    icon: Activity,       href: "/owner/report" },
             { label: "History",    icon: History,        href: "/owner/history" },
             { label: "Consignments", icon: Store,         href: "/owner/consignments" },
+            ...(isScaleStore ? [{ label: "Wastage", icon: ScaleIcon, href: "/owner/wastage" }] : []),
           ]}
         />
 
@@ -289,6 +295,7 @@ export default async function MorePage() {
               discountEnabled={user.discountEnabled}
               consignmentEnabled={user.consignmentEnabled}
               screenshotProtectionEnabled={user.screenshotProtectionEnabled}
+              wastageVisibleToStaff={user.wastageVisibleToStaff}
             />
           </div>
         </div>
