@@ -122,8 +122,8 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
                     <div key={item.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
                       <span>{item.inventory?.name}</span>
                       <span>
-                        {item.quantityOut} out
-                        {c.status === "settled" && ` · ${item.quantitySold} sold · ${item.quantityReturned} returned`}
+                        {item.quantityOut}{item.unit || ""} out
+                        {c.status === "settled" && ` · ${item.quantitySold}${item.unit || ""} sold · ${item.quantityReturned}${item.unit || ""} returned`}
                       </span>
                     </div>
                   ))}

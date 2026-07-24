@@ -22,6 +22,7 @@ export default async function OwnerReportsPage() {
       items: {
         include: { inventory: true } // Pulled from block 1 to resolve item names
       },
+      scaleItems: true,
     },
     orderBy: { date: "desc" },
   });
@@ -39,17 +40,33 @@ export default async function OwnerReportsPage() {
     cashTotal: Number(report.cashTotal),
     transferTotal: Number(report.transferTotal),
     author: report.author,
-    items: report.items.map((item) => ({
-      id: item.id,
-      // Resolves name from nested inventory first, falls back to item.name, then "Unknown Item"
-      name: item.inventory?.name ?? item.name ?? "Unknown Item",
-      price: Number(item.price),
-      quantity: item.quantity,
-      total: Number(item.total),
-      discountValue: item.discountValue != null ? Number(item.discountValue) : null,
-      discountType: item.discountType,
-      discountReason: item.discountReason,
-    })),
+    // Scale reports use ScaleReportItem (name/quantitySold/unit/totalPrice —
+    // no discount fields) — reshaped here into the exact same {name, price,
+    // quantity, total, discountValue} shape the standard items use, so the
+    // review UI's table renders both without needing separate branches.
+    // "quantity" becomes a display string like "12kg" instead of a number.
+    items: report.scaleItems.length > 0
+      ? report.scaleItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.quantitySold) > 0 ? Number(item.totalPrice) / Number(item.quantitySold) : 0,
+          quantity: `${Number(item.quantitySold)}${item.unit}`,
+          total: Number(item.totalPrice),
+          discountValue: null,
+          discountType: null,
+          discountReason: null,
+        }))
+      : report.items.map((item) => ({
+          id: item.id,
+          // Resolves name from nested inventory first, falls back to item.name, then "Unknown Item"
+          name: item.inventory?.name ?? item.name ?? "Unknown Item",
+          price: Number(item.price),
+          quantity: item.quantity,
+          total: Number(item.total),
+          discountValue: item.discountValue != null ? Number(item.discountValue) : null,
+          discountType: item.discountType,
+          discountReason: item.discountReason,
+        })),
   }));
 
   // 3. Pass the consolidated 'serialized' array to the Client Component

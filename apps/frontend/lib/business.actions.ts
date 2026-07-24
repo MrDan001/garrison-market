@@ -33,6 +33,10 @@ export async function submitDailyReport(authorId: number, content: string) {
     select: { fullName: true, staffStoreId: true },
   });
 
+  const store = author?.staffStoreId
+    ? await prisma.store.findUnique({ where: { id: author.staffStoreId }, select: { storeType: true } })
+    : null;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -42,6 +46,90 @@ export async function submitDailyReport(authorId: number, content: string) {
   });
 
   const salesStartTime = lastReportToday ? new Date(lastReportToday.date) : today;
+
+  // ============================================================
+  // Scale stores: reports are itemized per PRODUCT, not per sale —
+  // "Rice: 12kg — ₦24,000" — so sales since the last report get
+  // grouped by product before being written as ScaleReportItem rows.
+  // ============================================================
+  if (store?.storeType === "scale") {
+    const recentSales = await prisma.order.findMany({
+      where: { staffId: authorId, date: { gte: salesStartTime } },
+      include: { scaleItems: { include: { scaleInventory: true } } },
+    });
+
+    const allSoldScaleItems = recentSales.flatMap((s) => s.scaleItems);
+    const totalValue = recentSales.reduce((sum, s) => sum + Number(s.total), 0);
+    const cashTotal = recentSales
+      .filter((s) => s.paymentMethod === "cash")
+      .reduce((sum, s) => sum + Number(s.total), 0);
+    const transferTotal = recentSales
+      .filter((s) => s.paymentMethod === "transfer")
+      .reduce((sum, s) => sum + Number(s.total), 0);
+
+    const grouped = new Map<number, { name: string; unit: string; qty: number; total: number }>();
+    for (const item of allSoldScaleItems) {
+      const key = item.scaleInventoryId;
+      const qty = Number(item.quantityInBaseUnit);
+      const total = Number(item.priceAtTime);
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.qty += qty;
+        existing.total += total;
+      } else {
+        grouped.set(key, {
+          name: item.scaleInventory?.name ?? "Unknown Item",
+          unit: item.scaleInventory?.unit ?? "",
+          qty,
+          total,
+        });
+      }
+    }
+
+    const newReport = await prisma.report.create({
+      data: {
+        totalSales: totalValue,
+        cashTotal,
+        transferTotal,
+        notes: content && content.trim() !== "" ? content.trim() : "None",
+        status: "pending",
+        authorId,
+        ownerId: session.ownerId!,
+        storeId: author?.staffStoreId ?? undefined,
+        scaleItems: {
+          create: Array.from(grouped.entries()).map(([scaleInventoryId, g]) => ({
+            scaleInventoryId,
+            name: g.name,
+            quantitySold: g.qty,
+            unit: g.unit,
+            totalPrice: g.total,
+          })),
+        },
+      },
+    });
+
+    const submittedAt = new Date(newReport.date).toLocaleString("en-NG", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    await createNotification({
+      ownerId: session.ownerId!,
+      recipientId: null,
+      storeId: author?.staffStoreId ?? null,
+      type: "report_submitted",
+      message: `${author?.fullName || "A staff member"} submitted a daily report on ${submittedAt}.`,
+      link: "/owner/report",
+    });
+
+    revalidatePath("/staff/report");
+    revalidatePath("/owner/dashboard");
+    return { success: true };
+  }
 
   const recentSales = await prisma.order.findMany({
     where: { staffId: authorId, date: { gte: salesStartTime } },

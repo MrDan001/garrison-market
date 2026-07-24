@@ -6,12 +6,12 @@ import { submitDailyReport } from "@/lib/business.actions";
 import { FileText, Clock, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
 import { resubmitReportAction } from "@/lib/business.actions";
 
-export default function StaffReportClient({ staffId, reports, sales, pendingRevision }: any) {  const router = useRouter();
+export default function StaffReportClient({ staffId, reports, sales, pendingRevision, isScale, scaleSummary }: any) {  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [complaint, setComplaint] = useState("");
   const [showHistory, setShowHistory] = useState(false);
 
-  const allSoldItems = sales.flatMap((s: any) => s.items);
+  const allSoldItems = isScale ? [] : sales.flatMap((s: any) => s.items);
   const totalValue = sales.reduce((sum: number, s: any) => sum + Number(s.total), 0);
 
   const [clarification, setClarification] = useState("");
@@ -113,49 +113,97 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
 
         <div className="space-y-5 sm:space-y-6">
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Itemized List</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
+              {isScale ? "Amount Sold (Per Product)" : "Itemized List"}
+            </label>
 
-            {/* Mobile: stacked cards */}
-            <div className="sm:hidden space-y-2">
-              {allSoldItems.length === 0 && (
-                <p className="text-slate-400 dark:text-slate-600 text-sm italic p-3">No sales yet today.</p>
-              )}
-              {allSoldItems.map((item: any, idx: number) => (
-                <div key={idx} className="bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{item.inventory?.name || "N/A"}</p>
-                    <p className="text-xs text-slate-500">₦{Number(item.priceAtTime).toLocaleString()} × {item.quantity}</p>
-                  </div>
-                  <span className="font-bold text-[var(--text-primary)] text-sm shrink-0 ml-3">
-                    ₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Desktop: table */}
-            <div className="hidden sm:block bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300">
-                <thead>
-                  <tr className="text-slate-500 border-b border-slate-200 dark:border-slate-800">
-                    <th className="pb-3 px-2">Item</th>
-                    <th className="pb-3 px-2">Price</th>
-                    <th className="pb-3 px-2">Qty</th>
-                    <th className="pb-3 px-2">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allSoldItems.map((item: any, idx: number) => (
-                    <tr key={idx} className="border-b border-slate-200/50 dark:border-slate-800/50 last:border-0">
-                      <td className="py-3 px-2">{item.inventory?.name || "N/A"}</td>
-                      <td className="py-3 px-2">₦{Number(item.priceAtTime).toLocaleString()}</td>
-                      <td className="py-3 px-2">{item.quantity}</td>
-                      <td className="py-3 px-2 font-bold text-[var(--text-primary)]">₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}</td>
-                    </tr>
+            {isScale ? (
+              <>
+                {/* Mobile: stacked cards — "Rice: 12kg — ₦24,000" style */}
+                <div className="sm:hidden space-y-2">
+                  {scaleSummary.length === 0 && (
+                    <p className="text-slate-400 dark:text-slate-600 text-sm italic p-3">No sales yet today.</p>
+                  )}
+                  {scaleSummary.map((g: any, idx: number) => (
+                    <div key={idx} className="bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
+                      <div className="min-w-0">
+                        <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{g.name}</p>
+                        <p className="text-xs text-slate-500">{g.qty}{g.unit} sold</p>
+                      </div>
+                      <span className="font-bold text-[var(--text-primary)] text-sm shrink-0 ml-3">
+                        ₦{g.total.toLocaleString()}
+                      </span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+
+                {/* Desktop: table */}
+                <div className="hidden sm:block bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300">
+                    <thead>
+                      <tr className="text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                        <th className="pb-3 px-2">Item</th>
+                        <th className="pb-3 px-2">Amount Sold</th>
+                        <th className="pb-3 px-2">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scaleSummary.map((g: any, idx: number) => (
+                        <tr key={idx} className="border-b border-slate-200/50 dark:border-slate-800/50 last:border-0">
+                          <td className="py-3 px-2">{g.name}</td>
+                          <td className="py-3 px-2">{g.qty}{g.unit}</td>
+                          <td className="py-3 px-2 font-bold text-[var(--text-primary)]">₦{g.total.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Mobile: stacked cards */}
+                <div className="sm:hidden space-y-2">
+                  {allSoldItems.length === 0 && (
+                    <p className="text-slate-400 dark:text-slate-600 text-sm italic p-3">No sales yet today.</p>
+                  )}
+                  {allSoldItems.map((item: any, idx: number) => (
+                    <div key={idx} className="bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
+                      <div className="min-w-0">
+                        <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{item.inventory?.name || "N/A"}</p>
+                        <p className="text-xs text-slate-500">₦{Number(item.priceAtTime).toLocaleString()} × {item.quantity}</p>
+                      </div>
+                      <span className="font-bold text-[var(--text-primary)] text-sm shrink-0 ml-3">
+                        ₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop: table */}
+                <div className="hidden sm:block bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300">
+                    <thead>
+                      <tr className="text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                        <th className="pb-3 px-2">Item</th>
+                        <th className="pb-3 px-2">Price</th>
+                        <th className="pb-3 px-2">Qty</th>
+                        <th className="pb-3 px-2">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allSoldItems.map((item: any, idx: number) => (
+                        <tr key={idx} className="border-b border-slate-200/50 dark:border-slate-800/50 last:border-0">
+                          <td className="py-3 px-2">{item.inventory?.name || "N/A"}</td>
+                          <td className="py-3 px-2">₦{Number(item.priceAtTime).toLocaleString()}</td>
+                          <td className="py-3 px-2">{item.quantity}</td>
+                          <td className="py-3 px-2 font-bold text-[var(--text-primary)]">₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
 
           <textarea

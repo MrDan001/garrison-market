@@ -22,10 +22,29 @@ export default async function HistoryPage() {
       OR: [{ storeId: activeStoreId }, { storeId: null }],
     },
     orderBy: { date: "desc" },
-    include: { author: true, items: true }
+    include: { author: true, items: true, scaleItems: true }
   });
 
-  const serialized = JSON.parse(JSON.stringify(historyReports));
+  // Same reshape as the pending-reports page — scale reports render
+  // through the same table by mapping ScaleReportItem into the standard
+  // {name, price, quantity, total, discountValue} item shape.
+  const withReshapedItems = historyReports.map((report) => ({
+    ...report,
+    items: report.scaleItems.length > 0
+      ? report.scaleItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.quantitySold) > 0 ? Number(item.totalPrice) / Number(item.quantitySold) : 0,
+          quantity: `${Number(item.quantitySold)}${item.unit}`,
+          total: Number(item.totalPrice),
+          discountValue: null,
+          discountType: null,
+          discountReason: null,
+        }))
+      : report.items,
+  }));
+
+  const serialized = JSON.parse(JSON.stringify(withReshapedItems));
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">

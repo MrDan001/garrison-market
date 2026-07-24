@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Store, Save, AlertCircle, MapPin, Phone, Package, Building2, ChevronDown } from "lucide-react";
+import { ArrowLeft, Store, Save, AlertCircle, MapPin, Phone, Package, Building2, ChevronDown, Boxes, Scale as ScaleIcon } from "lucide-react";
 import { createStoreAction } from "@/lib/business.actions";
 import UpgradeLimitModal, { isLimitReachedError } from "@/components/UpgradeLimitModal";
 import { NIGERIAN_LOCATIONS } from "@/lib/nigeria-locations";
@@ -15,6 +15,7 @@ export default function CreateStorePage() {
   const [limitModalMessage, setLimitModalMessage] = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
+  const [storeType, setStoreType] = useState<"" | "standard" | "scale">("");
 
   const availableCities = selectedState ? NIGERIAN_LOCATIONS[selectedState] : [];
 
@@ -26,6 +27,11 @@ export default function CreateStorePage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    if (!storeType) {
+      setErrorMessage("Please choose how this store sells its products before continuing.");
+      return;
+    }
 
     const formData = new FormData(e.currentTarget);
 
@@ -80,6 +86,58 @@ export default function CreateStorePage() {
               <span>{errorMessage}</span>
             </div>
           )}
+
+          {/* Sell type — asked first, before any other store detail.
+              This choice is PERMANENT once the store is created, so it's
+              intentionally the very first thing an owner decides. */}
+          <div className="bg-slate-100/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-4">
+            <div>
+              <h2 className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
+                How Does This Store Sell? *
+              </h2>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                This cannot be changed after the store is created — choose carefully.
+              </p>
+            </div>
+
+            <input type="hidden" name="storeType" value={storeType} />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setStoreType("standard")}
+                className={`text-left p-4 rounded-xl border-2 transition-all disabled:opacity-50 ${
+                  storeType === "standard"
+                    ? "border-blue-600 bg-blue-600/10"
+                    : "border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)] hover:border-slate-300 dark:hover:border-slate-700"
+                }`}
+              >
+                <Boxes size={18} className={storeType === "standard" ? "text-blue-500" : "text-slate-500"} />
+                <p className="text-sm font-bold text-[var(--text-primary)] mt-2">Individual Items</p>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Sold by piece or unit count — e.g. bags, cartons, phones, packs.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setStoreType("scale")}
+                className={`text-left p-4 rounded-xl border-2 transition-all disabled:opacity-50 ${
+                  storeType === "scale"
+                    ? "border-amber-600 bg-amber-600/10"
+                    : "border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)] hover:border-slate-300 dark:hover:border-slate-700"
+                }`}
+              >
+                <ScaleIcon size={18} className={storeType === "scale" ? "text-amber-500" : "text-slate-500"} />
+                <p className="text-sm font-bold text-[var(--text-primary)] mt-2">Weight / Volume</p>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Sold by kg, g, litres, or ml — e.g. rice, meat, oil, chemicals.
+                </p>
+              </button>
+            </div>
+          </div>
 
           {/* Basic Info */}
           <div className="bg-slate-100/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-4">
@@ -197,7 +255,7 @@ export default function CreateStorePage() {
 
           <button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || !storeType}
             className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 text-white py-4 rounded-xl font-bold text-sm mt-2 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-600/10 disabled:opacity-50 active:scale-[0.98]"
           >
             <Save size={16} />
