@@ -5,9 +5,17 @@ import ScreenshotGuard from '@/components/ScreenshotGuard';
 import PwaServiceWorkerRegister from '@/components/PwaServiceWorkerRegister';
 import "./styles.css";
 
+const siteUrl = 'https://gmstock.co';
+const siteDescription =
+  'Garrison Market is an all-in-one inventory and sales management app for shop and market owners. Track stock by piece or by weight (kg, g, L, ml), manage staff and multiple stores, process sales, generate daily reports, and handle consignments and wastage — all from your phone.';
+
 export const metadata: Metadata = {
-  title: 'Garrison Market',
-  description: 'Market management system for owners and staff',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: 'Garrison Market — Inventory & Sales Management',
+    template: '%s | Garrison Market',
+  },
+  description: siteDescription,
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -17,6 +25,27 @@ export const metadata: Metadata = {
   icons: {
     icon: '/icon-192x192.png',
     apple: '/icon-192x192.png',
+  },
+  openGraph: {
+    type: 'website',
+    url: siteUrl,
+    siteName: 'Garrison Market',
+    title: 'Garrison Market — Inventory & Sales Management',
+    description: siteDescription,
+    images: [
+      {
+        url: '/icon-512x512.png',
+        width: 512,
+        height: 512,
+        alt: 'Garrison Market',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Garrison Market — Inventory & Sales Management',
+    description: siteDescription,
+    images: ['/icon-512x512.png'],
   },
 };
 
