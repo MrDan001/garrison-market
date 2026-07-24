@@ -648,6 +648,13 @@ export async function createStoreAction(
   const city = formData.get("city") as string;
   const state = formData.get("state") as string;
   const productsSold = formData.get("productsSold") as string;
+  const storeType = formData.get("storeType") as string;
+
+  // storeType is the first decision an owner makes for a store and is
+  // permanent — validate it strictly before anything else.
+  if (storeType !== "standard" && storeType !== "scale") {
+    return { success: false, error: "Please choose how this store sells its products." };
+  }
 
   if (!name?.trim()) return { success: false, error: "Store name is required." };
 
@@ -659,6 +666,7 @@ export async function createStoreAction(
       city: city || null,
       state: state || null,
       productsSold: productsSold || null,
+      storeType,
       ownerId: user.id,
     },
   });

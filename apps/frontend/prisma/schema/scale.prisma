@@ -1,0 +1,141 @@
+// ============================================================================
+// SCALE INVENTORY (v2) — weight/volume-based selling
+// ============================================================================
+// Parallel system to the models in base.prisma, for stores where
+// `Store.storeType == "scale"`. An owner chooses "standard" or "scale" once,
+// at store creation — permanently — and every product, sale, report, and
+// consignment for that store flows through these models instead of the
+// standard Inventory/OrderItem/ReportItem/ConsignmentItem ones.
+//
+// Units: each ScaleInventory product is stocked in a fixed base unit
+// ("kg" or "L"), set by the owner when the product is created and never
+// changed afterward. At the point of sale or when logging wastage, staff
+// may enter the amount in the base unit OR its smaller counterpart
+// (g for kg, ml for L) — application code converts and stores the amount
+// actually deducted from stock in the base unit, so ScaleInventory.quantity
+// always stays in one consistent unit regardless of how a given sale was
+// entered.
+// ============================================================================
+
+model ScaleInventory {
+  id           Int      @id @default(autoincrement())
+  name         String
+  quantity     Decimal  // always stored in `unit` (kg or L)
+  unit         String   // "kg" | "L" — fixed at creation, never changes
+  price        Decimal  // price per 1 unit (per kg or per L)
+  costPrice    Decimal?
+  category     String?
+  restockLevel Decimal?
+  image        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  ownerId      Int
+  storeId      Int?
+
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  store        Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  orderItems       ScaleOrderItem[]
+  reportItems      ScaleReportItem[]
+  consignmentItems ScaleConsignmentItem[]
+  wastageEntries   ScaleWastage[]
+
+  @@index([ownerId, storeId])
+  @@index([storeId])
+}
+
+model ScaleOrderItem {
+  id               Int      @id @default(autoincrement())
+  orderId          Int
+  scaleInventoryId Int
+
+  // Amount as entered by staff at sale time, in whichever unit they used
+  // (may be the base unit or its smaller counterpart, e.g. "g" for a
+  // product stocked in "kg").
+  quantity         Decimal
+  unit             String   // "kg" | "g" | "L" | "ml" — unit used for THIS sale
+
+  // Same amount converted to the product's base unit — this is what
+  // actually gets decremented from ScaleInventory.quantity, kept here too
+  // for a clean audit trail independent of unit conversion at read time.
+  quantityInBaseUnit Decimal
+
+  priceAtTime      Decimal  // total price charged for this line (post-discount)
+  originalPrice    Decimal?
+  discountValue    Decimal?
+  discountType     String?
+  discountReason   String?
+
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([scaleInventoryId])
+}
+
+model ScaleReportItem {
+  id               Int      @id @default(autoincrement())
+  reportId         Int
+  scaleInventoryId Int
+  name             String   // denormalized product name at time of report
+  quantitySold     Decimal  // total weight/volume sold, in base unit
+  unit             String   // base unit ("kg" | "L") for display
+  totalPrice       Decimal  // total price for this product on the report
+
+  report           Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([scaleInventoryId])
+}
+
+model ScaleConsignmentItem {
+  id               Int      @id @default(autoincrement())
+  consignmentId    Int
+  scaleInventoryId Int
+  quantityOut      Decimal
+  quantitySold     Decimal  @default(0)
+  quantityReturned Decimal  @default(0)
+  unit             String   // base unit ("kg" | "L")
+  priceAtTime      Decimal
+
+  consignment      Consignment    @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+
+  @@index([consignmentId])
+  @@index([scaleInventoryId])
+}
+
+model ScaleWastage {
+  id               Int       @id @default(autoincrement())
+  ownerId          Int
+  storeId          Int
+  scaleInventoryId Int
+  staffId          Int       // who logged it — kept for accountability
+
+  quantity         Decimal   // amount as entered by staff
+  unit             String    // unit used for this entry ("kg" | "g" | "L" | "ml")
+  quantityInBaseUnit Decimal // converted to product's base unit
+
+  reason           String    // "trimming" | "spillage" | "spoilage" | "sample" | "other"
+  note             String?
+
+  status           String    @default("pending") // "pending" | "approved" | "declined"
+  declineReason    String?   // required when status == "declined"
+
+  reviewedById     Int?      // owner who approved/declined
+  reviewedAt       DateTime?
+
+  createdAt        DateTime  @default(now())
+
+  owner            User           @relation("ScaleWastageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store            Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  staff            User           @relation("ScaleWastageStaff", fields: [staffId], references: [id], onDelete: Cascade)
+  reviewedBy       User?          @relation("ScaleWastageReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  // Powers "total wastage this month" + browsing by month/year.
+  @@index([storeId, status])
+  @@index([storeId, createdAt])
+  @@index([staffId])
+}

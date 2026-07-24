@@ -2,7 +2,7 @@ import 'dotenv/config'; // Required to load .env variables
 import { defineConfig, env } from 'prisma/config';
 
 export default defineConfig({
-  schema: 'prisma/schema.prisma',
+  schema: 'prisma/schema',
   datasource: {
     // CLI-only (db push / migrate / studio). This must be a direct or
     // session-mode connection — Supabase's transaction pooler (port 6543,

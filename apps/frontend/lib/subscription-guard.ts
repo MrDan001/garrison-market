@@ -231,8 +231,14 @@ export async function checkPlanLimit(
       : { allowed: true, limit, current: count };
   }
 
-  // products
-  const count = await prisma.inventory.count({ where: { ownerId: resolvedOwnerId } });
+  // products — counts BOTH standard Inventory and ScaleInventory, since an
+  // owner's plan limit applies to total product count regardless of which
+  // store type a given product belongs to.
+  const [standardCount, scaleCount] = await Promise.all([
+    prisma.inventory.count({ where: { ownerId: resolvedOwnerId } }),
+    prisma.scaleInventory.count({ where: { ownerId: resolvedOwnerId } }),
+  ]);
+  const count = standardCount + scaleCount;
   const limit = plan.maxProducts;
   return count >= limit
     ? { allowed: false, reason: limitReachedMessage, limit, current: count }

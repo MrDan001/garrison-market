@@ -1,9 +1,12 @@
 // app/staff/inventory/page.tsx
 import { getInventoryForStaff } from "@/lib/business.actions";
+import { getScaleInventoryForStaff } from "@/lib/scale-inventory.actions";
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { getActiveStore } from "@/lib/store-context";
 import InventoryClient from "./inventory-client";
+import ScaleInventoryClient from "./scale-inventory-client";
 
 function sanitize(data: any) {
   return JSON.parse(
@@ -32,6 +35,20 @@ export default async function InventoryPage() {
     });
 
     const discountEnabled = staffUser?.owner?.discountEnabled ?? false;
+
+    // storeType (chosen permanently at store creation) decides which
+    // inventory system this staff member's assigned store runs on.
+    const activeStore = await getActiveStore();
+
+    if (activeStore?.storeType === "scale") {
+      const scaleItems = await getScaleInventoryForStaff();
+      return (
+        <ScaleInventoryClient
+          initialItems={sanitize(scaleItems || [])}
+          discountEnabled={discountEnabled}
+        />
+      );
+    }
 
     const items = await getInventoryForStaff();
     const serializedItems = sanitize(items || []);

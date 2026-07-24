@@ -41,3 +41,17 @@ export async function getActiveStoreId(): Promise<number | null> {
   });
   return firstStore?.id ?? null;
 }
+
+// Returns the active store's id AND storeType together, so pages can branch
+// between the standard (piece) and scale (weight/volume) UI/actions from a
+// single source instead of each page re-deriving storeType on its own.
+export async function getActiveStore(): Promise<{ id: number; storeType: string } | null> {
+  const storeId = await getActiveStoreId();
+  if (!storeId) return null;
+
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    select: { id: true, storeType: true },
+  });
+  return store ?? null;
+}
