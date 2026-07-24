@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Scale as ScaleIcon, Clock, CheckCircle2, XCircle, Lock } from "lucide-react";
-import { submitWastageAction, WASTAGE_REASON_LABELS, WASTAGE_REASONS } from "@/lib/scale-wastage.actions";
+import { submitWastageAction } from "@/lib/scale-wastage.actions";
+import { WASTAGE_REASON_LABELS, WASTAGE_REASONS } from "@/lib/wastage-constants";
 import { unitsForBase } from "@/lib/scale-units";
 
 interface ScaleItem {

@@ -6,17 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createNotification } from "./notification.actions";
 import { getActiveStore } from "./store-context";
 import { convertToBaseUnit } from "./scale-units";
-
-export const WASTAGE_REASONS = ["trimming", "spillage", "spoilage", "sample", "other"] as const;
-export type WastageReason = (typeof WASTAGE_REASONS)[number];
-
-export const WASTAGE_REASON_LABELS: Record<WastageReason, string> = {
-  trimming: "Trimming",
-  spillage: "Spillage",
-  spoilage: "Spoilage",
-  sample: "Sample / Taste Test",
-  other: "Other",
-};
+import { WASTAGE_REASONS, type WastageReason } from "./wastage-constants";
 
 // ============================================================================
 // Submit (staff) — always allowed regardless of the wastageVisibleToStaff

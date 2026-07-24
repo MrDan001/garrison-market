@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Scale as ScaleIcon, Clock, CheckCircle2, XCircle, TrendingDown, ChevronDown, ChevronUp } from "lucide-react";
-import { approveWastageAction, declineWastageAction, WASTAGE_REASON_LABELS } from "@/lib/scale-wastage.actions";
+import { approveWastageAction, declineWastageAction } from "@/lib/scale-wastage.actions";
+import { WASTAGE_REASON_LABELS } from "@/lib/wastage-constants";
 
 export default function OwnerWastageClient({ data }: { data: any }) {
   const router = useRouter();
