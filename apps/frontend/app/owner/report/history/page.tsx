@@ -1,3 +1,5 @@
+// FILE: apps/frontend/app/owner/report/history/page.tsx
+
 import prisma from "@/lib/prisma";
 import HistoryClientList from "@/components/HistoryList";
 import Link from "next/link";
@@ -22,26 +24,34 @@ export default async function HistoryPage() {
       OR: [{ storeId: activeStoreId }, { storeId: null }],
     },
     orderBy: { date: "desc" },
-    include: { author: true, items: true, scaleItems: true }
+    include: { author: true, items: { include: { inventory: true } }, scaleItems: true },
   });
 
-  // Same reshape as the pending-reports page — scale reports render
-  // through the same table by mapping ScaleReportItem into the standard
-  // {name, price, quantity, total, discountValue} item shape.
+  // Same fix as the pending-reports page — a merged store's report can
+  // have both list and scale items on the same row. Both are kept as
+  // separate arrays now instead of one silently overwriting the other.
   const withReshapedItems = historyReports.map((report) => ({
     ...report,
-    items: report.scaleItems.length > 0
-      ? report.scaleItems.map((item) => ({
-          id: item.id,
-          name: item.name,
-          price: Number(item.quantitySold) > 0 ? Number(item.totalPrice) / Number(item.quantitySold) : 0,
-          quantity: `${Number(item.quantitySold)}${item.unit}`,
-          total: Number(item.totalPrice),
-          discountValue: null,
-          discountType: null,
-          discountReason: null,
-        }))
-      : report.items,
+    listItems: report.items.map((item) => ({
+      id: item.id,
+      name: item.inventory?.name ?? item.name ?? "Unknown Item",
+      price: Number(item.price),
+      quantity: item.quantity,
+      total: Number(item.total),
+      discountValue: item.discountValue != null ? Number(item.discountValue) : null,
+      discountType: item.discountType,
+      discountReason: item.discountReason,
+    })),
+    scaleItems: report.scaleItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      price: Number(item.quantitySold) > 0 ? Number(item.totalPrice) / Number(item.quantitySold) : 0,
+      quantity: `${Number(item.quantitySold)}${item.unit}`,
+      total: Number(item.totalPrice),
+      discountValue: null,
+      discountType: null,
+      discountReason: null,
+    })),
   }));
 
   const serialized = JSON.parse(JSON.stringify(withReshapedItems));

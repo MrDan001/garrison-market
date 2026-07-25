@@ -1,3 +1,5 @@
+// FILE: apps/frontend/app/owner/report/page.tsx
+
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth.actions";
 import { getActiveStoreId } from "@/lib/store-context";
@@ -10,7 +12,6 @@ export default async function OwnerReportsPage() {
 
   const activeStoreId = await getActiveStoreId();
 
-  // 1. Fetch using the second query's structure, but with the first query's nested inventory relation
   const pendingReports = await prisma.report.findMany({
     where: {
       ownerId: session.id,
@@ -20,55 +21,63 @@ export default async function OwnerReportsPage() {
     include: {
       author: { select: { id: true, fullName: true } },
       items: {
-        include: { inventory: true } // Pulled from block 1 to resolve item names
+        include: { inventory: true },
       },
       scaleItems: true,
     },
     orderBy: { date: "desc" },
   });
-  
-  // 2. Serialize using the second block's structure, merging the inventory-name fallback logic
-  const serialized = pendingReports.map((report) => ({
-    id: report.id,
-    status: report.status,
-    date: report.date instanceof Date ? report.date.toISOString() : new Date().toISOString(),
-    notes: report.notes,
-    ownerNote: report.ownerNote,
-    authorId: report.authorId,
-    ownerId: report.ownerId,
-    totalSales: Number(report.totalSales),
-    cashTotal: Number(report.cashTotal),
-    transferTotal: Number(report.transferTotal),
-    author: report.author,
-    // Scale reports use ScaleReportItem (name/quantitySold/unit/totalPrice —
-    // no discount fields) — reshaped here into the exact same {name, price,
-    // quantity, total, discountValue} shape the standard items use, so the
-    // review UI's table renders both without needing separate branches.
-    // "quantity" becomes a display string like "12kg" instead of a number.
-    items: report.scaleItems.length > 0
-      ? report.scaleItems.map((item) => ({
-          id: item.id,
-          name: item.name,
-          price: Number(item.quantitySold) > 0 ? Number(item.totalPrice) / Number(item.quantitySold) : 0,
-          quantity: `${Number(item.quantitySold)}${item.unit}`,
-          total: Number(item.totalPrice),
-          discountValue: null,
-          discountType: null,
-          discountReason: null,
-        }))
-      : report.items.map((item) => ({
-          id: item.id,
-          // Resolves name from nested inventory first, falls back to item.name, then "Unknown Item"
-          name: item.inventory?.name ?? item.name ?? "Unknown Item",
-          price: Number(item.price),
-          quantity: item.quantity,
-          total: Number(item.total),
-          discountValue: item.discountValue != null ? Number(item.discountValue) : null,
-          discountType: item.discountType,
-          discountReason: item.discountReason,
-        })),
-  }));
 
-  // 3. Pass the consolidated 'serialized' array to the Client Component
+  // Stage: a merged (admin-override) store's report can carry BOTH list
+  // sales and scale sales on the same row — previously this reshaped
+  // either scaleItems OR items into a single `items` array, which
+  // silently dropped whichever type lost that coin-flip. Now both are
+  // kept, always, as separate arrays — the review UI decides how to
+  // show them (a toggle when a report genuinely has both).
+  const serialized = pendingReports.map((report) => {
+    const listItems = report.items.map((item) => ({
+      id: item.id,
+      name: item.inventory?.name ?? item.name ?? "Unknown Item",
+      price: Number(item.price),
+      quantity: item.quantity,
+      total: Number(item.total),
+      discountValue: item.discountValue != null ? Number(item.discountValue) : null,
+      discountType: item.discountType,
+      discountReason: item.discountReason,
+    }));
+
+    // Scale reports use ScaleReportItem (name/quantitySold/unit/totalPrice —
+    // no discount fields) — reshaped here into the same {name, price,
+    // quantity, total, discountValue} shape the standard items use, so
+    // both render through the same table component. "quantity" becomes
+    // a display string like "12kg" instead of a number.
+    const scaleItems = report.scaleItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      price: Number(item.quantitySold) > 0 ? Number(item.totalPrice) / Number(item.quantitySold) : 0,
+      quantity: `${Number(item.quantitySold)}${item.unit}`,
+      total: Number(item.totalPrice),
+      discountValue: null,
+      discountType: null,
+      discountReason: null,
+    }));
+
+    return {
+      id: report.id,
+      status: report.status,
+      date: report.date instanceof Date ? report.date.toISOString() : new Date().toISOString(),
+      notes: report.notes,
+      ownerNote: report.ownerNote,
+      authorId: report.authorId,
+      ownerId: report.ownerId,
+      totalSales: Number(report.totalSales),
+      cashTotal: Number(report.cashTotal),
+      transferTotal: Number(report.transferTotal),
+      author: report.author,
+      listItems,
+      scaleItems,
+    };
+  });
+
   return <ReportsReviewClient initialReports={serialized} />;
 }
