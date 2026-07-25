@@ -12,6 +12,12 @@ interface OwnerTabsProps {
 export function OwnerTabs({ referralsTabContent, historyTabContent, actionsTabContent }: OwnerTabsProps) {
   const [activeTab, setActiveTab] = useState<"referrals" | "history" | "actions">("referrals");
 
+  const tabs = [
+    { key: "referrals" as const, content: referralsTabContent },
+    { key: "history" as const, content: historyTabContent },
+    { key: "actions" as const, content: actionsTabContent },
+  ];
+
   return (
     <div>
       {/* Tab Header Buttons */}
@@ -50,9 +56,11 @@ export function OwnerTabs({ referralsTabContent, historyTabContent, actionsTabCo
 
       {/* Tab Body Display */}
       <div>
-        {activeTab === "referrals" && referralsTabContent}
-        {activeTab === "history" && historyTabContent}
-        {activeTab === "actions" && actionsTabContent}
+        {tabs
+          .filter((tab) => tab.key === activeTab)
+          .map((tab) => (
+            <div key={tab.key}>{tab.content}</div>
+          ))}
       </div>
     </div>
   );

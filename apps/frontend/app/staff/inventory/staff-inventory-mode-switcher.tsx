@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { List, Scale as ScaleIcon } from "lucide-react";
 import InventoryClient from "./inventory-client";
-import StaffScaleLiveSell from "./staff-scale-live-sell";
+import StaffScaleConsignmentClient from "./staff-scale-consignment-client";
 
 // Only rendered for standard stores where the owner's admin-controlled
 // scaleConsignmentEnabled override is on. List mode is the existing,
@@ -54,7 +54,11 @@ export default function StaffInventoryModeSwitcher({
       {mode === "list" ? (
         <InventoryClient initialItems={listItems} discountEnabled={discountEnabled} />
       ) : (
-        <StaffScaleLiveSell openConsignments={scaleOpenConsignments} history={scaleHistory} />
+        <StaffScaleConsignmentClient
+          openConsignments={scaleOpenConsignments}
+          history={scaleHistory}
+          discountEnabled={discountEnabled}
+        />
       )}
     </div>
   );
