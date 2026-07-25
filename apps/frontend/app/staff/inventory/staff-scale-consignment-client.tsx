@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from "react";
 import {
-  Search, ShoppingCart, X, Package, ChevronRight,
+  Search, ShoppingCart, X, Package, Tag, ChevronRight,
   AlertCircle, Trash2, Scale as ScaleIcon, Clock, CheckCircle2,
 } from "lucide-react";
 import { sellFromScaleConsignmentAction } from "@/lib/consignment.actions";
@@ -127,6 +127,7 @@ export default function StaffScaleConsignmentClient({
   };
 
   const unitPair = drawerItem ? unitsForBase(drawerItem.baseUnit) : null;
+  const drawerCartItem = drawerItem ? cart.find((c) => c.consignmentItemId === drawerItem.consignmentItemId) : undefined;
 
   const computeBaseQty = (): number | null => {
     if (!drawerItem) return null;
@@ -402,204 +403,335 @@ export default function StaffScaleConsignmentClient({
       )}
 
       {/* Weigh-out drawer */}
+      {/* Floating checkout */}
+      {cart.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--bg-app)]/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 z-40">
+          <button
+            onClick={() => setShowCart(true)}
+            className="w-full flex items-center justify-between bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] rounded-2xl px-5 py-4 transition-all shadow-lg shadow-emerald-900/10"
+          >
+            <span className="flex items-center gap-2 font-bold text-[var(--text-primary)]">
+              <ShoppingCart size={18} />
+              {cartCount} item{cartCount !== 1 ? "s" : ""}
+            </span>
+            <span className="font-bold text-[var(--text-primary)]">₦{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          </button>
+        </div>
+      )}
+
       {drawerItem && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={closeDrawer} />
-          <div className="relative w-full sm:max-w-md bg-[var(--bg-surface)] rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-[var(--text-primary)]">{drawerItem.name}</h2>
-              <button onClick={closeDrawer} className="h-7 w-7 rounded-lg bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
-                <X size={14} />
-              </button>
+        <div className="fixed inset-0 z-50 flex items-end">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeDrawer} />
+          <div className="relative w-full bg-[var(--bg-surface)] border-t border-slate-200 dark:border-slate-800 rounded-t-3xl z-10 max-h-[88vh] overflow-y-auto">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-700" />
             </div>
-            <p className="text-xs text-slate-500">
-              {drawerItem.remaining}{drawerItem.baseUnit} left of what's signed out to you · ₦{drawerItem.price.toLocaleString()}/{drawerItem.baseUnit}
-            </p>
 
-            {/* Quantity + unit toggle, side by side in the same bar */}
-            <div>
-              <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Quantity</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  step="0.001"
-                  min={0}
-                  inputMode="decimal"
-                  placeholder="0"
-                  value={qtyInput}
-                  onChange={(e) => setQtyInput(e.target.value)}
-                  className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 px-3 text-sm text-[var(--text-primary)] outline-none focus:border-blue-600"
-                />
-                {unitPair && (
-                  <div className="flex rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0">
-                    {[unitPair.base, unitPair.sub].map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        onClick={() => setSaleUnit(u)}
-                        className={`px-3.5 py-2.5 text-xs font-bold transition-colors ${
-                          saleUnit === u ? "bg-blue-600 text-white" : "bg-slate-50 dark:bg-slate-950 text-slate-500"
-                        }`}
-                      >
-                        {u}
-                      </button>
-                    ))}
+            <div className="px-5 pb-8 pt-3 space-y-5">
+              {/* Product header */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-14 w-14 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                    {drawerItem.image ? (
+                      <img src={drawerItem.image} alt={drawerItem.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <ScaleIcon size={22} className="text-slate-500" />
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-
-            {discountEnabled && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowDiscount((s) => !s)}
-                  className="text-xs font-semibold text-blue-500"
-                >
-                  {showDiscount ? "Remove discount" : "+ Add discount"}
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold text-[var(--text-primary)] leading-tight truncate">{drawerItem.name}</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Sold by {drawerItem.baseUnit}</p>
+                  </div>
+                </div>
+                <button onClick={closeDrawer} className="p-2 text-slate-500 hover:text-[var(--text-primary)] transition-colors shrink-0">
+                  <X size={18} />
                 </button>
-                {showDiscount && (
-                  <div className="mt-2 space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        placeholder={discountType === "percent" ? "%" : "₦ off"}
-                        value={discountInput}
-                        onChange={(e) => setDiscountInput(e.target.value)}
-                        className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-sm outline-none focus:border-blue-600"
-                      />
-                      <div className="flex rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0">
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-2">
+                <StatChip label="Price" value={`₦${drawerItem.price.toLocaleString()}/${drawerItem.baseUnit}`} />
+                <StatChip label="Remaining" value={`${drawerItem.remaining}${drawerItem.baseUnit}`} />
+                <StatChip
+                  label="In Cart"
+                  value={drawerCartItem ? `${drawerCartItem.enteredQty}${drawerCartItem.enteredUnit}` : "0"}
+                  highlight={!!drawerCartItem}
+                />
+              </div>
+
+              {/* Quantity + unit toggle, side by side in the same bar */}
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Quantity</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.001"
+                    min={0}
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={qtyInput}
+                    onChange={(e) => setQtyInput(e.target.value)}
+                    className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 px-3 text-sm text-[var(--text-primary)] outline-none focus:border-blue-600"
+                  />
+                  {unitPair && (
+                    <div className="flex rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0">
+                      {[unitPair.base, unitPair.sub].map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setSaleUnit(u)}
+                          className={`px-3.5 py-2.5 text-xs font-bold transition-colors ${
+                            saleUnit === u ? "bg-blue-600 text-white" : "bg-slate-50 dark:bg-slate-950 text-slate-500"
+                          }`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {discountEnabled && (
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscount((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-200/30 hover:dark:bg-slate-800/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <Tag size={14} />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">Apply Discount</p>
+                        {showDiscount && savings > 0 && (
+                          <p className="text-xs text-emerald-400">Saving ₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className={`text-slate-500 transition-transform ${showDiscount ? "rotate-90" : ""}`} />
+                  </button>
+
+                  {showDiscount && (
+                    <div className="px-4 pb-4 space-y-3 border-t border-slate-200/60 dark:border-slate-800/60">
+                      {/* Type pills */}
+                      <div className="flex gap-2 mt-3">
                         {(["percent", "flat"] as const).map((t) => (
                           <button
                             key={t}
                             type="button"
                             onClick={() => setDiscountType(t)}
-                            className={`px-3 py-2 text-xs font-bold ${discountType === t ? "bg-blue-600 text-white" : "bg-slate-50 dark:bg-slate-950 text-slate-500"}`}
+                            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                              discountType === t ? "bg-emerald-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]"
+                            }`}
                           >
-                            {t === "percent" ? "%" : "₦"}
+                            {t === "percent" ? "% Percentage" : "₦ Flat Amount"}
                           </button>
                         ))}
                       </div>
+
+                      {/* Input */}
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">
+                          {discountType === "percent" ? "%" : "₦"}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder={discountType === "percent" ? "e.g. 10" : "e.g. 500"}
+                          value={discountInput}
+                          onChange={(e) => setDiscountInput(e.target.value)}
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl py-2.5 pl-8 pr-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-emerald-500 transition-colors"
+                        />
+                      </div>
+
+                      {/* Live preview */}
+                      {discountInput && (
+                        <div className="flex items-center justify-between bg-slate-50/60 dark:bg-slate-950/60 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-800">
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">New Price (per {drawerItem.baseUnit})</p>
+                            <p className="text-lg font-bold text-emerald-400">₦{previewUnitPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">You save</p>
+                            <p className="text-lg font-bold text-[var(--text-primary)]">₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Reasons */}
+                      <div>
+                        <p className="text-xs text-slate-500 mb-1.5 font-medium">Reason</p>
+                        <div className="flex flex-wrap gap-2">
+                          {DISCOUNT_REASONS.map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              onClick={() => setDiscountReason(r)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                discountReason === r ? "bg-emerald-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]"
+                              }`}
+                            >
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {discountType === "percent" && parseFloat(discountInput) > 100 && (
+                        <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                          <AlertCircle size={13} />
+                          Percentage cannot exceed 100%
+                        </div>
+                      )}
                     </div>
-                    <select
-                      value={discountReason}
-                      onChange={(e) => setDiscountReason(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs outline-none"
-                    >
-                      {DISCOUNT_REASONS.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                    {savings > 0 && (
-                      <p className="text-[11px] text-emerald-400">Saves ₦{savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
 
-            {baseQtyPreview != null && (
-              <div className="flex items-center justify-between text-sm pt-1 border-t border-slate-200 dark:border-slate-800">
-                <span className="text-slate-500">Line total</span>
-                <span className="font-bold text-[var(--text-primary)]">₦{previewLineTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-              </div>
-            )}
+              {baseQtyPreview != null && (
+                <div className="flex items-center justify-between text-sm pt-1 border-t border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500">Line total</span>
+                  <span className="font-bold text-[var(--text-primary)]">₦{previewLineTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+              )}
 
-            {drawerError && (
-              <p className="text-xs text-rose-400 flex items-center gap-1"><AlertCircle size={12} /> {drawerError}</p>
-            )}
+              {drawerError && (
+                <p className="text-xs text-rose-400 flex items-center gap-1"><AlertCircle size={12} /> {drawerError}</p>
+              )}
 
-            <button
-              onClick={handleAddFromDrawer}
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold"
-            >
-              Add to Cart
-            </button>
+              <button
+                disabled={drawerItem.remaining <= 0}
+                onClick={handleAddFromDrawer}
+                className="w-full py-4 rounded-2xl font-bold text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:dark:text-slate-600 text-white transition-colors flex items-center justify-center gap-2"
+              >
+                <ShoppingCart size={17} />
+                {showDiscount && savings > 0 && baseQtyPreview != null
+                  ? `Add at ₦${previewLineTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                  : "Add to Cart"}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Cart / checkout */}
+      {/* Cart / checkout — styled to match the main (List) staff checkout */}
       {showCart && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowCart(false)} />
-          <div className="relative w-full sm:max-w-md bg-[var(--bg-surface)] rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-[var(--text-primary)]">Cart ({cartCount})</h2>
-              <button onClick={() => setShowCart(false)} className="h-7 w-7 rounded-lg bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
-                <X size={14} />
+        <div className="fixed inset-0 z-50 flex items-end">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCart(false)} />
+          <div className="relative w-full bg-[var(--bg-surface)] border-t border-slate-200 dark:border-slate-800 rounded-t-3xl p-6 max-h-[80vh] overflow-y-auto z-10">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <ShoppingCart size={20} /> Checkout
+              </h2>
+              <button onClick={() => setShowCart(false)} className="p-2 text-slate-500 hover:text-[var(--text-primary)] transition-colors">
+                <X size={20} />
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3 mb-5">
               {cart.map((line) => (
-                <div key={line.consignmentItemId} className="flex items-center justify-between bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">{line.name}</p>
-                    <p className="text-xs text-slate-500">{line.enteredQty}{line.enteredUnit} · ₦{(line.linePrice * line.baseQty).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                <div key={line.consignmentItemId} className="flex items-center justify-between gap-3 p-3 bg-slate-100/60 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="h-10 w-10 bg-slate-50 dark:bg-slate-950 rounded-lg overflow-hidden shrink-0 flex items-center justify-center border border-slate-200 dark:border-slate-800">
+                      {line.image ? (
+                        <img src={line.image} alt={line.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <Package size={16} className="text-slate-400 dark:text-slate-600" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[var(--text-primary)] truncate">{line.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs text-slate-500">
+                          {line.enteredQty}
+                          {line.enteredUnit} · ₦{(line.linePrice * line.baseQty).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </p>
+                        {line.discountValue && (
+                          <span className="text-[9px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-bold">DISC</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <button onClick={() => removeFromCart(line.consignmentItemId)} className="text-rose-400">
-                    <Trash2 size={16} />
+                  <button onClick={() => removeFromCart(line.consignmentItemId)} className="h-7 w-7 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-rose-400 transition-colors shrink-0">
+                    <Trash2 size={13} />
                   </button>
                 </div>
               ))}
             </div>
 
-            <div className="flex items-center justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-800">
-              <span className="text-slate-500">Total</span>
-              <span className="text-lg font-bold text-[var(--text-primary)]">₦{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+            <div className="border-t border-slate-200 dark:border-slate-800 pt-4 mb-5 flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400 font-medium">Total</span>
+              <span className="text-2xl font-bold text-[var(--text-primary)]">₦{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             </div>
 
-            <div>
-              <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Payment method</label>
-              <div className="flex gap-2">
-                {(["cash", "transfer"] as const).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setPaymentMethod(p)}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-semibold capitalize ${
-                      paymentMethod === p ? "bg-emerald-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-500"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
+            {/* Customer Details Fields */}
+            <div className="mb-5 space-y-3">
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Customer Details (Optional)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="Customer Name"
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                <input
+                  type="tel"
+                  placeholder="Phone Number"
+                  value={buyerPhone}
+                  onChange={(e) => setBuyerPhone(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                placeholder="Buyer name (optional)"
-                value={buyerName}
-                onChange={(e) => setBuyerName(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-sm outline-none focus:border-blue-600"
-              />
-              <input
-                type="text"
-                placeholder="Buyer phone (optional)"
-                value={buyerPhone}
-                onChange={(e) => setBuyerPhone(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-sm outline-none focus:border-blue-600"
-              />
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Payment Method</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setPaymentMethod("cash")}
+                  className={`py-3 rounded-xl text-sm font-bold transition-colors ${
+                    paymentMethod === "cash" ? "bg-emerald-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
+                  }`}
+                >
+                  💵 Cash
+                </button>
+                <button
+                  onClick={() => setPaymentMethod("transfer")}
+                  className={`py-3 rounded-xl text-sm font-bold transition-colors ${
+                    paymentMethod === "transfer" ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
+                  }`}
+                >
+                  🏦 Transfer
+                </button>
+              </div>
             </div>
 
             {checkoutError && (
-              <p className="text-xs text-rose-400 flex items-center gap-1"><AlertCircle size={12} /> {checkoutError}</p>
+              <p className="text-xs text-rose-400 flex items-center gap-1 mb-3"><AlertCircle size={12} /> {checkoutError}</p>
             )}
 
             <button
+              disabled={loading || cart.length === 0 || !paymentMethod}
               onClick={handleProcessSale}
-              disabled={loading || cart.length === 0}
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold flex items-center justify-center gap-2"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
             >
-              {loading ? "Processing..." : `Confirm Sale · ₦${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-              {!loading && <ChevronRight size={16} />}
+              {loading ? "Processing..." : !paymentMethod ? "Select payment method" : "Confirm Sale"}
             </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function StatChip({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className={`rounded-xl border px-3 py-2.5 text-center ${highlight ? "border-blue-500/30 bg-blue-500/10" : "border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/60"}`}>
+      <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">{label}</p>
+      <p className={`text-base font-bold mt-0.5 ${highlight ? "text-blue-400" : "text-[var(--text-primary)]"}`}>{value}</p>
     </div>
   );
 }

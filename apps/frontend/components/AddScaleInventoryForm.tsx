@@ -81,7 +81,7 @@ export default function AddScaleInventoryForm() {
         return;
       }
 
-      router.push("/owner/inventory?status=added");
+      router.push("/owner/inventory?status=added&tab=scale");
     } catch (err) {
       console.error("Submission failed:", err);
       setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -96,7 +96,7 @@ export default function AddScaleInventoryForm() {
         <UpgradeLimitModal message={limitModalMessage} onClose={() => setLimitModalMessage(null)} />
       )}
       <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-4 py-4 flex items-center gap-4">
-        <Link href="/owner/inventory" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
+        <Link href="/owner/inventory?tab=scale" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
           <ArrowLeft size={24} />
         </Link>
         <div className="flex items-center gap-2">

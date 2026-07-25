@@ -1,3 +1,5 @@
+// FILE: apps/frontend/app/owner/inventory/[id]/edit/page.tsx
+
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth.actions";
 import prisma from "@/lib/prisma";
@@ -7,18 +9,32 @@ import { getActiveStore } from "@/lib/store-context";
 
 interface EditPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ type?: string }>;
 }
 
-export default async function EditItemPage({ params }: EditPageProps) {
+export default async function EditItemPage({ params, searchParams }: EditPageProps) {
   const { id } = await params;
   const itemId = parseInt(id, 10);
 
   const session = await getSessionUser();
   if (!session || session.role !== "owner") redirect("/login");
 
+  const { type } = await searchParams;
   const activeStore = await getActiveStore();
 
-  if (activeStore?.storeType === "scale") {
+  // Native scale stores always edit through ScaleInventory. Standard
+  // stores with the admin-only scaleConsignmentEnabled override reach
+  // this same branch when editing from the Scale tab (?type=scale).
+  let useScaleForm = activeStore?.storeType === "scale";
+  if (!useScaleForm && type === "scale") {
+    const owner = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { scaleConsignmentEnabled: true },
+    });
+    useScaleForm = !!owner?.scaleConsignmentEnabled;
+  }
+
+  if (useScaleForm) {
     const item = await prisma.scaleInventory.findUnique({ where: { id: itemId } });
 
     if (!item || item.ownerId !== session.id) {

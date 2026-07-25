@@ -90,7 +90,7 @@ export default function ScaleInventoryEditForm({
         alert(result.error);
         return;
       }
-      router.push("/owner/inventory?status=updated");
+      router.push("/owner/inventory?status=updated&tab=scale");
     } catch (err) {
       console.error("Update failed:", err);
       setStatus("Something went wrong. Please try again.");
@@ -110,7 +110,7 @@ export default function ScaleInventoryEditForm({
       formData.set("id", itemId);
       const result = await deleteScaleItemAction(formData);
       const statusParam = result?.archived ? "archived" : "deleted";
-      router.push(`/owner/inventory?status=${statusParam}`);
+      router.push(`/owner/inventory?status=${statusParam}&tab=scale`);
     } catch (err: any) {
       console.error("Delete failed:", err);
       setIsDeleting(false);
@@ -122,7 +122,7 @@ export default function ScaleInventoryEditForm({
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
       <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 py-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link href="/owner/inventory" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
+          <Link href="/owner/inventory?tab=scale" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
             <ArrowLeft size={24} />
           </Link>
           <div className="flex items-center gap-2">

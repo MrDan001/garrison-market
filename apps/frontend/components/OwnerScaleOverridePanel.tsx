@@ -148,7 +148,7 @@ export default function OwnerScaleOverridePanel({
   };
 
   return (
-    <div className="mt-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)] p-5 space-y-5">
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)] p-5 space-y-5">
       <div className="flex items-center gap-2">
         <Scale size={16} className="text-teal-500" />
         <h2 className="text-sm font-bold text-[var(--text-primary)]">Scale Inventory (Daily Consignment)</h2>

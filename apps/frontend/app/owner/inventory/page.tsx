@@ -4,11 +4,10 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth.actions";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import type { ReactNode } from "react";
 import { getActiveStore } from "@/lib/store-context";
 import InventoryGrid from "@/components/InventoryGrid";
 import ScaleInventoryGrid from "@/components/ScaleInventoryGrid";
-import OwnerScaleOverridePanel from "@/components/OwnerScaleOverridePanel";
+import OwnerInventoryModeSwitcher from "@/components/OwnerInventoryModeSwitcher";
 import { getStaffForScaleOverride, getStaffScaleStockSummary } from "@/lib/consignment.actions";
 
 export const dynamic = "force-dynamic";
@@ -121,14 +120,16 @@ export default async function OwnerInventoryPage() {
   }));
 
   // Admin-only override: standard stores keep their normal Inventory as-is,
-  // but if the owner has scaleConsignmentEnabled on, they also get a Scale
-  // Inventory panel underneath for the daily consignment-to-staff flow.
+  // but if the owner has scaleConsignmentEnabled on, they also get Scale
+  // Inventory for the daily consignment-to-staff flow. Stage 1: instead of
+  // showing that Scale panel stacked underneath the List grid, it now sits
+  // behind a List/Scale toggle at the top of the page, matching the pattern
+  // already used on the staff inventory page.
   const owner = await prisma.user.findUnique({
     where: { id: session.id },
     select: { scaleConsignmentEnabled: true },
   });
 
-  let scaleOverridePanel: ReactNode = null;
   if (owner?.scaleConsignmentEnabled) {
     const [scaleItems, staff, scaleSalesCounts, staffStockSummary] = await Promise.all([
       prisma.scaleInventory.findMany({
@@ -142,6 +143,7 @@ export default async function OwnerInventoryPage() {
           costPrice: true,
           category: true,
           restockLevel: true,
+          image: true,
         },
         orderBy: { name: "asc" },
       }),
@@ -159,29 +161,34 @@ export default async function OwnerInventoryPage() {
       scaleSalesMap.set(s.scaleInventoryId, Number(s._sum.quantityInBaseUnit ?? 0));
     });
 
-    scaleOverridePanel = (
-      <OwnerScaleOverridePanel
-        items={scaleItems.map((i) => ({
-          id: i.id,
-          name: i.name,
-          quantity: Number(i.quantity),
-          unit: i.unit,
-          price: Number(i.price),
-          costPrice: i.costPrice != null ? Number(i.costPrice) : null,
-          category: i.category,
-          salesCount: scaleSalesMap.get(i.id) ?? 0,
-          restockLevel: i.restockLevel != null ? Number(i.restockLevel) : null,
-        }))}
-        staff={staff}
-        staffStock={staffStockSummary}
-      />
+    const serializedScaleItems = scaleItems.map((i) => ({
+      id: i.id,
+      name: i.name,
+      quantity: Number(i.quantity),
+      unit: i.unit,
+      price: Number(i.price),
+      costPrice: i.costPrice != null ? Number(i.costPrice) : null,
+      category: i.category,
+      salesCount: scaleSalesMap.get(i.id) ?? 0,
+      restockLevel: i.restockLevel != null ? Number(i.restockLevel) : null,
+      image: i.image,
+    }));
+
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[var(--bg-app)]" />}>
+        <OwnerInventoryModeSwitcher
+          listItems={serialized}
+          scaleItems={serializedScaleItems}
+          staff={staff}
+          staffStock={staffStockSummary}
+        />
+      </Suspense>
     );
   }
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-[var(--bg-app)]" />}>
       <InventoryGrid items={serialized} />
-      {scaleOverridePanel && <div className="max-w-4xl mx-auto px-4 sm:px-6">{scaleOverridePanel}</div>}
     </Suspense>
   );
 }
