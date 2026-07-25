@@ -1,3 +1,5 @@
+// FILE: apps/frontend/lib/consignment.actions.ts
+
 "use server";
 
 import prisma from "@/lib/prisma";
@@ -311,8 +313,22 @@ export async function signOutScaleConsignment(params: {
   if (params.items.length === 0) throw new Error("Add at least one item");
 
   const activeStore = await getActiveStore();
-  if (!activeStore || activeStore.storeType !== "scale") {
-    throw new Error("This action is only available for weight/volume stores");
+  if (!activeStore) {
+    throw new Error("No active store found");
+  }
+
+  // A store qualifies for scale sign-out either because it's a native
+  // "scale" store, OR because the admin has switched on the
+  // scaleConsignmentEnabled override for this owner (unlocks a parallel
+  // Scale layer on top of an otherwise-untouched standard store).
+  if (activeStore.storeType !== "scale") {
+    const owner = await prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { scaleConsignmentEnabled: true },
+    });
+    if (!owner?.scaleConsignmentEnabled) {
+      throw new Error("This action is only available for weight/volume stores");
+    }
   }
 
   const inventoryRows = await prisma.scaleInventory.findMany({
@@ -523,6 +539,378 @@ export async function settleScaleConsignment(
   revalidatePath("/staff/consignment");
   revalidatePath("/owner/consignments");
   return { success: true };
+}
+
+// ============================================================================
+// Owner → Staff scale sign-out (admin-override daily consignment)
+// ============================================================================
+// Used only when an owner has scaleConsignmentEnabled on. Unlike the
+// staff-initiated signOutScaleConsignment above (staff → external
+// recipient), this is OWNER-initiated and targets one of their own staff
+// members directly — that staff member's `staffId` on the resulting
+// Consignment is what makes it show up in their own "scale inventory" view
+// (getOpenScaleConsignmentsForStaff already filters on staffId, so no
+// changes were needed there).
+
+export async function getStaffForScaleOverride() {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  const storeId = await getActiveStoreId();
+  if (!storeId) return [];
+
+  return prisma.user.findMany({
+    where: { ownerId: session.id, role: "staff", staffStoreId: storeId },
+    select: { id: true, fullName: true, email: true, phoneNumber: true },
+    orderBy: { fullName: "asc" },
+  });
+}
+
+export async function getStaffScaleStockSummary() {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  const activeStore = await getActiveStore();
+  if (!activeStore) return [];
+
+  const openConsignments = await prisma.consignment.findMany({
+    where: { ownerId: session.id, storeId: activeStore.id, status: "out", scaleItems: { some: {} } },
+    include: {
+      staff: { select: { id: true, fullName: true } },
+      scaleItems: { include: { scaleInventory: { select: { name: true } } } },
+    },
+  });
+
+  return openConsignments.map((c) => ({
+    staffId: c.staffId,
+    staffName: c.staff?.fullName || "Staff",
+    items: c.scaleItems.map((i) => ({
+      name: i.scaleInventory?.name || "Item",
+      unit: i.unit,
+      quantityOut: Number(i.quantityOut),
+      quantitySold: Number(i.quantitySold),
+      remaining: Number(i.quantityOut) - Number(i.quantitySold),
+    })),
+  }));
+}
+
+export async function ownerSignOutScaleToStaffAction(params: {
+  staffId: number;
+  items: SignOutScaleItem[];
+}) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  await assertSubscriptionActive(session.id);
+
+  const owner = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { scaleConsignmentEnabled: true },
+  });
+  if (!owner?.scaleConsignmentEnabled) {
+    throw new Error("Scale Consignment is not enabled for this account.");
+  }
+
+  if (params.items.length === 0) throw new Error("Add at least one item");
+
+  const activeStore = await getActiveStore();
+  if (!activeStore) throw new Error("No active store found");
+
+  const staff = await prisma.user.findFirst({
+    where: { id: params.staffId, ownerId: session.id, role: "staff", staffStoreId: activeStore.id },
+    select: { id: true, fullName: true, phoneNumber: true },
+  });
+  if (!staff) throw new Error("Staff member not found for this store");
+
+  const inventoryRows = await prisma.scaleInventory.findMany({
+    where: {
+      id: { in: params.items.map((i) => i.scaleInventoryId) },
+      ownerId: session.id,
+      storeId: activeStore.id,
+    },
+  });
+
+  const resolved: { item: SignOutScaleItem; baseQty: number; inv: (typeof inventoryRows)[number] }[] = [];
+
+  for (const item of params.items) {
+    const inv = inventoryRows.find((r) => r.id === item.scaleInventoryId);
+    if (!inv) throw new Error(`Item ${item.scaleInventoryId} not found`);
+
+    const baseQty = convertToBaseUnit(item.enteredQty, item.enteredUnit, inv.unit);
+    if (baseQty <= 0) throw new Error(`Invalid quantity for ${inv.name}.`);
+    if (Number(inv.quantity) < baseQty) {
+      throw new Error(`Insufficient stock for ${inv.name}. Available: ${Number(inv.quantity)}${inv.unit}`);
+    }
+    resolved.push({ item, baseQty, inv });
+  }
+
+  const consignment = await prisma.$transaction(async (tx) => {
+    // Top-up support: if this staff member already has an open scale
+    // consignment today (e.g. they ran low and the owner is sending more),
+    // merge into it instead of creating a second, duplicate-looking
+    // consignment — matching item rows get their quantityOut bumped up,
+    // new items get added as new rows on the SAME consignment.
+    const existing = await tx.consignment.findFirst({
+      where: { ownerId: session.id, staffId: staff.id, storeId: activeStore.id, status: "out", scaleItems: { some: {} } },
+      include: { scaleItems: true },
+    });
+
+    if (existing) {
+      for (const { item, baseQty, inv } of resolved) {
+        const existingLine = existing.scaleItems.find((si) => si.scaleInventoryId === item.scaleInventoryId);
+        if (existingLine) {
+          await tx.scaleConsignmentItem.update({
+            where: { id: existingLine.id },
+            data: { quantityOut: { increment: baseQty } },
+          });
+        } else {
+          await tx.scaleConsignmentItem.create({
+            data: {
+              consignmentId: existing.id,
+              scaleInventoryId: item.scaleInventoryId,
+              quantityOut: baseQty,
+              unit: inv.unit,
+              priceAtTime: inv.price,
+            },
+          });
+        }
+      }
+      return existing;
+    }
+
+    return tx.consignment.create({
+      data: {
+        ownerId: session.id,
+        staffId: staff.id,
+        storeId: activeStore.id,
+        recipientName: staff.fullName || "Staff",
+        recipientPhone: staff.phoneNumber || "",
+        recipientNote: "Daily scale consignment sign-out",
+        status: "out",
+        scaleItems: {
+          create: resolved.map(({ item, baseQty, inv }) => ({
+            scaleInventoryId: item.scaleInventoryId,
+            quantityOut: baseQty,
+            unit: inv.unit,
+            priceAtTime: inv.price,
+          })),
+        },
+      },
+    });
+  });
+
+  for (const { item, baseQty } of resolved) {
+    await prisma.scaleInventory.update({
+      where: { id: item.scaleInventoryId },
+      data: { quantity: { decrement: baseQty } },
+    });
+  }
+
+  await createNotification({
+    ownerId: session.id,
+    recipientId: staff.id,
+    storeId: activeStore.id,
+    type: "announcement",
+    message: `Fresh scale stock has been signed out to you.`,
+    link: "/staff/inventory",
+  });
+
+  revalidatePath("/staff/inventory");
+  revalidatePath("/staff/consignment");
+  revalidatePath("/owner/consignments");
+  revalidatePath("/owner/inventory");
+  return { success: true, id: consignment.id };
+}
+
+// ============================================================================
+// Live selling against an open scale consignment (admin-override mode)
+// ============================================================================
+// Every sale updates quantitySold on the ScaleConsignmentItem in real time —
+// this is what feeds submitDailyReport's scale grouping, and what the
+// midnight/manual settlement reads to compute what's unsold.
+type ConsignmentSaleCartItem = {
+  consignmentItemId: number;
+  enteredQty: number;
+  enteredUnit: string;
+  price: number; // per base unit, post-discount if any
+};
+
+export async function sellFromScaleConsignmentAction(
+  cartItems: ConsignmentSaleCartItem[],
+  paymentMethod: "cash" | "transfer",
+  buyerName?: string,
+  buyerPhone?: string
+) {
+  const session = await getSessionUser();
+  if (!session) throw new Error("Unauthorized");
+
+  const ownerId = session.role === "owner" ? session.id : session.ownerId!;
+  await assertSubscriptionActive(ownerId);
+
+  if (cartItems.length === 0) throw new Error("Cart is empty");
+
+  // Wrapped in a transaction so two near-simultaneous sells (e.g. a
+  // double-tap) can't both read the same quantitySold and jointly oversell
+  // past what's actually left on the consignment.
+  const result = await prisma.$transaction(async (tx) => {
+    const consignmentItems = await tx.scaleConsignmentItem.findMany({
+      where: { id: { in: cartItems.map((c) => c.consignmentItemId) } },
+      include: { consignment: true, scaleInventory: true },
+    });
+
+    const resolved: { cart: ConsignmentSaleCartItem; baseQty: number; row: (typeof consignmentItems)[number] }[] = [];
+
+    for (const cart of cartItems) {
+      const row = consignmentItems.find((r) => r.id === cart.consignmentItemId);
+      if (!row) throw new Error("Consigned item not found.");
+      if (row.consignment.staffId !== session.id) throw new Error("Unauthorized for this consignment.");
+      if (row.consignment.status !== "out") throw new Error("This consignment has already been settled.");
+
+      const baseQty = convertToBaseUnit(cart.enteredQty, cart.enteredUnit, row.unit);
+      if (baseQty <= 0) throw new Error(`Invalid quantity for ${row.scaleInventory?.name}.`);
+
+      const remaining = Number(row.quantityOut) - Number(row.quantitySold);
+      if (baseQty > remaining) {
+        throw new Error(`Only ${remaining}${row.unit} of ${row.scaleInventory?.name} left to sell today.`);
+      }
+      resolved.push({ cart, baseQty, row });
+    }
+
+    const total = resolved.reduce((sum, r) => sum + r.cart.price * r.baseQty, 0);
+    // Use the consignment's own storeId as the source of truth — it's what
+    // the item was actually signed out under, independent of whatever the
+    // staff's "active store" cookie currently says.
+    const saleStoreId = resolved[0].row.consignment.storeId;
+
+    await tx.order.create({
+      data: {
+        total,
+        paymentMethod,
+        buyerName: buyerName?.trim() || "Walk-in Customer",
+        buyerPhone: buyerPhone?.trim() || null,
+        ownerId,
+        staffId: session.id,
+        storeId: saleStoreId,
+        scaleItems: {
+          create: resolved.map(({ cart, baseQty, row }) => ({
+            scaleInventoryId: row.scaleInventoryId,
+            quantity: cart.enteredQty,
+            unit: cart.enteredUnit,
+            quantityInBaseUnit: baseQty,
+            priceAtTime: cart.price * baseQty,
+          })),
+        },
+      },
+    });
+
+    for (const { baseQty, row } of resolved) {
+      // Re-check remaining stock atomically inside the transaction via an
+      // updateMany guard, in case another concurrent sale slipped in
+      // between the read above and this write.
+      const updateResult = await tx.scaleConsignmentItem.updateMany({
+        where: {
+          id: row.id,
+          quantitySold: row.quantitySold, // optimistic lock on the value we read
+        },
+        data: { quantitySold: { increment: baseQty } },
+      });
+      if (updateResult.count === 0) {
+        throw new Error(`${row.scaleInventory?.name} was just sold by another request — please try again.`);
+      }
+    }
+
+    return { total, saleStoreId };
+  });
+
+  const naira = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(result.total);
+  const staffName = await prisma.user.findUnique({ where: { id: session.id }, select: { fullName: true } });
+
+  await createNotification({
+    ownerId,
+    recipientId: null,
+    storeId: result.saleStoreId,
+    type: "sale_made",
+    message: staffName?.fullName ? `${staffName.fullName} made a scale sale of ${naira}.` : `A scale sale of ${naira} was made.`,
+    link: "/owner/dashboard",
+  });
+
+  revalidatePath("/staff/inventory");
+  revalidatePath("/owner/consignments");
+  return { success: true, total: result.total };
+}
+
+// ============================================================================
+// Auto-settlement for admin-override scale consignments
+// ============================================================================
+// Distinct from settleScaleConsignment above (which is the staff-entered,
+// one-time settlement for external-recipient consignments on native scale
+// stores). Here, quantitySold is already accurate — it was tracked live by
+// sellFromScaleConsignmentAction on every sale — so this just closes the
+// day out: whatever's left (quantityOut - quantitySold) goes back onto
+// ScaleInventory, and the consignment is marked settled. No new Order is
+// created (those were already created at time of sale).
+export async function autoSettleScaleConsignment(consignmentId: number, source: "manual" | "midnight" = "manual") {
+  const consignment = await prisma.consignment.findUnique({
+    where: { id: consignmentId },
+    include: {
+      scaleItems: { include: { scaleInventory: { select: { name: true } } } },
+      staff: { select: { fullName: true } },
+    },
+  });
+  if (!consignment) throw new Error("Consignment not found");
+  if (consignment.status !== "out") return { success: true, skipped: true };
+
+  for (const item of consignment.scaleItems) {
+    const sold = Number(item.quantitySold);
+    const returned = Math.max(0, Number(item.quantityOut) - sold);
+
+    await prisma.scaleConsignmentItem.update({
+      where: { id: item.id },
+      data: { quantityReturned: returned },
+    });
+
+    if (returned > 0) {
+      await prisma.scaleInventory.update({
+        where: { id: item.scaleInventoryId },
+        data: { quantity: { increment: returned } },
+      });
+    }
+  }
+
+  await prisma.consignment.update({
+    where: { id: consignmentId },
+    data: { status: "settled", settledAt: new Date() },
+  });
+
+  await createNotification({
+    ownerId: consignment.ownerId,
+    recipientId: null,
+    storeId: consignment.storeId,
+    type: "announcement",
+    message:
+      source === "midnight"
+        ? `${consignment.staff?.fullName || "Staff"}'s scale consignment was auto-settled at midnight — unsold stock is back in your inventory.`
+        : `${consignment.staff?.fullName || "Staff"}'s scale consignment was reconciled — unsold stock is back in your inventory.`,
+    link: "/owner/consignments",
+  });
+
+  revalidatePath("/staff/inventory");
+  revalidatePath("/owner/consignments");
+  revalidatePath("/owner/inventory");
+  return { success: true };
+}
+
+export async function ownerReconcileScaleConsignmentAction(consignmentId: number) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  const consignment = await prisma.consignment.findUnique({
+    where: { id: consignmentId },
+    select: { ownerId: true },
+  });
+  if (!consignment || consignment.ownerId !== session.id) throw new Error("Not found");
+
+  return autoSettleScaleConsignment(consignmentId, "manual");
 }
 
 export async function getScaleConsignmentsForOwner(storeId?: number) {

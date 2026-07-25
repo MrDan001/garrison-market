@@ -1,3 +1,5 @@
+// FILE: apps/frontend/prisma/schema/base.prisma
+
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
@@ -76,6 +78,17 @@ model User {
   // same on/off pattern as discountEnabled above. Approval itself is
   // always owner-only regardless of this flag.
   wastageVisibleToStaff Boolean @default(false)
+
+  // Admin-only override (set from the admin panel, never by the owner
+  // themselves): unlocks Scale Consignment for this owner even when their
+  // store's storeType is "standard". Standard inventory stays completely
+  // untouched — this only adds a parallel, consignment-gated Scale layer.
+  // Staff sign-out is DAILY: an automated midnight job force-settles any
+  // open scale consignment, returning unsold stock to ScaleInventory, so
+  // staff's scale view starts empty each day until the owner signs out
+  // fresh stock. See lib/scale-consignment-reset.ts for the cron logic.
+  scaleConsignmentEnabled Boolean @default(false)
+
   
   stores         Store[]   @relation("OwnerStores")
   staffStoreId   Int?

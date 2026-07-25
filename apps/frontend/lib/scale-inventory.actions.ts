@@ -1,3 +1,5 @@
+// FILE: apps/frontend/lib/scale-inventory.actions.ts
+
 "use server";
 
 import prisma from "@/lib/prisma";
@@ -40,8 +42,22 @@ export async function addScaleItemAction(
   }
 
   const activeStore = await getActiveStore();
-  if (!activeStore || activeStore.storeType !== "scale") {
-    return { success: false, error: "This action is only available for weight/volume stores." };
+  if (!activeStore) {
+    return { success: false, error: "No active store found." };
+  }
+
+  // Native "scale" stores always qualify. Standard stores only qualify if
+  // the admin has switched on scaleConsignmentEnabled for this owner —
+  // that's the daily-consignment-gated Scale layer, not a full store
+  // conversion, so standard Inventory keeps working exactly as before.
+  if (activeStore.storeType !== "scale") {
+    const owner = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { scaleConsignmentEnabled: true },
+    });
+    if (!owner?.scaleConsignmentEnabled) {
+      return { success: false, error: "This action is only available for weight/volume stores." };
+    }
   }
 
   const name = formData.get("name") as string;

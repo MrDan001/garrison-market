@@ -1,0 +1,8 @@
+{
+    "crons": [
+      {
+        "path": "/api/cron/scale-consignment-reset",
+        "schedule": "0 23 * * *"
+      }
+    ]
+  }

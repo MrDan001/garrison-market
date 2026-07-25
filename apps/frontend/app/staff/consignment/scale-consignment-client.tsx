@@ -1,3 +1,5 @@
+// FILE: apps/frontend/app/staff/consignment/scale-consignment-client.tsx
+
 "use client";
 
 import { useState } from "react";
@@ -30,14 +32,21 @@ export default function StaffScaleConsignmentClient({
   inventory,
   openConsignments,
   history,
+  hideSignOutTab = false,
 }: {
   enabled: boolean;
   inventory: ScaleItem[];
   openConsignments: any[];
   history: any[];
+  // True in the admin-override case (standard store + scaleConsignmentEnabled):
+  // staff never sign stock out themselves there — only the owner signs out
+  // to them — so the "Sign Out" tab is hidden and staff land on "Open".
+  hideSignOutTab?: boolean;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"new" | "open" | "history">(openConsignments.length > 0 ? "open" : "new");
+  const [tab, setTab] = useState<"new" | "open" | "history">(
+    hideSignOutTab ? "open" : openConsignments.length > 0 ? "open" : "new"
+  );
 
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
@@ -181,7 +190,9 @@ export default function StaffScaleConsignmentClient({
 
       {/* Tabs */}
       <div className="flex gap-2 px-4 pt-4">
-        {(["new", "open", "history"] as const).map((t) => (
+        {(["new", "open", "history"] as const)
+          .filter((t) => !(hideSignOutTab && t === "new"))
+          .map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}

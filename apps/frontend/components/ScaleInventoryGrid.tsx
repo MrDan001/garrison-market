@@ -1,8 +1,10 @@
+// FILE: apps/frontend/components/ScaleInventoryGrid.tsx
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Scale as ScaleIcon } from "lucide-react";
+import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Scale as ScaleIcon, Flame } from "lucide-react";
 import Link from "next/link";
 
 interface ScaleInventoryItem {
@@ -15,9 +17,10 @@ interface ScaleInventoryItem {
   category: string | null;
   restockLevel: number | null;
   image: string | null;
+  salesCount?: number; // total sold (base unit), for Top Selling tab
 }
 
-type Tab = "all" | "low-stock" | "out-of-stock";
+type Tab = "all" | "low-stock" | "out-of-stock" | "top-selling";
 
 export default function ScaleInventoryGrid({ items }: { items: ScaleInventoryItem[] }) {
   const [tab, setTab] = useState<Tab>("all");
@@ -46,6 +49,9 @@ export default function ScaleInventoryGrid({ items }: { items: ScaleInventoryIte
     () => items.filter((i) => i.quantity > 0 && i.restockLevel != null && i.quantity <= i.restockLevel),
     [items]
   );
+  const topSellingItems = useMemo(() => {
+    return [...items].sort((a, b) => (b.salesCount ?? 0) - (a.salesCount ?? 0));
+  }, [items]);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -55,11 +61,13 @@ export default function ScaleInventoryGrid({ items }: { items: ScaleInventoryIte
         return lowStockItems;
       case "out-of-stock":
         return outOfStockItems;
+      case "top-selling":
+        return topSellingItems;
       case "all":
       default:
         return items;
     }
-  }, [tab, items, lowStockItems, outOfStockItems]);
+  }, [tab, items, lowStockItems, outOfStockItems, topSellingItems]);
 
   const visibleItems = searchQuery.trim()
     ? tabFiltered.filter((i) => i.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
@@ -75,10 +83,11 @@ export default function ScaleInventoryGrid({ items }: { items: ScaleInventoryIte
     return { totalCost: cost, totalSelling: selling, totalProfit: selling - cost };
   }, [items]);
 
-  const tabs: { key: Tab; label: string; count?: number }[] = [
+  const tabs: { key: Tab; label: string; count?: number; icon?: React.ReactNode }[] = [
     { key: "all", label: "All", count: items.length },
     { key: "low-stock", label: "Low Stock", count: lowStockItems.length },
     { key: "out-of-stock", label: "Out of Stock", count: outOfStockItems.length },
+    { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> },
   ];
 
   const fmtQty = (q: number, unit: string) => {
@@ -226,6 +235,13 @@ export default function ScaleInventoryGrid({ items }: { items: ScaleInventoryIte
                     <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-md">
                       Low Stock
                     </span>
+                  </div>
+                )}
+
+                {/* Flame badge for items rendered in Top Selling list */}
+                {tab === "top-selling" && item.salesCount && item.salesCount > 0 && (
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500/90 text-slate-50 dark:text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
+                    <Flame size={10} fill="currentColor" /> {fmtQty(item.salesCount, item.unit)} sold
                   </div>
                 )}
 

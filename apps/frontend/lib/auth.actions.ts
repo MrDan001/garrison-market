@@ -1,3 +1,5 @@
+// FILE: apps/frontend/lib/auth.actions.ts
+
 "use server";
 
 import prisma from "@/lib/prisma";
@@ -603,6 +605,29 @@ export async function setCustomPriceAction(ownerId: number, plan: "basic" | "pre
   } catch (error) {
     console.error("Set custom price error:", error);
     return { success: false, error: "Failed to update negotiated price." };
+  }
+}
+
+export async function setScaleConsignmentOverrideAction(ownerId: number, enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+
+  try {
+    const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+    if (!owner) return { success: false, error: "Owner not found." };
+
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { scaleConsignmentEnabled: enabled },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    revalidatePath("/staff/consignment");
+    revalidatePath("/owner/consignments");
+    return { success: true };
+  } catch (error) {
+    console.error("Set scale consignment override error:", error);
+    return { success: false, error: "Failed to update scale consignment override." };
   }
 }
 

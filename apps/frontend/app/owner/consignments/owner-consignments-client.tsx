@@ -1,12 +1,31 @@
+// FILE: apps/frontend/app/owner/consignments/owner-consignments-client.tsx
+
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Truck, Calendar, User, Store } from "lucide-react";
+import { ArrowLeft, Truck, Calendar, User, Store, RotateCcw } from "lucide-react";
+import { ownerReconcileScaleConsignmentAction } from "@/lib/consignment.actions";
 
 export default function OwnerConsignmentsClient({ consignments }: { consignments: any[] }) {
   const [filter, setFilter] = useState<"all" | "out" | "settled">("all");
   const [storeFilter, setStoreFilter] = useState<string>("all");
+  const [isPending, startTransition] = useTransition();
+  const [reconcileMsg, setReconcileMsg] = useState<Record<number, string>>({});
+  const router = useRouter();
+
+  const handleReconcile = (id: number) => {
+    startTransition(async () => {
+      try {
+        await ownerReconcileScaleConsignmentAction(id);
+        setReconcileMsg((prev) => ({ ...prev, [id]: "Reconciled — stock returned." }));
+        router.refresh();
+      } catch (err: any) {
+        setReconcileMsg((prev) => ({ ...prev, [id]: err?.message || "Failed to reconcile." }));
+      }
+    });
+  };
 
   const stores = Array.from(
     new Map(consignments.filter((c) => c.store).map((c) => [c.store.id, c.store])).values()
@@ -130,9 +149,27 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
                 </div>
 
                 {c.status === "out" && (
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800">
-                    <span className="text-xs text-slate-500">Value signed out</span>
-                    <span className="text-sm font-bold text-amber-400">₦{totalOutValue.toLocaleString()}</span>
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Value signed out</span>
+                      <span className="text-sm font-bold text-amber-400">₦{totalOutValue.toLocaleString()}</span>
+                    </div>
+                    {c.isScale && (
+                      <>
+                        <button
+                          disabled={isPending}
+                          onClick={() => handleReconcile(c.id)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold"
+                        >
+                          <RotateCcw size={12} /> Reconcile Now
+                        </button>
+                        <p className="text-[10px] text-slate-500 text-center">
+                          Closes today's consignment early — unsold stock returns to your inventory immediately
+                          instead of waiting for the midnight reset.
+                        </p>
+                        {reconcileMsg[c.id] && <p className="text-[11px] text-slate-400 text-center">{reconcileMsg[c.id]}</p>}
+                      </>
+                    )}
                   </div>
                 )}
 

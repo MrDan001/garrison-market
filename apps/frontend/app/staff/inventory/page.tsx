@@ -1,12 +1,16 @@
+// FILE: apps/frontend/app/staff/inventory/page.tsx
+
 // app/staff/inventory/page.tsx
 import { getInventoryForStaff } from "@/lib/business.actions";
 import { getScaleInventoryForStaff } from "@/lib/scale-inventory.actions";
+import { getOpenScaleConsignmentsForStaff, getScaleConsignmentHistoryForStaff } from "@/lib/consignment.actions";
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { getActiveStore } from "@/lib/store-context";
 import InventoryClient from "./inventory-client";
 import ScaleInventoryClient from "./scale-inventory-client";
+import StaffInventoryModeSwitcher from "./staff-inventory-mode-switcher";
 
 function sanitize(data: any) {
   return JSON.parse(
@@ -30,11 +34,12 @@ export default async function InventoryPage() {
       where: { email: session.email },
       select: {
         ownerId: true,
-        owner: { select: { discountEnabled: true } },
+        owner: { select: { discountEnabled: true, scaleConsignmentEnabled: true } },
       },
     });
 
     const discountEnabled = staffUser?.owner?.discountEnabled ?? false;
+    const scaleConsignmentEnabled = staffUser?.owner?.scaleConsignmentEnabled ?? false;
 
     // storeType (chosen permanently at store creation) decides which
     // inventory system this staff member's assigned store runs on.
@@ -52,6 +57,26 @@ export default async function InventoryPage() {
 
     const items = await getInventoryForStaff();
     const serializedItems = sanitize(items || []);
+
+    // Admin-only override: on an otherwise-untouched standard store, if the
+    // owner has scaleConsignmentEnabled on, staff get a List/Scale toggle.
+    // List is this same InventoryClient, unchanged. Scale shows only what's
+    // been signed out to THIS staff member today via consignment.
+    if (scaleConsignmentEnabled) {
+      const [openConsignments, history] = await Promise.all([
+        getOpenScaleConsignmentsForStaff(),
+        getScaleConsignmentHistoryForStaff(),
+      ]);
+
+      return (
+        <StaffInventoryModeSwitcher
+          listItems={serializedItems}
+          discountEnabled={discountEnabled}
+          scaleOpenConsignments={sanitize(openConsignments || [])}
+          scaleHistory={sanitize(history || [])}
+        />
+      );
+    }
 
     return (
       <InventoryClient

@@ -1,9 +1,11 @@
+// FILE: apps/frontend/app/admin/users/[id]/OwnerActions.tsx
+
 "use client";
 
 import { useState, useTransition, type TransitionStartFunction } from "react";
 import { useRouter } from "next/navigation";
-import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction } from "@/lib/auth.actions";
-import { CalendarPlus, Tag } from "lucide-react";
+import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction, setScaleConsignmentOverrideAction } from "@/lib/auth.actions";
+import { CalendarPlus, Tag, Scale } from "lucide-react";
 
 const naira = (n: number) =>
   new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n);
@@ -19,6 +21,7 @@ interface OwnerActionsProps {
   customPricePremiumNaira?: number | null;
   customPricePremiumNote?: string | null;
   customPriceUpdatedAt?: string | null;
+  scaleConsignmentEnabled?: boolean;
 }
 
 export function OwnerActions({
@@ -31,10 +34,12 @@ export function OwnerActions({
   customPricePremiumNaira,
   customPricePremiumNote,
   customPriceUpdatedAt,
+  scaleConsignmentEnabled,
 }: OwnerActionsProps) {
   const [isPending, startTransition] = useTransition();
   const [days, setDays] = useState("7");
   const [extendMsg, setExtendMsg] = useState<string | null>(null);
+  const [scaleMsg, setScaleMsg] = useState<string | null>(null);
   const router = useRouter();
 
   const handleAction = (action: () => Promise<any>, navigateAfter?: string) => {
@@ -55,6 +60,22 @@ export function OwnerActions({
     startTransition(async () => {
       const result = await extendSubscriptionAction(ownerId, n);
       setExtendMsg(result.success ? `Added ${n} day(s).` : result.error || "Failed to extend.");
+      router.refresh();
+    });
+  };
+
+  const handleScaleToggle = () => {
+    if (!ownerId) return;
+    const next = !scaleConsignmentEnabled;
+    startTransition(async () => {
+      const result = await setScaleConsignmentOverrideAction(ownerId, next);
+      setScaleMsg(
+        result.success
+          ? next
+            ? "Scale Consignment turned ON for this owner."
+            : "Scale Consignment turned OFF for this owner."
+          : result.error || "Failed to update."
+      );
       router.refresh();
     });
   };
@@ -156,6 +177,40 @@ export function OwnerActions({
             Quarterly/bi-annual/annual discounts still apply on top of it. Until a rate is set, the plan shows as
             unpriced on the owner's billing page and they cannot check out for it.
           </p>
+        </div>
+      )}
+      {ownerId && (
+        <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <Scale size={14} className="text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-400">Scale Consignment override</span>
+            <span
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                scaleConsignmentEnabled
+                  ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+            >
+              {scaleConsignmentEnabled ? "On" : "Off"}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            When ON, this owner can stock Scale (weight/volume) inventory and sign it out to staff via daily
+            consignment — even though their store is a standard store. Standard inventory is unaffected. Any stock
+            not sold gets returned to the owner and the staff view resets automatically at midnight.
+          </p>
+          <button
+            disabled={isPending}
+            onClick={handleScaleToggle}
+            className={`px-3 py-1.5 disabled:opacity-50 rounded-lg text-xs font-bold transition-colors ${
+              scaleConsignmentEnabled
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                : "bg-teal-600 hover:bg-teal-500 text-white"
+            }`}
+          >
+            {scaleConsignmentEnabled ? "Turn Off" : "Turn On"}
+          </button>
+          {scaleMsg && <span className="ml-2 text-[11px] text-slate-400">{scaleMsg}</span>}
         </div>
       )}
       <button

@@ -1,3 +1,5 @@
+// FILE: apps/frontend/app/admin/users/[id]/page.tsx
+
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -266,6 +268,7 @@ export default async function OwnerDetailsPage({
               customPricePremiumNaira={owner.customPricePremiumNaira}
               customPricePremiumNote={owner.customPricePremiumNote}
               customPriceUpdatedAt={owner.customPriceUpdatedAt ? owner.customPriceUpdatedAt.toISOString() : null}
+              scaleConsignmentEnabled={owner.scaleConsignmentEnabled}
             />
           </div>
         }

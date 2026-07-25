@@ -1,3 +1,5 @@
+// FILE: apps/frontend/lib/business.actions.ts
+
 "use server";
 
 import prisma from "@/lib/prisma";
@@ -131,12 +133,21 @@ export async function submitDailyReport(authorId: number, content: string) {
     return { success: true };
   }
 
+  // Standard-store branch. If the owner has scaleConsignmentEnabled on
+  // (admin override), this staff member may ALSO have live sales against
+  // consigned scale stock today — those get grouped by product, same as
+  // the native-scale-store branch above, and folded into this same report
+  // alongside their regular list-inventory sales.
   const recentSales = await prisma.order.findMany({
     where: { staffId: authorId, date: { gte: salesStartTime } },
-    include: { items: { include: { inventory: true } } }
+    include: {
+      items: { include: { inventory: true } },
+      scaleItems: { include: { scaleInventory: true } },
+    }
   });
 
   const allSoldItems = recentSales.flatMap((s: any) => s.items);
+  const allSoldScaleItems = recentSales.flatMap((s: any) => s.scaleItems);
   const totalValue = recentSales.reduce((sum: number, s: any) => sum + Number(s.total), 0);
   const cashTotal = recentSales
     .filter((s: any) => s.paymentMethod === "cash")
@@ -144,6 +155,25 @@ export async function submitDailyReport(authorId: number, content: string) {
   const transferTotal = recentSales
     .filter((s: any) => s.paymentMethod === "transfer")
     .reduce((sum: number, s: any) => sum + Number(s.total), 0);
+
+  const groupedScale = new Map<number, { name: string; unit: string; qty: number; total: number }>();
+  for (const item of allSoldScaleItems) {
+    const key = item.scaleInventoryId;
+    const qty = Number(item.quantityInBaseUnit);
+    const total = Number(item.priceAtTime);
+    const existing = groupedScale.get(key);
+    if (existing) {
+      existing.qty += qty;
+      existing.total += total;
+    } else {
+      groupedScale.set(key, {
+        name: item.scaleInventory?.name ?? "Unknown Item",
+        unit: item.scaleInventory?.unit ?? "",
+        qty,
+        total,
+      });
+    }
+  }
 
   const newReport = await prisma.report.create({
     data: {
@@ -170,6 +200,15 @@ export async function submitDailyReport(authorId: number, content: string) {
                 discountReason: i.discountReason,
               }
             : {}),
+        })),
+      },
+      scaleItems: {
+        create: Array.from(groupedScale.entries()).map(([scaleInventoryId, g]) => ({
+          scaleInventoryId,
+          name: g.name,
+          quantitySold: g.qty,
+          unit: g.unit,
+          totalPrice: g.total,
         })),
       },
     },
