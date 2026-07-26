@@ -57,7 +57,11 @@ export default async function OwnerDetailsPage({
     pending: "bg-amber-900/30 text-amber-400 border-amber-500/20",
   };
 
-  const currentPlan = owner.plan || "Basic Plan";
+  // maxPackageEnabled can be true even if `plan` itself hasn't caught up yet
+  // (e.g. a manual admin grant before any payment), so it takes priority
+  // for display purposes here — same precedence as resolveEffectivePlanId()
+  // in lib/subscription-guard.ts.
+  const currentPlan = owner.maxPackageEnabled ? "Max Package" : owner.plan || "Basic Plan";
   const planExpiryDate = owner.currentPeriodEnd 
     ? new Date(owner.currentPeriodEnd).toLocaleDateString() 
     : owner.trialEndsAt 
@@ -267,8 +271,11 @@ export default async function OwnerDetailsPage({
               customPriceBasicNote={owner.customPriceBasicNote}
               customPricePremiumNaira={owner.customPricePremiumNaira}
               customPricePremiumNote={owner.customPricePremiumNote}
+              customPriceMaxNaira={owner.customPriceMaxNaira}
+              customPriceMaxNote={owner.customPriceMaxNote}
               customPriceUpdatedAt={owner.customPriceUpdatedAt ? owner.customPriceUpdatedAt.toISOString() : null}
               scaleConsignmentEnabled={owner.scaleConsignmentEnabled}
+              maxPackageEnabled={owner.maxPackageEnabled}
             />
           </div>
         }

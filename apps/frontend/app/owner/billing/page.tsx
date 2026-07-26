@@ -1,9 +1,11 @@
+// FILE: apps/frontend/app/owner/billing/page.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard, Loader2, Crown, MessageCircle } from "lucide-react";
 import { getOwnerBillingInfo, startCheckoutAction } from "@/lib/billing.actions";
 import { PLANS, BILLING_CYCLES, getCyclePrice, getCycleDiscountPct, type PlanId, type BillingCycleId } from "@/lib/plans";
 
@@ -13,6 +15,10 @@ const naira = (n: number) =>
 // Pricing is fully negotiated — there's no standard price to fall back to.
 // Render a dash until an admin sets a rate for this owner+plan.
 const nairaOrDash = (n: number | null) => (n === null ? "—" : naira(n));
+
+// Max Package's limits are Infinity (see PLANS.max in lib/plans.ts) — show
+// that as "Unlimited" instead of the literal word "Infinity".
+const displayLimit = (n: number) => (n === Infinity ? "Unlimited" : n);
 
 export default function BillingPage() {
   const router = useRouter();
@@ -38,11 +44,14 @@ export default function BillingPage() {
   const customPriceBasicNote: string | null = info?.customPriceBasicNote ?? null;
   const customPricePremiumNaira: number | null = info?.customPricePremiumNaira ?? null;
   const customPricePremiumNote: string | null = info?.customPricePremiumNote ?? null;
+  const customPriceMaxNaira: number | null = info?.customPriceMaxNaira ?? null;
+  const customPriceMaxNote: string | null = info?.customPriceMaxNote ?? null;
+  const maxPackageEnabled: boolean = info?.maxPackageEnabled ?? false;
 
   const customPriceForPlan = (planId: PlanId) =>
-    planId === "premium" ? customPricePremiumNaira : customPriceBasicNaira;
+    planId === "premium" ? customPricePremiumNaira : planId === "max" ? customPriceMaxNaira : customPriceBasicNaira;
   const customNoteForPlan = (planId: PlanId) =>
-    planId === "premium" ? customPricePremiumNote : customPriceBasicNote;
+    planId === "premium" ? customPricePremiumNote : planId === "max" ? customPriceMaxNote : customPriceBasicNote;
 
   const selectedCustomPrice = customPriceForPlan(selectedPlan);
 
@@ -112,6 +121,11 @@ export default function BillingPage() {
               {new Date(status.currentPeriodEnd).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
             </p>
           )}
+          {maxPackageEnabled && (
+            <p className="text-sm text-amber-500 font-semibold flex items-center gap-1.5 mt-1">
+              <Crown size={14} /> Max Package active — unlimited stores, staff, and products
+            </p>
+          )}
           {status?.isLocked && (
             <p className="text-sm text-rose-500/90">
               Your trial or subscription has ended. Choose a plan below to unlock your account again — all your data is safe and untouched.
@@ -126,7 +140,7 @@ export default function BillingPage() {
         )}
 
         {/* Plan picker */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {(Object.keys(PLANS) as PlanId[]).map((planId) => {
             const plan = PLANS[planId];
             const isSelected = selectedPlan === planId;
@@ -141,15 +155,18 @@ export default function BillingPage() {
                     : "border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)] hover:border-slate-300 dark:hover:border-slate-700"
                 }`}
               >
-                <p className="font-bold text-[var(--text-primary)] mb-1">{plan.name}</p>
+                <p className="font-bold text-[var(--text-primary)] mb-1 flex items-center gap-1.5">
+                  {planId === "max" && <Crown size={14} className="text-amber-500" />}
+                  {plan.name}
+                </p>
                 <p className="text-2xl font-black text-[var(--text-primary)] mb-3">
                   {nairaOrDash(displayMonthly)}
                   {displayMonthly !== null && <span className="text-xs font-medium text-slate-500">/mo</span>}
                 </p>
                 <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                  <li>{plan.maxStores} store{plan.maxStores > 1 ? "s" : ""}</li>
-                  <li>{plan.maxStaff} staff accounts</li>
-                  <li>{plan.maxProducts} products</li>
+                  <li>{displayLimit(plan.maxStores)} store{plan.maxStores > 1 ? "s" : ""}</li>
+                  <li>{displayLimit(plan.maxStaff)} staff accounts</li>
+                  <li>{displayLimit(plan.maxProducts)} products</li>
                   <li className={plan.businessSummaryChart ? "text-emerald-500" : "text-slate-400 dark:text-slate-600"}>
                     {plan.businessSummaryChart ? "✓" : "✕"} Business summary chart
                   </li>
@@ -197,23 +214,39 @@ export default function BillingPage() {
           </div>
         </div>
 
-        <button
-          onClick={handleCheckout}
-          disabled={checkingOut || selectedCustomPrice === null}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-colors"
-        >
-          {checkingOut ? (
-            <>
-              <Loader2 className="animate-spin" size={18} /> Redirecting to Paystack...
-            </>
-          ) : selectedCustomPrice === null ? (
-            <>contact admin</>
-          ) : (
-            <>
-              <CreditCard size={18} /> Pay {naira(getCyclePrice(selectedPlan, selectedCycle, selectedCustomPrice)!)} with Paystack
-            </>
-          )}
-        </button>
+        {selectedCustomPrice === null ? (
+          <div className="space-y-2">
+            <Link
+              href="/owner/support"
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-colors"
+            >
+              <MessageCircle size={18} /> Contact admin about {PLANS[selectedPlan].name}
+            </Link>
+            <p className="text-center text-xs text-slate-500">
+              Or email{" "}
+              <a href="mailto:support@garrison.com" className="underline font-semibold text-slate-600 dark:text-slate-400">
+                support@garrison.com
+              </a>
+              . Once a rate is agreed, it'll show here and you can pay directly.
+            </p>
+          </div>
+        ) : (
+          <button
+            onClick={handleCheckout}
+            disabled={checkingOut}
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-colors"
+          >
+            {checkingOut ? (
+              <>
+                <Loader2 className="animate-spin" size={18} /> Redirecting to Paystack...
+              </>
+            ) : (
+              <>
+                <CreditCard size={18} /> Pay {naira(getCyclePrice(selectedPlan, selectedCycle, selectedCustomPrice)!)} with Paystack
+              </>
+            )}
+          </button>
+        )}
 
         {/* Payment history */}
         {info?.payments?.length > 0 && (

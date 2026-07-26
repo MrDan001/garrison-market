@@ -44,6 +44,14 @@ model User {
   customPriceBasicNote     String?
   customPricePremiumNaira  Int?
   customPricePremiumNote   String?
+  // Negotiated Max Package rate. Same pattern as Basic/Premium above — no
+  // static price exists for Max at all, so this is the ONLY way an owner
+  // can ever see a price or check out for it. Set by an admin after they've
+  // haggled with the owner over Support/email, per setCustomPriceAction
+  // (plan="max"). Until this is set, Max always renders as "contact admin"
+  // on the billing page, same as an unpriced Basic/Premium.
+  customPriceMaxNaira      Int?
+  customPriceMaxNote       String?
   customPriceSetBy         String?   // admin email who last set either rate
   customPriceUpdatedAt     DateTime?
 
@@ -88,6 +96,21 @@ model User {
   // staff's scale view starts empty each day until the owner signs out
   // fresh stock. See lib/scale-consignment-reset.ts for the cron logic.
   scaleConsignmentEnabled Boolean @default(false)
+
+  // --- Max Package (negotiated price, admin-gated) ---
+  // Like Basic/Premium, Max has no static price — an owner requests it by
+  // contacting admin via Support or email, admin negotiates and sets a rate
+  // with setCustomPriceAction (see customPriceMaxNaira above), and only then
+  // can the owner check out for it via the normal Paystack flow.
+  //
+  // This flag is the actual unlock switch: it turns ON AUTOMATICALLY the
+  // moment a Max payment succeeds (webhook / syncPaymentDirectly), granting
+  // unlimited stores/staff/products and every gated feature regardless of
+  // trial/period expiry (see resolveEffectivePlanId() and getBillingStatus()
+  // in lib/subscription-guard.ts). If they haven't paid, it stays OFF.
+  // An admin can also flip it manually from the admin panel — e.g. to grant
+  // it as a courtesy, or to revoke it — independent of payment state.
+  maxPackageEnabled Boolean @default(false)
 
   
   stores         Store[]   @relation("OwnerStores")

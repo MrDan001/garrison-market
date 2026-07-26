@@ -1,3 +1,5 @@
+// FILE: apps/frontend/app/api/paystack/webhook/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyWebhookSignature, verifyTransaction } from "@/lib/paystack";
@@ -71,6 +73,11 @@ export async function POST(request: NextRequest) {
           currentPeriodEnd: newPeriodEnd,
           paystackCustomerCode: verified.customer?.customer_code || owner.paystackCustomerCode,
           paystackAuthorizationCode: verified.authorization?.authorization_code || owner.paystackAuthorizationCode,
+          // Max Package's unlock is a separate flag from `plan` — flip it on
+          // the moment a Max payment actually succeeds here. Never set to
+          // false for non-Max payments, so an existing manual grant is
+          // never silently revoked by an unrelated purchase.
+          ...(plan === "max" ? { maxPackageEnabled: true } : {}),
         },
       }),
     ]);
@@ -89,7 +96,7 @@ export async function POST(request: NextRequest) {
       recipientId: null,
       storeId: null,
       type: "announcement",
-      message: `Payment received — your ${plan === "premium" ? "Premium" : "Basic"} plan is now active until ${newPeriodEnd.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}.`,
+      message: `Payment received — your ${plan === "max" ? "Max Package" : plan === "premium" ? "Premium" : "Basic"} plan is now active until ${newPeriodEnd.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}.`,
       link: "/owner/billing",
     });
 

@@ -2,7 +2,7 @@
 // Single source of truth for plan pricing and limits.
 // Adjust prices/limits here — nothing else should hardcode these numbers.
 
-export type PlanId = "basic" | "premium";
+export type PlanId = "basic" | "premium" | "max";
 export type BillingCycleId = "quarterly" | "biannual" | "annual";
 
 export interface PlanConfig {
@@ -46,6 +46,28 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     businessSummaryChart: true,
     consignment: true,
     discounts: { quarterly: 0, biannual: 20, annual: 35 },
+  },
+  // Max Package: no self-service price — an owner requests it via Support
+  // or email, an admin negotiates and sets a rate with setCustomPriceAction
+  // (customPriceMaxNaira on the User model), and only then can they check
+  // out for it, same flow as Basic/Premium. Infinity is a legitimate number
+  // in JS/TS here: every limit check in subscription-guard.ts is
+  // `count >= limit`, so Infinity simply never trips.
+  //
+  // NOTE: PLANS.max's limits below are what a Max *checkout* grants once
+  // paid. The actual on/off unlock for a given owner is the separate
+  // maxPackageEnabled flag (set automatically on successful Max payment,
+  // or manually by an admin) — see resolveEffectivePlanId() in
+  // lib/subscription-guard.ts.
+  max: {
+    id: "max",
+    name: "Max Package",
+    maxStores: Infinity,
+    maxStaff: Infinity,
+    maxProducts: Infinity,
+    businessSummaryChart: true,
+    consignment: true,
+    discounts: { quarterly: 0, biannual: 25, annual: 40 },
   },
 };
 

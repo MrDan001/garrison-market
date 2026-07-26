@@ -1,3 +1,5 @@
+// FILE: apps/frontend/lib/billing.actions.ts
+
 "use server";
 
 import prisma from "@/lib/prisma";
@@ -22,7 +24,15 @@ export async function getOwnerBillingInfo() {
   });
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
-    select: { customPriceBasicNaira: true, customPriceBasicNote: true, customPricePremiumNaira: true, customPricePremiumNote: true },
+    select: {
+      customPriceBasicNaira: true,
+      customPriceBasicNote: true,
+      customPricePremiumNaira: true,
+      customPricePremiumNote: true,
+      customPriceMaxNaira: true,
+      customPriceMaxNote: true,
+      maxPackageEnabled: true,
+    },
   });
 
   return {
@@ -33,6 +43,9 @@ export async function getOwnerBillingInfo() {
     customPriceBasicNote: owner?.customPriceBasicNote ?? null,
     customPricePremiumNaira: owner?.customPricePremiumNaira ?? null,
     customPricePremiumNote: owner?.customPricePremiumNote ?? null,
+    customPriceMaxNaira: owner?.customPriceMaxNaira ?? null,
+    customPriceMaxNote: owner?.customPriceMaxNote ?? null,
+    maxPackageEnabled: owner?.maxPackageEnabled ?? false,
   };
 }
 
@@ -51,6 +64,7 @@ export async function startCheckoutAction(plan: PlanId, cycle: BillingCycleId) {
       email: true,
       customPriceBasicNaira: true,
       customPricePremiumNaira: true,
+      customPriceMaxNaira: true,
       currentPeriodEnd: true,
     },
   });
@@ -58,8 +72,11 @@ export async function startCheckoutAction(plan: PlanId, cycle: BillingCycleId) {
 
   // Pricing is fully negotiated — there is no standard/static price to fall
   // back to. Until an admin sets a rate for this owner+plan, checkout is
-  // blocked.
-  const customMonthly = plan === "premium" ? user.customPricePremiumNaira : user.customPriceBasicNaira;
+  // blocked. This applies to Max Package exactly like Basic/Premium: an
+  // admin only sets customPriceMaxNaira after negotiating with the owner
+  // over Support or email.
+  const customMonthly =
+    plan === "premium" ? user.customPricePremiumNaira : plan === "max" ? user.customPriceMaxNaira : user.customPriceBasicNaira;
   const amount = getCyclePrice(plan, cycle, customMonthly);
   if (amount === null) {
     return { error: "No price has been set for this plan yet. Please contact the admin to negotiate your rate." };
@@ -176,6 +193,13 @@ export async function syncPaymentDirectly(reference: string) {
             currentPeriodEnd: newPeriodEnd,
             paystackCustomerCode: paystackData.data.customer?.customer_code || undefined,
             paystackAuthorizationCode: paystackData.data.authorization?.authorization_code || undefined,
+            // Max Package's unlock is a separate flag from `plan` (see
+            // maxPackageEnabled on the User model) — flip it on here the
+            // moment a Max payment actually succeeds. Never set to false
+            // for non-Max payments: an owner who already has it (e.g. via
+            // manual admin grant) shouldn't lose it just by also paying
+            // for Basic/Premium on a different store/negotiation.
+            ...(payment.plan === "max" ? { maxPackageEnabled: true } : {}),
           },
         }),
       ]);

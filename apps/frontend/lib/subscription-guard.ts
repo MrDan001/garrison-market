@@ -12,18 +12,31 @@ export { LIMIT_REACHED_PREFIX, formatLimitReachedMessage };
 
 /**
  * The plan to use for feature/limit checks is NOT always the same as the
- * plan stored on the account. While an owner is on an active (non-expired)
- * trial, they get full Premium access regardless of what `plan` says —
- * trial means "everything unlocked", so a new signup isn't quietly capped
- * at Basic limits before they've even had a chance to pick a plan. Once the
- * trial ends, this collapses back to whatever they've actually paid for
+ * plan stored on the account.
+ *
+ * Highest priority: maxPackageEnabled. This is a separate flag from
+ * `plan` (see base.prisma) — it flips on automatically the moment a Max
+ * Package payment succeeds, or manually via admin override, and while true
+ * it always resolves to "max" (unlimited everything), regardless of trial
+ * state or what `plan` says. This check comes before the trial check
+ * below on purpose: an owner who has actually paid for Max shouldn't lose
+ * that the day their original trial would have expired.
+ *
+ * Otherwise: while an owner is on an active (non-expired) trial, they get
+ * full Premium access regardless of what `plan` says — trial means
+ * "everything unlocked", so a new signup isn't quietly capped at Basic
+ * limits before they've even had a chance to pick a plan. Once the trial
+ * ends, this collapses back to whatever they've actually paid for
  * (defaulting to Basic if nothing was purchased).
  */
 export function resolveEffectivePlanId(account: {
   plan: string | null;
   subscriptionStatus: string | null;
   trialEndsAt: Date | null;
+  maxPackageEnabled?: boolean | null;
 }): PlanId {
+  if (account.maxPackageEnabled) return "max";
+
   const isActiveTrial =
     account.subscriptionStatus === "trialing" &&
     !!account.trialEndsAt &&
@@ -74,6 +87,7 @@ export const getBillingStatus = cache(async function getBillingStatus(idParam: n
       subscriptionStatus: true,
       trialEndsAt: true,
       currentPeriodEnd: true,
+      maxPackageEnabled: true,
     },
   });
 
@@ -89,6 +103,7 @@ export const getBillingStatus = cache(async function getBillingStatus(idParam: n
         subscriptionStatus: true,
         trialEndsAt: true,
         currentPeriodEnd: true,
+        maxPackageEnabled: true,
       },
     });
   }
@@ -157,6 +172,16 @@ export const getBillingStatus = cache(async function getBillingStatus(idParam: n
     isLocked = true;
   }
 
+  // Max Package override — takes precedence over everything computed above.
+  // While ON, this owner is never locked and always resolves to "max"
+  // (unlimited everything), regardless of trial/period expiry or whatever
+  // the payment self-healing block above resolved `plan` to. This is set
+  // automatically on successful Max payment, or manually by an admin.
+  if (account.maxPackageEnabled) {
+    plan = "max";
+    isLocked = false;
+  }
+
   return {
     plan,
     subscriptionStatus: currentStatus,
@@ -200,7 +225,7 @@ export async function checkPlanLimit(
   
   const user = await prisma.user.findUnique({ 
     where: { id: idParam }, 
-    select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true, fullName: true } 
+    select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true, fullName: true, maxPackageEnabled: true } 
   });
   
   if (user && user.role === "staff" && user.ownerId) {
@@ -209,7 +234,7 @@ export async function checkPlanLimit(
 
   const owner = resolvedOwnerId === idParam
     ? user
-    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true, fullName: true } });
+    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true, fullName: true, maxPackageEnabled: true } });
   const plan = getPlanConfig(
     owner ? resolveEffectivePlanId(owner) : undefined
   );
@@ -253,7 +278,7 @@ export async function assertFeatureAllowed(
   feature: "businessSummaryChart" | "consignment"
 ): Promise<void> {
   let resolvedOwnerId = idParam;
-  const user = await prisma.user.findUnique({ where: { id: idParam }, select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true } });
+  const user = await prisma.user.findUnique({ where: { id: idParam }, select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true } });
   
   if (user && user.role === "staff" && user.ownerId) {
     resolvedOwnerId = user.ownerId;
@@ -261,12 +286,12 @@ export async function assertFeatureAllowed(
 
   const owner = resolvedOwnerId === idParam
     ? user
-    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true } });
+    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true } });
   const plan = getPlanConfig(owner ? resolveEffectivePlanId(owner) : undefined);
   
   if (!plan[feature]) {
     throw new Error(
-      `UPGRADE_REQUIRED: This feature is only available on the Premium plan. Please upgrade to access it.`
+      `UPGRADE_REQUIRED: This feature is only available on the Premium and Max Package plans. Please upgrade to access it.`
     );
   }
 }

@@ -567,7 +567,7 @@ export async function extendSubscriptionAction(ownerId: number, days: number, re
   }
 }
 
-export async function setCustomPriceAction(ownerId: number, plan: "basic" | "premium", priceNaira: number | null, note?: string) {
+export async function setCustomPriceAction(ownerId: number, plan: "basic" | "premium" | "max", priceNaira: number | null, note?: string) {
   const session = await getSessionUser();
   if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
 
@@ -584,6 +584,11 @@ export async function setCustomPriceAction(ownerId: number, plan: "basic" | "pre
         ? {
             customPricePremiumNaira: priceNaira,
             customPricePremiumNote: priceNaira === null ? null : note || null,
+          }
+        : plan === "max"
+        ? {
+            customPriceMaxNaira: priceNaira,
+            customPriceMaxNote: priceNaira === null ? null : note || null,
           }
         : {
             customPriceBasicNaira: priceNaira,
@@ -630,6 +635,39 @@ export async function setScaleConsignmentOverrideAction(ownerId: number, enabled
     return { success: false, error: "Failed to update scale consignment override." };
   }
 }
+
+/**
+ * Manual admin override for the Max Package unlock. This is the same flag
+ * that flips on automatically when a Max Package payment succeeds (see
+ * syncPaymentDirectly in lib/billing.actions.ts and the Paystack webhook
+ * handler) — this action lets an admin grant or revoke it directly,
+ * independent of payment state (e.g. as a courtesy, or to walk back a
+ * mistaken grant). See maxPackageEnabled on the User model and
+ * resolveEffectivePlanId() in lib/subscription-guard.ts for how it's used.
+ */
+export async function setMaxPackageOverrideAction(ownerId: number, enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+
+  try {
+    const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+    if (!owner) return { success: false, error: "Owner not found." };
+
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { maxPackageEnabled: enabled },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    revalidatePath("/owner/billing");
+    revalidatePath("/owner/dashboard");
+    return { success: true };
+  } catch (error) {
+    console.error("Set Max Package override error:", error);
+    return { success: false, error: "Failed to update Max Package override." };
+  }
+}
+
 
 export async function deleteUser(email: string) {
   const session = await getSessionUser();

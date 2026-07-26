@@ -4,8 +4,8 @@
 
 import { useState, useTransition, type TransitionStartFunction } from "react";
 import { useRouter } from "next/navigation";
-import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction, setScaleConsignmentOverrideAction } from "@/lib/auth.actions";
-import { CalendarPlus, Tag, Scale } from "lucide-react";
+import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction, setScaleConsignmentOverrideAction, setMaxPackageOverrideAction } from "@/lib/auth.actions";
+import { CalendarPlus, Tag, Scale, Crown } from "lucide-react";
 
 const naira = (n: number) =>
   new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n);
@@ -20,8 +20,11 @@ interface OwnerActionsProps {
   customPriceBasicNote?: string | null;
   customPricePremiumNaira?: number | null;
   customPricePremiumNote?: string | null;
+  customPriceMaxNaira?: number | null;
+  customPriceMaxNote?: string | null;
   customPriceUpdatedAt?: string | null;
   scaleConsignmentEnabled?: boolean;
+  maxPackageEnabled?: boolean;
 }
 
 export function OwnerActions({
@@ -33,13 +36,17 @@ export function OwnerActions({
   customPriceBasicNote,
   customPricePremiumNaira,
   customPricePremiumNote,
+  customPriceMaxNaira,
+  customPriceMaxNote,
   customPriceUpdatedAt,
   scaleConsignmentEnabled,
+  maxPackageEnabled,
 }: OwnerActionsProps) {
   const [isPending, startTransition] = useTransition();
   const [days, setDays] = useState("7");
   const [extendMsg, setExtendMsg] = useState<string | null>(null);
   const [scaleMsg, setScaleMsg] = useState<string | null>(null);
+  const [maxMsg, setMaxMsg] = useState<string | null>(null);
   const router = useRouter();
 
   const handleAction = (action: () => Promise<any>, navigateAfter?: string) => {
@@ -74,6 +81,22 @@ export function OwnerActions({
           ? next
             ? "Scale Consignment turned ON for this owner."
             : "Scale Consignment turned OFF for this owner."
+          : result.error || "Failed to update."
+      );
+      router.refresh();
+    });
+  };
+
+  const handleMaxToggle = () => {
+    if (!ownerId) return;
+    const next = !maxPackageEnabled;
+    startTransition(async () => {
+      const result = await setMaxPackageOverrideAction(ownerId, next);
+      setMaxMsg(
+        result.success
+          ? next
+            ? "Max Package turned ON for this owner — unlimited stores/staff/products, all features unlocked."
+            : "Max Package turned OFF for this owner."
           : result.error || "Failed to update."
       );
       router.refresh();
@@ -172,10 +195,23 @@ export function OwnerActions({
             router={router}
           />
 
+          <RateRow
+            ownerId={ownerId}
+            plan="max"
+            label="Max Package"
+            currentPrice={customPriceMaxNaira ?? null}
+            currentNote={customPriceMaxNote ?? null}
+            isPending={isPending}
+            startTransition={startTransition}
+            router={router}
+          />
+
           <p className="text-[10px] text-slate-500">
             There is no standard/default price — each plan is priced only once you set a rate here for this owner.
             Quarterly/bi-annual/annual discounts still apply on top of it. Until a rate is set, the plan shows as
-            unpriced on the owner's billing page and they cannot check out for it.
+            unpriced on the owner's billing page and they cannot check out for it. For Max Package specifically,
+            set this only after negotiating a rate with the owner directly (they reach you via Support or email) —
+            once they pay at that rate, the Max Package unlock below turns on automatically.
           </p>
         </div>
       )}
@@ -213,6 +249,41 @@ export function OwnerActions({
           {scaleMsg && <span className="ml-2 text-[11px] text-slate-400">{scaleMsg}</span>}
         </div>
       )}
+      {ownerId && (
+        <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <Crown size={14} className="text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-400">Max Package unlock</span>
+            <span
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                maxPackageEnabled
+                  ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+            >
+              {maxPackageEnabled ? "On" : "Off"}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            This turns ON AUTOMATICALLY the moment this owner pays for Max Package at the negotiated rate above —
+            you don't need to touch it for a normal purchase. Use this switch only to grant it manually as a
+            courtesy (without a payment), or to revoke it. While ON, this owner gets unlimited stores, staff, and
+            products, plus every gated feature, regardless of trial or subscription period status.
+          </p>
+          <button
+            disabled={isPending}
+            onClick={handleMaxToggle}
+            className={`px-3 py-1.5 disabled:opacity-50 rounded-lg text-xs font-bold transition-colors ${
+              maxPackageEnabled
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                : "bg-amber-600 hover:bg-amber-500 text-white"
+            }`}
+          >
+            {maxPackageEnabled ? "Turn Off" : "Turn On"}
+          </button>
+          {maxMsg && <span className="ml-2 text-[11px] text-slate-400">{maxMsg}</span>}
+        </div>
+      )}
       <button
         disabled={isPending}
         onClick={() => {
@@ -239,7 +310,7 @@ function RateRow({
   router,
 }: {
   ownerId: number;
-  plan: "basic" | "premium";
+  plan: "basic" | "premium" | "max";
   label: string;
   currentPrice: number | null;
   currentNote: string | null;
