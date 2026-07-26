@@ -38,6 +38,20 @@ export default async function StaffDashboard() {
   const activeStore = await getActiveStore();
   const isScaleStore = activeStore?.storeType === "scale";
 
+  // Stage 3: the Wastage tile below was hardcoded to native scale-only
+  // stores. Merged stores (standard store + the admin-only
+  // scaleConsignmentEnabled override) can log wastage too now (Stages
+  // 1-2), so the tile needs to show for them as well.
+  let isMergedScale = false;
+  if (!isScaleStore && staff.ownerId) {
+    const ownerFlag = await prisma.user.findUnique({
+      where: { id: staff.ownerId },
+      select: { scaleConsignmentEnabled: true },
+    });
+    isMergedScale = !!ownerFlag?.scaleConsignmentEnabled;
+  }
+  const showWastageTile = isScaleStore || isMergedScale;
+
   // FIXED: getBillingStatus already resolves staff -> owner internally and
   // correctly picks trialEndsAt while trialing, or currentPeriodEnd once
   // paid — same logic the owner-side billing page uses, so the numbers
@@ -292,7 +306,7 @@ export default async function StaffDashboard() {
                 </div>
               </Link>
 
-              {isScaleStore && (
+              {showWastageTile && (
                 <Link href="/staff/wastage" className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
                   <div className="h-9 w-9 rounded-xl bg-rose-500/10 flex items-center justify-center">
                     <ScaleIcon size={18} className="text-rose-400" />

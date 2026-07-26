@@ -1,18 +1,35 @@
+// FILE: apps/frontend/app/staff/report/staff-report-client.tsx
+
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitDailyReport } from "@/lib/business.actions";
-import { FileText, Clock, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import { FileText, Clock, ChevronDown, ChevronUp, ArrowLeft, List, Scale as ScaleIcon } from "lucide-react";
 import { resubmitReportAction } from "@/lib/business.actions";
 
-export default function StaffReportClient({ staffId, reports, sales, pendingRevision, isScale, scaleSummary }: any) {  const router = useRouter();
+// Stage 4: a merged store (standard store + the admin-only
+// scaleConsignmentEnabled override) now shows a List/Scale toggle above
+// today's sales summary instead of only ever showing List sales. A
+// store that's only ever one type (native scale-only, or standard
+// without the override) never shows the toggle — same single view as
+// before, just driven by hasList/hasScale instead of the old isScale
+// flag.
+export default function StaffReportClient({ staffId, reports, sales, pendingRevision, hasList, hasScale, scaleSummary }: any) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [complaint, setComplaint] = useState("");
   const [showHistory, setShowHistory] = useState(false);
 
-  const allSoldItems = isScale ? [] : sales.flatMap((s: any) => s.items);
+  const allSoldItems = hasList ? sales.flatMap((s: any) => s.items ?? []) : [];
   const totalValue = sales.reduce((sum: number, s: any) => sum + Number(s.total), 0);
+
+  const isMerged = !!hasList && !!hasScale;
+  const [view, setView] = useState<"list" | "scale">(hasList ? "list" : "scale");
+  const activeView = isMerged ? view : hasList ? "list" : "scale";
+
+  const listTotal = allSoldItems.reduce((sum: number, item: any) => sum + Number(item.priceAtTime) * item.quantity, 0);
+  const scaleTotal = (scaleSummary || []).reduce((sum: number, g: any) => sum + g.total, 0);
 
   const [clarification, setClarification] = useState("");
   const [resubmitting, setResubmitting] = useState(false);
@@ -105,6 +122,11 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
       <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-lg">
         <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Total Sales Today</p>
         <h1 className="text-3xl sm:text-5xl font-bold text-[var(--text-primary)] mt-2">₦{totalValue.toLocaleString()}</h1>
+        {isMerged && (
+          <p className="text-xs text-slate-500 mt-2">
+            List ₦{listTotal.toLocaleString()} · Scale ₦{scaleTotal.toLocaleString()}
+          </p>
+        )}
       </div>
 
       {/* Main Report Form */}
@@ -114,10 +136,33 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
         <div className="space-y-5 sm:space-y-6">
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
-              {isScale ? "Amount Sold (Per Product)" : "Itemized List"}
+              {activeView === "scale" ? "Amount Sold (Per Product)" : "Itemized List"}
             </label>
 
-            {isScale ? (
+            {isMerged && (
+              <div className="flex gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setView("list")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-colors ${
+                    activeView === "list" ? "bg-blue-600 text-white" : "bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  <List size={13} /> List · ₦{listTotal.toLocaleString()}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView("scale")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-colors ${
+                    activeView === "scale" ? "bg-blue-600 text-white" : "bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  <ScaleIcon size={13} /> Scale · ₦{scaleTotal.toLocaleString()}
+                </button>
+              </div>
+            )}
+
+            {activeView === "scale" ? (
               <>
                 {/* Mobile: stacked cards — "Rice: 12kg — ₦24,000" style */}
                 <div className="sm:hidden space-y-2">

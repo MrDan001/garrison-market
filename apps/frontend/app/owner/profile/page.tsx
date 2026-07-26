@@ -37,6 +37,7 @@ export default async function MorePage() {
       consignmentEnabled: true,
       screenshotProtectionEnabled: true,
       wastageVisibleToStaff: true,
+      scaleConsignmentEnabled: true,
       referralCode: true,
       referrals: {
         where: { role: "owner" },
@@ -249,7 +250,7 @@ export default async function MorePage() {
             { label: "Reports",    icon: Activity,       href: "/owner/report" },
             { label: "History",    icon: History,        href: "/owner/history" },
             { label: "Consignments", icon: Store,         href: "/owner/consignments" },
-            ...(isScaleStore ? [{ label: "Wastage Reports", icon: ScaleIcon, href: "/owner/wastage" }] : []),
+            ...(isScaleStore || user?.scaleConsignmentEnabled ? [{ label: "Wastage Reports", icon: ScaleIcon, href: "/owner/wastage" }] : []),
           ]}
         />
 

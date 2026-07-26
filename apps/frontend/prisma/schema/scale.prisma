@@ -96,11 +96,18 @@ model ScaleConsignmentItem {
   quantityOut      Decimal
   quantitySold     Decimal  @default(0)
   quantityReturned Decimal  @default(0)
+  // Stage 1 (wastage fix): stock wasted while signed out to a staff
+  // member. Tracked separately from quantitySold/quantityReturned so
+  // settlement's sold+returned+wasted=quantityOut invariant holds, and
+  // so this amount is never re-added to ScaleInventory at settlement —
+  // it already left the shop for good when wastage was approved.
+  quantityWasted   Decimal  @default(0)
   unit             String   // base unit ("kg" | "L")
   priceAtTime      Decimal
 
   consignment      Consignment    @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
   scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  wastageEntries   ScaleWastage[]
 
   @@index([consignmentId])
   @@index([scaleInventoryId])
@@ -112,6 +119,14 @@ model ScaleWastage {
   storeId          Int
   scaleInventoryId Int
   staffId          Int       // who logged it — kept for accountability
+
+  // Stage 1 (wastage fix): set only for a merged store's entry, where
+  // the wasted stock came out of what was signed out to this staff
+  // member today rather than the shop's master ScaleInventory pool
+  // directly (native scale stores leave this null). Approval deducts
+  // from this consignment item's quantityWasted instead of the master
+  // pool, since sign-out already removed the stock from there.
+  consignmentItemId Int?
 
   quantity         Decimal   // amount as entered by staff
   unit             String    // unit used for this entry ("kg" | "g" | "L" | "ml")
@@ -133,6 +148,7 @@ model ScaleWastage {
   scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
   staff            User           @relation("ScaleWastageStaff", fields: [staffId], references: [id], onDelete: Cascade)
   reviewedBy       User?          @relation("ScaleWastageReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  consignmentItem  ScaleConsignmentItem? @relation(fields: [consignmentItemId], references: [id], onDelete: SetNull)
 
   // Powers "total wastage this month" + browsing by month/year.
   @@index([storeId, status])

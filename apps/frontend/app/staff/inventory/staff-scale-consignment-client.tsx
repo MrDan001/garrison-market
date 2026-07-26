@@ -16,7 +16,8 @@ interface ConsignmentLine {
   baseUnit: string; // "kg" | "L"
   quantityOut: number;
   quantitySold: number;
-  remaining: number; // quantityOut - quantitySold, what's actually sellable
+  quantityWasted: number;
+  remaining: number; // quantityOut - quantitySold - quantityWasted, what's actually sellable
   price: number; // per base unit
 }
 
@@ -84,7 +85,8 @@ export default function StaffScaleConsignmentClient({
           baseUnit: i.unit,
           quantityOut: Number(i.quantityOut),
           quantitySold: Number(i.quantitySold),
-          remaining: Number(i.quantityOut) - Number(i.quantitySold),
+          quantityWasted: Number(i.quantityWasted ?? 0),
+          remaining: Number(i.quantityOut) - Number(i.quantitySold) - Number(i.quantityWasted ?? 0),
           price: Number(i.priceAtTime),
         }))
       ),

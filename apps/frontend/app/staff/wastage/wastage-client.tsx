@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Scale as ScaleIcon, Clock, CheckCircle2, XCircle, Lock } from "lucide-react";
+import { ArrowLeft, Scale as ScaleIcon, Clock, CheckCircle2, XCircle, Lock, TrendingDown, Package } from "lucide-react";
 import { submitWastageAction } from "@/lib/scale-wastage.actions";
 import { WASTAGE_REASON_LABELS, WASTAGE_REASONS } from "@/lib/wastage-constants";
 import { unitsForBase } from "@/lib/scale-units";
@@ -26,14 +26,24 @@ interface WastageEntry {
   scaleInventory: { name: string; unit: string };
 }
 
+interface WastageReport {
+  month: string;
+  totalQty: number;
+  totalValue: number;
+  count: number;
+  byProduct: { name: string; unit: string; qty: number; value: number; count: number }[];
+}
+
 export default function StaffWastageClient({
   inventory,
   entries,
   canViewReport,
+  report,
 }: {
   inventory: ScaleItem[];
   entries: WastageEntry[];
   canViewReport: boolean;
+  report: WastageReport | null;
 }) {
   const router = useRouter();
   const [itemId, setItemId] = useState("");
@@ -229,13 +239,50 @@ export default function StaffWastageClient({
           )}
         </div>
 
-        {/* Report view — gated by the owner's toggle */}
-        {!canViewReport && (
+        {/* Report view — gated by the owner's toggle. Same monthly
+            total/per-product breakdown the owner sees, store-wide. */}
+        {!canViewReport ? (
           <div className="bg-[var(--bg-surface)] border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center">
             <Lock size={22} className="mx-auto mb-2 text-slate-300 dark:text-slate-700" />
             <p className="text-xs text-slate-500">Your owner hasn't turned on wastage report access for staff yet.</p>
           </div>
-        )}
+        ) : report ? (
+          <div className="space-y-3">
+            <div className="bg-gradient-to-br from-rose-950/40 to-[var(--bg-surface)] border border-rose-500/20 rounded-2xl p-5">
+              <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                <TrendingDown size={12} /> Total Wastage This Month ({report.month})
+              </p>
+              <p className="text-2xl font-black text-[var(--text-primary)]">
+                ₦{report.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">{report.count} entr{report.count === 1 ? "y" : "ies"} logged</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">By Product</label>
+              {report.byProduct.length === 0 ? (
+                <p className="text-xs text-slate-400 dark:text-slate-600 italic px-1">No approved wastage yet this month.</p>
+              ) : (
+                report.byProduct.map((p) => (
+                  <div key={p.name} className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-8 w-8 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-400 shrink-0">
+                        <Package size={14} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{p.name}</p>
+                        <p className="text-xs text-slate-500">{p.qty}{p.unit} · {p.count} entr{p.count === 1 ? "y" : "ies"}</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-[var(--text-primary)] text-sm shrink-0">
+                      ₦{p.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

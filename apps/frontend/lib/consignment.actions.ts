@@ -589,7 +589,8 @@ export async function getStaffScaleStockSummary() {
       unit: i.unit,
       quantityOut: Number(i.quantityOut),
       quantitySold: Number(i.quantitySold),
-      remaining: Number(i.quantityOut) - Number(i.quantitySold),
+      quantityWasted: Number(i.quantityWasted),
+      remaining: Number(i.quantityOut) - Number(i.quantitySold) - Number(i.quantityWasted),
     })),
   }));
 }
@@ -862,7 +863,8 @@ export async function autoSettleScaleConsignment(consignmentId: number, source: 
 
   for (const item of consignment.scaleItems) {
     const sold = Number(item.quantitySold);
-    const returned = Math.max(0, Number(item.quantityOut) - sold);
+    const wasted = Number(item.quantityWasted);
+    const returned = Math.max(0, Number(item.quantityOut) - sold - wasted);
 
     await prisma.scaleConsignmentItem.update({
       where: { id: item.id },

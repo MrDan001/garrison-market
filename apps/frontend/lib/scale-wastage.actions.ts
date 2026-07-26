@@ -12,6 +12,19 @@ import { WASTAGE_REASONS, type WastageReason } from "./wastage-constants";
 // Submit (staff) — always allowed regardless of the wastageVisibleToStaff
 // toggle, which only gates the REPORT view, not submission. Sits as
 // "pending" and does NOT touch stock until the owner approves it.
+//
+// Stage 1: now works for merged stores too (standard store + the
+// admin-only scaleConsignmentEnabled override), not just native
+// scale-only stores. The two cases differ in what the wastage is
+// validated and later deducted against:
+//  - Native scale store: no consignment layer exists — validated
+//    against, and later deducted from, the shop's master ScaleInventory
+//    pool directly (unchanged from before).
+//  - Merged store: stock signed out to a staff member already left the
+//    master pool at sign-out time, so wastage is validated against, and
+//    later deducted from, THAT staff member's remaining signed-out
+//    balance instead — otherwise approval would remove the same stock
+//    from the master pool a second time.
 // ============================================================================
 export async function submitWastageAction(params: {
   scaleInventoryId: number;
@@ -32,7 +45,18 @@ export async function submitWastageAction(params: {
   }
 
   const activeStore = await getActiveStore();
-  if (!activeStore || activeStore.storeType !== "scale") {
+  if (!activeStore) throw new Error("No active store found.");
+
+  const isNativeScale = activeStore.storeType === "scale";
+  let isMerged = false;
+  if (!isNativeScale) {
+    const owner = await prisma.user.findUnique({
+      where: { id: session.ownerId },
+      select: { scaleConsignmentEnabled: true },
+    });
+    isMerged = !!owner?.scaleConsignmentEnabled;
+  }
+  if (!isNativeScale && !isMerged) {
     throw new Error("This action is only available for weight/volume stores.");
   }
 
@@ -40,8 +64,35 @@ export async function submitWastageAction(params: {
   if (!inv || inv.storeId !== activeStore.id) throw new Error("Item not found.");
 
   const baseQty = convertToBaseUnit(params.quantity, params.unit, inv.unit);
-  if (baseQty > Number(inv.quantity)) {
-    throw new Error(`That's more than the ${Number(inv.quantity)}${inv.unit} currently in stock for ${inv.name}.`);
+
+  let consignmentItemId: number | null = null;
+
+  if (isNativeScale) {
+    if (baseQty > Number(inv.quantity)) {
+      throw new Error(`That's more than the ${Number(inv.quantity)}${inv.unit} currently in stock for ${inv.name}.`);
+    }
+  } else {
+    // Merged store — find this staff member's open signed-out balance
+    // for this item today, and validate against what they actually
+    // still have, not the shop-wide master pool.
+    const openConsignment = await prisma.consignment.findFirst({
+      where: {
+        staffId: session.id,
+        storeId: activeStore.id,
+        status: "out",
+        scaleItems: { some: { scaleInventoryId: params.scaleInventoryId } },
+      },
+      include: { scaleItems: true },
+    });
+    const item = openConsignment?.scaleItems.find((i) => i.scaleInventoryId === params.scaleInventoryId);
+    if (!item) {
+      throw new Error(`${inv.name} isn't currently signed out to you.`);
+    }
+    const remaining = Number(item.quantityOut) - Number(item.quantitySold) - Number(item.quantityWasted);
+    if (baseQty > remaining) {
+      throw new Error(`That's more than the ${remaining}${inv.unit} you currently have signed out for ${inv.name}.`);
+    }
+    consignmentItemId = item.id;
   }
 
   const entry = await prisma.scaleWastage.create({
@@ -50,6 +101,7 @@ export async function submitWastageAction(params: {
       storeId: activeStore.id,
       scaleInventoryId: params.scaleInventoryId,
       staffId: session.id,
+      consignmentItemId,
       quantity: params.quantity,
       unit: params.unit,
       quantityInBaseUnit: baseQty,
@@ -84,28 +136,59 @@ export async function approveWastageAction(wastageId: number) {
 
   const entry = await prisma.scaleWastage.findUnique({
     where: { id: wastageId },
-    include: { scaleInventory: true, staff: { select: { id: true, fullName: true } } },
+    include: {
+      scaleInventory: true,
+      staff: { select: { id: true, fullName: true } },
+      consignmentItem: true,
+    },
   });
   if (!entry || entry.ownerId !== session.id) throw new Error("Unauthorized");
   if (entry.status !== "pending") throw new Error("This entry has already been reviewed.");
 
   const baseQty = Number(entry.quantityInBaseUnit);
-  if (baseQty > Number(entry.scaleInventory.quantity)) {
-    throw new Error(
-      `Stock has changed since this was submitted — only ${Number(entry.scaleInventory.quantity)}${entry.scaleInventory.unit} of ${entry.scaleInventory.name} is left, less than the ${baseQty}${entry.scaleInventory.unit} being written off.`
-    );
-  }
 
-  await prisma.$transaction([
-    prisma.scaleWastage.update({
-      where: { id: wastageId },
-      data: { status: "approved", reviewedById: session.id, reviewedAt: new Date() },
-    }),
-    prisma.scaleInventory.update({
-      where: { id: entry.scaleInventoryId },
-      data: { quantity: { decrement: baseQty } },
-    }),
-  ]);
+  if (entry.consignmentItem) {
+    // Merged-store entry — this stock already left the master pool at
+    // sign-out, so it comes out of the consignment item's own balance
+    // instead of ScaleInventory.quantity a second time.
+    const item = entry.consignmentItem;
+    const remaining = Number(item.quantityOut) - Number(item.quantitySold) - Number(item.quantityWasted);
+    if (baseQty > remaining) {
+      throw new Error(
+        `That staff member's signed-out balance has changed since this was submitted — only ${remaining}${item.unit} of ${entry.scaleInventory.name} is left with them, less than the ${baseQty}${item.unit} being written off.`
+      );
+    }
+
+    await prisma.$transaction([
+      prisma.scaleWastage.update({
+        where: { id: wastageId },
+        data: { status: "approved", reviewedById: session.id, reviewedAt: new Date() },
+      }),
+      prisma.scaleConsignmentItem.update({
+        where: { id: item.id },
+        data: { quantityWasted: { increment: baseQty } },
+      }),
+    ]);
+  } else {
+    // Native scale store — no consignment layer, deduct straight from
+    // the shop's master pool, same as before.
+    if (baseQty > Number(entry.scaleInventory.quantity)) {
+      throw new Error(
+        `Stock has changed since this was submitted — only ${Number(entry.scaleInventory.quantity)}${entry.scaleInventory.unit} of ${entry.scaleInventory.name} is left, less than the ${baseQty}${entry.scaleInventory.unit} being written off.`
+      );
+    }
+
+    await prisma.$transaction([
+      prisma.scaleWastage.update({
+        where: { id: wastageId },
+        data: { status: "approved", reviewedById: session.id, reviewedAt: new Date() },
+      }),
+      prisma.scaleInventory.update({
+        where: { id: entry.scaleInventoryId },
+        data: { quantity: { decrement: baseQty } },
+      }),
+    ]);
+  }
 
   await createNotification({
     ownerId: session.id,
@@ -244,4 +327,69 @@ export async function getWastageForStaff() {
     orderBy: { createdAt: "desc" },
     take: 50,
   });
+}
+
+// ============================================================================
+// Stage 4: the actual report content behind the wastageVisibleToStaff
+// toggle — previously the toggle existed but nothing was ever built to
+// show when it was on. Mirrors getWastageForOwner's current-month total
+// (approved entries only, same cost-price-based valuation), plus a
+// per-product kg/₦ breakdown for that month, which is store-wide — not
+// filtered to just this staff member's own entries — since the point is
+// parity with what the owner sees.
+// ============================================================================
+export async function getWastageReportForStaff() {
+  const session = await getSessionUser();
+  if (!session) return null;
+  const ownerId = session.role === "owner" ? session.id : session.ownerId;
+  if (!ownerId) return null;
+
+  const activeStore = await getActiveStore();
+  if (!activeStore) return null;
+
+  const approved = await prisma.scaleWastage.findMany({
+    where: { ownerId, storeId: activeStore.id, status: "approved" },
+    include: { scaleInventory: { select: { name: true, unit: true, costPrice: true, price: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const now = new Date();
+  const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthLabel = now.toLocaleDateString("en-NG", { month: "long", year: "numeric" });
+
+  const thisMonth = approved.filter((entry) => {
+    const d = new Date(entry.createdAt);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` === currentKey;
+  });
+
+  const byProduct = new Map<string, { name: string; unit: string; qty: number; value: number; count: number }>();
+  let totalQty = 0;
+  let totalValue = 0;
+
+  for (const entry of thisMonth) {
+    const unitValue =
+      entry.scaleInventory.costPrice != null ? Number(entry.scaleInventory.costPrice) : Number(entry.scaleInventory.price);
+    const value = unitValue * Number(entry.quantityInBaseUnit);
+    const qty = Number(entry.quantityInBaseUnit);
+
+    totalQty += qty;
+    totalValue += value;
+
+    const key = entry.scaleInventory.name;
+    if (!byProduct.has(key)) {
+      byProduct.set(key, { name: entry.scaleInventory.name, unit: entry.scaleInventory.unit, qty: 0, value: 0, count: 0 });
+    }
+    const bucket = byProduct.get(key)!;
+    bucket.qty += qty;
+    bucket.value += value;
+    bucket.count += 1;
+  }
+
+  return {
+    month: monthLabel,
+    totalQty,
+    totalValue,
+    count: thisMonth.length,
+    byProduct: Array.from(byProduct.values()).sort((a, b) => b.value - a.value),
+  };
 }
