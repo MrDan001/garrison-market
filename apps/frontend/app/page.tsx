@@ -1,3 +1,5 @@
+// FILE: apps/frontend/app/page.tsx
+
 "use client";
 
 import Link from "next/link";
@@ -14,6 +16,8 @@ import {
   Zap,
   TrendingDown,
   ChevronDown,
+  Crown,
+  Mail,
 } from "lucide-react";
 
 const display = Oswald({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
@@ -469,7 +473,7 @@ export default function HomePage() {
                 </h2>
                 <p className="text-center text-[var(--text-primary)]/50 mb-14 text-sm font-semibold uppercase tracking-wider">Cancel anytime. No card required to start.</p>
 
-                <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
+                <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
                   {[
                     {
                       title: "Basic",
@@ -496,19 +500,39 @@ export default function HomePage() {
                       plan: "premium",
                       popular: true,
                     },
+                    {
+                      title: "Max Package",
+                      price: "Contact us",
+                      features: [
+                        { text: "Unlimited stores", included: true },
+                        { text: "Unlimited staff accounts", included: true },
+                        { text: "Unlimited products", included: true },
+                        { text: "Business summary chart", included: true },
+                        { text: "Consignment management", included: true },
+                      ],
+                      plan: "max",
+                    },
                   ].map((plan) => (
-                    <div key={plan.title} className={`bg-[var(--bg-app)] p-8 rounded-none border ${plan.popular ? 'border-[#E55345]' : 'border-[var(--border-subtle)]/10'} flex flex-col gap-8 relative`}>
+                    <div key={plan.title} className={`bg-[var(--bg-app)] p-8 rounded-none border ${plan.popular ? 'border-[#E55345]' : plan.plan === 'max' ? 'border-amber-500/40' : 'border-[var(--border-subtle)]/10'} flex flex-col gap-8 relative`}>
                       {plan.popular && (
                         <span className="absolute -top-3.5 right-6 bg-[#E55345] text-[#F1EEE3] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md">
                           POPULAR CHOICE
+                        </span>
+                      )}
+                      {plan.plan === "max" && (
+                        <span className="absolute -top-3.5 right-6 bg-amber-500 text-[#0D1527] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md flex items-center gap-1">
+                          <Crown size={11} /> UNLIMITED
                         </span>
                       )}
                       <div>
                         <div className="text-[var(--text-primary)]/50 text-xs font-bold uppercase tracking-widest mb-1.5">{plan.title}</div>
                         <div className="text-5xl font-black text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
                           {plan.price}
-                          <span className="text-sm font-normal text-[var(--text-primary)]/50">/mo</span>
+                          {plan.plan !== "max" && <span className="text-sm font-normal text-[var(--text-primary)]/50">/mo</span>}
                         </div>
+                        {plan.plan === "max" && (
+                          <p className="text-xs text-[var(--text-primary)]/50 mt-1.5">Pricing negotiated directly with our team</p>
+                        )}
                       </div>
                       <ul className="space-y-4 flex-1">
                         {plan.features.map((f) => (
@@ -520,16 +544,25 @@ export default function HomePage() {
                           </li>
                         ))}
                       </ul>
-                      <Link
-                        href={`/register?plan=${plan.plan}`}
-                        className={`w-full text-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 ${
-                          plan.popular 
-                          ? 'bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] shadow-[0_4px_15px_rgba(229,83,69,0.3)]' 
-                          : 'bg-[#F1EEE3] text-[#0D1527] hover:bg-[#E2DDD0]'
-                        }`}
-                      >
-                        Choose {plan.title}
-                      </Link>
+                      {plan.plan === "max" ? (
+                        <a
+                          href="mailto:support@garrison.com"
+                          className="w-full text-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 bg-amber-500 text-[#0D1527] hover:bg-amber-400 flex items-center justify-center gap-2"
+                        >
+                          <Mail size={14} /> Contact Us
+                        </a>
+                      ) : (
+                        <Link
+                          href={`/register?plan=${plan.plan}`}
+                          className={`w-full text-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 ${
+                            plan.popular 
+                            ? 'bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] shadow-[0_4px_15px_rgba(229,83,69,0.3)]' 
+                            : 'bg-[#F1EEE3] text-[#0D1527] hover:bg-[#E2DDD0]'
+                          }`}
+                        >
+                          Choose {plan.title}
+                        </Link>
+                      )}
                     </div>
                   ))}
                 </div>

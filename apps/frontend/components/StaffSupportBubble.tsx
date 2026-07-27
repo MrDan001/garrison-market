@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, X, Store, Headphones, ChevronLeft } from "lucide-react";
+import { MessageCircle, X, Store, Headphones, ChevronLeft, Sparkles } from "lucide-react";
 import {
   getStaffOwnerThread, sendStaffMessage, setStaffTypingInOwnerThread,
   getStaffAdminThread, sendStaffToAdminMessage, setStaffTypingInAdminThread,
@@ -9,8 +9,9 @@ import {
 import { getIntakeContext, type IntakeContext } from "@/lib/support-intake.actions";
 import ChatPanel from "./ChatPanel";
 import SupportIntakeWizard from "./SupportIntakeWizard";
+import AskMePanel from "./AskMePanel";
 
-type View = "closed" | "choose" | "owner" | "admin";
+type View = "closed" | "choose" | "owner" | "admin" | "ask";
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -130,6 +131,21 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
 
                 <div className="flex-1 flex flex-col justify-center gap-4 px-6">
                   <button
+                    onClick={() => setView("ask")}
+                    className="w-full flex items-center gap-4 p-5 rounded-3xl bg-gradient-to-br from-violet-600/15 to-violet-500/5 border border-violet-500/20 hover:border-violet-500/40 transition-all active:scale-[0.98] text-left"
+                  >
+                    <div className="h-14 w-14 rounded-2xl bg-violet-600 flex items-center justify-center shrink-0 shadow-lg shadow-violet-600/20">
+                      <Sparkles size={24} className="text-[var(--text-primary)]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[var(--text-primary)]">Ask Me</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
+                        How to use the app — instant answers, any time
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
                     onClick={openOwner}
                     className="w-full flex items-center gap-4 p-5 rounded-3xl bg-gradient-to-br from-emerald-600/15 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 transition-all active:scale-[0.98] text-left"
                   >
@@ -244,6 +260,26 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                   />
                 </div>
                 )}
+              </>
+            )}
+            {/* ── ASK ME (AI) ── */}
+            {view === "ask" && (
+              <>
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200/60 dark:border-slate-800/60 shrink-0">
+                  <button onClick={() => setView("choose")} className="h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 flex items-center justify-center transition-colors">
+                    <ChevronLeft size={16} />
+                  </button>
+                  <div className="h-9 w-9 rounded-xl bg-violet-600/15 flex items-center justify-center">
+                    <Sparkles size={16} className="text-violet-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-[var(--text-primary)]">Ask Me</h2>
+                    <p className="text-[11px] text-slate-500">Answers instantly, any time</p>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <AskMePanel role="staff" />
+                </div>
               </>
             )}
           </div>
