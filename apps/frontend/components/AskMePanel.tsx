@@ -3,8 +3,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Sparkles, User } from "lucide-react";
-import { askStoreAssistant, type AskMeChatMessage } from "@/lib/store-assistant.actions";
+import { Send, Sparkles, User, Package } from "lucide-react";
+import { askStoreAssistant, type AskMeChatMessage, type AskMeProduct } from "@/lib/store-assistant.actions";
 import { ASK_ME_STARTERS } from "@/lib/store-assistant-knowledge";
 
 /**
@@ -21,6 +21,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   isError?: boolean;
+  products?: AskMeProduct[];
 }
 
 function AiAvatar() {
@@ -35,6 +36,34 @@ function UserAvatar() {
   return (
     <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300/60 dark:border-slate-700/60 flex items-center justify-center shrink-0">
       <User size={13} className="text-slate-500" />
+    </div>
+  );
+}
+
+const NAIRA = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
+
+function ProductCards({ products }: { products: AskMeProduct[] }) {
+  return (
+    <div className="max-w-[92%] grid grid-cols-2 gap-2 mt-1 ml-9">
+      {products.map((p) => (
+        <div
+          key={p.id}
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)] overflow-hidden"
+        >
+          <div className="h-20 w-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center overflow-hidden">
+            {p.image ? (
+              <img src={p.image} alt={p.name} className="h-full w-full object-cover" />
+            ) : (
+              <Package size={20} className="text-slate-300 dark:text-slate-700" />
+            )}
+          </div>
+          <div className="p-2">
+            <p className="text-xs font-semibold text-[var(--text-primary)] truncate">{p.name}</p>
+            <p className="text-[11px] text-slate-500">{NAIRA.format(p.price)}</p>
+            <p className="text-[10px] text-violet-500 dark:text-violet-400">{p.unitsSold} sold · 30d</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -62,7 +91,10 @@ export default function AskMePanel({ role }: { role: "owner" | "staff" }) {
       const history: AskMeChatMessage[] = nextMessages.map((m) => ({ role: m.role, content: m.content }));
       const result = await askStoreAssistant(history);
       if (result.success) {
-        setMessages((prev) => [...prev, { role: "assistant", content: result.reply }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: result.reply, products: result.products?.length ? result.products : undefined },
+        ]);
       } else {
         setMessages((prev) => [...prev, { role: "assistant", content: result.error, isError: true }]);
       }
@@ -108,20 +140,23 @@ export default function AskMePanel({ role }: { role: "owner" | "staff" }) {
             {messages.map((m, i) => {
               const isMine = m.role === "user";
               return (
-                <div key={i} className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
-                  {!isMine && <AiAvatar />}
-                  <div
-                    className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                      isMine
-                        ? "bg-blue-600 text-white rounded-br-md"
-                        : m.isError
-                        ? "bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 rounded-bl-md"
-                        : "bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-md"
-                    }`}
-                  >
-                    {m.content}
+                <div key={i}>
+                  <div className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
+                    {!isMine && <AiAvatar />}
+                    <div
+                      className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                        isMine
+                          ? "bg-blue-600 text-white rounded-br-md"
+                          : m.isError
+                          ? "bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 rounded-bl-md"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-md"
+                      }`}
+                    >
+                      {m.content}
+                    </div>
+                    {isMine && <UserAvatar />}
                   </div>
-                  {isMine && <UserAvatar />}
+                  {!isMine && m.products && m.products.length > 0 && <ProductCards products={m.products} />}
                 </div>
               );
             })}

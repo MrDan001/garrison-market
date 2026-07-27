@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getBillingStatus } from "@/lib/subscription-guard";
 import TrialTopBar from "@/components/TrialTopBar";
+import OwnerSupportBubble from "@/components/OwnerSupportBubble";
 
 /**
  * Wraps every page under /owner/* (dashboard, inventory, staff, reports,
@@ -33,6 +34,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
         trialDaysLeft={billingStatus.trialDaysLeft}
       />
       {children}
+      <OwnerSupportBubble currentUserId={session.id} />
     </>
   );
 }

@@ -3,9 +3,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Headphones, ChevronRight } from "lucide-react";
+import { ArrowLeft, Headphones, ChevronRight, Sparkles } from "lucide-react";
 import ChatPanel from "@/components/ChatPanel";
 import SupportIntakeWizard from "@/components/SupportIntakeWizard";
+import AskMePanel from "@/components/AskMePanel";
 import {
   getOwnerStaffThread,
   sendOwnerToStaffMessage,
@@ -29,7 +30,7 @@ export default function OwnerSupportClient({
   adminMessages: any[];
   adminIntake: IntakeContext | null;
 }) {
-  const [activeView, setActiveView] = useState<"list" | "admin" | number>("list");
+  const [activeView, setActiveView] = useState<"list" | "admin" | "ask" | number>("list");
   const [messages, setMessages] = useState<any[]>(adminMessages);
   const [otherTyping, setOtherTyping] = useState(false);
   const [needsIntake, setNeedsIntake] = useState(adminIntake?.needsIntake ?? false);
@@ -58,7 +59,7 @@ export default function OwnerSupportClient({
 
   // Poll for new messages + the other party's typing status while a thread is open.
   useEffect(() => {
-    if (activeView === "list") return;
+    if (activeView === "list" || activeView === "ask") return;
     if (activeView === "admin" && needsIntake) return;
 
     const poll = async () => {
@@ -73,6 +74,28 @@ export default function OwnerSupportClient({
     const interval = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [activeView, needsIntake]);
+
+  if (activeView === "ask") {
+    return (
+      <div className="h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 flex flex-col">
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 shrink-0">
+          <button onClick={() => setActiveView("list")} className="h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 flex items-center justify-center">
+            <ArrowLeft size={16} />
+          </button>
+          <div className="h-9 w-9 rounded-xl bg-violet-600/15 flex items-center justify-center">
+            <Sparkles size={16} className="text-violet-400" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-[var(--text-primary)]">Ask Me</h1>
+            <p className="text-[11px] text-slate-500">Answers instantly, any time</p>
+          </div>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <AskMePanel role="owner" />
+        </div>
+      </div>
+    );
+  }
 
   if (activeView !== "list") {
     const isAdmin = activeView === "admin";
@@ -147,6 +170,20 @@ export default function OwnerSupportClient({
       </div>
 
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 space-y-4">
+        <button
+          onClick={() => setActiveView("ask")}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl bg-violet-600/10 border border-violet-500/20 hover:border-violet-500/40 transition-colors"
+        >
+          <div className="h-11 w-11 rounded-xl bg-violet-600 flex items-center justify-center shrink-0">
+            <Sparkles size={19} className="text-[var(--text-primary)]" />
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Ask Me</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 truncate">How to use the app — instant answers, any time</p>
+          </div>
+          <ChevronRight size={18} className="text-slate-400 dark:text-slate-600 shrink-0" />
+        </button>
+
         <button
           onClick={openAdmin}
           className="w-full flex items-center gap-3 p-4 rounded-2xl bg-blue-600/10 border border-blue-500/20 hover:border-blue-500/40 transition-colors"
