@@ -92,6 +92,7 @@ export default async function OwnerDashboardPage() {
     const [
       salesData, 
       activeProducts, 
+      activeScaleProducts,
       todayOrdersList, 
       recentReports, 
       lowStockItems, 
@@ -104,6 +105,13 @@ export default async function OwnerDashboardPage() {
         orderBy: { date: "asc" },
       }),
       prisma.inventory.count({
+        where: { ownerId: user.id, OR: [{ storeId: activeStoreId }, { storeId: null }] }
+      }),
+      // Scale (weight/volume) products — counted separately since they live
+      // in their own table, then added to activeProducts below so the
+      // dashboard's "Active Products" stat reflects BOTH inventory types,
+      // not just the standard/list one.
+      prisma.scaleInventory.count({
         where: { ownerId: user.id, OR: [{ storeId: activeStoreId }, { storeId: null }] }
       }),
       prisma.order.findMany({
@@ -167,6 +175,11 @@ export default async function OwnerDashboardPage() {
     // Compute Calculations safely
     const ordersToday = todayOrdersList.length;
     const todaySalesRevenue = todayOrdersList.reduce((sum, order) => sum + Number(order.total), 0);
+
+    // Combined count so the "Active Products" stat reflects the store's
+    // full catalog regardless of storeType — standard (list) items plus
+    // scale (weight/volume) items.
+    const totalProducts = activeProducts + activeScaleProducts;
     
     const cashSalesToday = todayOrdersList
       .filter(o => o.paymentMethod?.toLowerCase().trim() === "cash")
@@ -297,7 +310,7 @@ export default async function OwnerDashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard title="Today's Revenue" value={`₦${todaySalesRevenue.toLocaleString()}`} sub={`Cash: ₦${cashSalesToday.toLocaleString()} | Transfer: ₦${transferSalesToday.toLocaleString()}`} icon={<Banknote size={17} />} accent="emerald" />
             <StatCard title="Orders Today" value={ordersToday.toString()} sub="Transactions today" icon={<TrendingUp size={17} />} accent="blue" />
-            <StatCard title="Active Products" value={activeProducts.toString()} sub="In inventory" icon={<Package size={17} />} accent="violet" />
+            <StatCard title="Active Products" value={totalProducts.toString()} sub="In inventory" icon={<Package size={17} />} accent="violet" />
             <StatCard title="90-Day Revenue" value={`₦${totalSales.toLocaleString()}`} sub="Last 90 days gross" icon={<ShoppingCart size={17} />} accent="blue" />
           </div>
 

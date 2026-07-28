@@ -73,13 +73,14 @@ export async function submitWastageAction(params: {
     }
   } else {
     // Merged store — find this staff member's open signed-out balance
-    // for this item today, and validate against what they actually
-    // still have, not the shop-wide master pool.
+    // for this item today (their own consignment OR a store-wide shared
+    // one), and validate against what they actually still have, not the
+    // shop-wide master pool.
     const openConsignment = await prisma.consignment.findFirst({
       where: {
-        staffId: session.id,
         storeId: activeStore.id,
         status: "out",
+        OR: [{ staffId: session.id }, { staffId: null }],
         scaleItems: { some: { scaleInventoryId: params.scaleInventoryId } },
       },
       include: { scaleItems: true },

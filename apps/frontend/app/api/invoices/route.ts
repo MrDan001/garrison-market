@@ -35,6 +35,7 @@ interface PrismaOrder {
   staffId: number | null;
   buyerName: string | null;
   buyerPhone: string | null; // FIXED: Added to interface types
+  paymentMethod: string;
   staff: {
     fullName: string | null;
   } | null;
@@ -104,6 +105,7 @@ export async function GET() {
       staffId: order.staffId,
       buyerName: order.buyerName,
       buyerPhone: order.buyerPhone, // FIXED: Explicitly mapped and included in JSON response
+      paymentMethod: order.paymentMethod,
       staff: order.staff,
       owner: order.owner,
       items: [

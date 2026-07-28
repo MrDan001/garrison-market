@@ -389,8 +389,17 @@ export async function getOpenScaleConsignmentsForStaff() {
   const session = await getSessionUser();
   if (!session) return [];
 
+  // A staff member should see BOTH consignments signed out to them
+  // personally AND any store-wide shared consignment (staffId: null) —
+  // scoped to their own store, since a shared consignment at a different
+  // store they don't work at should never surface here.
+  const storeId = await getActiveStoreId();
+
   return prisma.consignment.findMany({
-    where: { staffId: session.id, status: "out" },
+    where: {
+      status: "out",
+      OR: [{ staffId: session.id }, { staffId: null, storeId: storeId ?? -1 }],
+    },
     include: {
       store: { select: { id: true, name: true } },
       scaleItems: { include: { scaleInventory: true } },
@@ -403,8 +412,13 @@ export async function getScaleConsignmentHistoryForStaff() {
   const session = await getSessionUser();
   if (!session) return [];
 
+  const storeId = await getActiveStoreId();
+
   return prisma.consignment.findMany({
-    where: { staffId: session.id, status: "settled" },
+    where: {
+      status: "settled",
+      OR: [{ staffId: session.id }, { staffId: null, storeId: storeId ?? -1 }],
+    },
     include: {
       store: { select: { id: true, name: true } },
       scaleItems: { include: { scaleInventory: true } },
@@ -583,7 +597,7 @@ export async function getStaffScaleStockSummary() {
 
   return openConsignments.map((c) => ({
     staffId: c.staffId,
-    staffName: c.staff?.fullName || "Staff",
+    staffName: c.staffId === null ? "All Staff (shared)" : c.staff?.fullName || "Staff",
     items: c.scaleItems.map((i) => ({
       name: i.scaleInventory?.name || "Item",
       unit: i.unit,
@@ -596,7 +610,7 @@ export async function getStaffScaleStockSummary() {
 }
 
 export async function ownerSignOutScaleToStaffAction(params: {
-  staffId: number;
+  staffId: number | "all";
   items: SignOutScaleItem[];
 }) {
   const session = await getSessionUser();
@@ -617,11 +631,18 @@ export async function ownerSignOutScaleToStaffAction(params: {
   const activeStore = await getActiveStore();
   if (!activeStore) throw new Error("No active store found");
 
-  const staff = await prisma.user.findFirst({
-    where: { id: params.staffId, ownerId: session.id, role: "staff", staffStoreId: activeStore.id },
-    select: { id: true, fullName: true, phoneNumber: true },
-  });
-  if (!staff) throw new Error("Staff member not found for this store");
+  const isAllStaff = params.staffId === "all";
+
+  // For "All Staff", the resulting consignment has staffId: null — no one
+  // specific staff row to resolve. Otherwise, resolve and validate the
+  // chosen staff member same as before.
+  const staff = isAllStaff
+    ? null
+    : await prisma.user.findFirst({
+        where: { id: params.staffId as number, ownerId: session.id, role: "staff", staffStoreId: activeStore.id },
+        select: { id: true, fullName: true, phoneNumber: true },
+      });
+  if (!isAllStaff && !staff) throw new Error("Staff member not found for this store");
 
   const inventoryRows = await prisma.scaleInventory.findMany({
     where: {
@@ -646,13 +667,19 @@ export async function ownerSignOutScaleToStaffAction(params: {
   }
 
   const consignment = await prisma.$transaction(async (tx) => {
-    // Top-up support: if this staff member already has an open scale
-    // consignment today (e.g. they ran low and the owner is sending more),
-    // merge into it instead of creating a second, duplicate-looking
+    // Top-up support: if this staff member (or, for "All Staff", the
+    // store's shared consignment) already has an open scale consignment
+    // today, merge into it instead of creating a second, duplicate-looking
     // consignment — matching item rows get their quantityOut bumped up,
     // new items get added as new rows on the SAME consignment.
     const existing = await tx.consignment.findFirst({
-      where: { ownerId: session.id, staffId: staff.id, storeId: activeStore.id, status: "out", scaleItems: { some: {} } },
+      where: {
+        ownerId: session.id,
+        staffId: isAllStaff ? null : staff!.id,
+        storeId: activeStore.id,
+        status: "out",
+        scaleItems: { some: {} },
+      },
       include: { scaleItems: true },
     });
 
@@ -682,11 +709,11 @@ export async function ownerSignOutScaleToStaffAction(params: {
     return tx.consignment.create({
       data: {
         ownerId: session.id,
-        staffId: staff.id,
+        staffId: isAllStaff ? null : staff!.id,
         storeId: activeStore.id,
-        recipientName: staff.fullName || "Staff",
-        recipientPhone: staff.phoneNumber || "",
-        recipientNote: "Daily scale consignment sign-out",
+        recipientName: isAllStaff ? "All Staff" : staff!.fullName || "Staff",
+        recipientPhone: isAllStaff ? "" : staff!.phoneNumber || "",
+        recipientNote: isAllStaff ? "Daily scale consignment sign-out (shared)" : "Daily scale consignment sign-out",
         status: "out",
         scaleItems: {
           create: resolved.map(({ item, baseQty, inv }) => ({
@@ -709,10 +736,12 @@ export async function ownerSignOutScaleToStaffAction(params: {
 
   await createNotification({
     ownerId: session.id,
-    recipientId: staff.id,
+    recipientId: isAllStaff ? null : staff!.id,
     storeId: activeStore.id,
     type: "announcement",
-    message: `Fresh scale stock has been signed out to you.`,
+    message: isAllStaff
+      ? `Fresh scale stock has been signed out to all staff.`
+      : `Fresh scale stock has been signed out to you.`,
     link: "/staff/inventory",
   });
 
@@ -750,6 +779,11 @@ export async function sellFromScaleConsignmentAction(
 
   if (cartItems.length === 0) throw new Error("Cart is empty");
 
+  // A shared consignment (staffId: null) is sellable by any staff member
+  // at the store it was signed out to — everyone else is still scoped to
+  // their own staffId.
+  const activeStoreId = await getActiveStoreId();
+
   // Wrapped in a transaction so two near-simultaneous sells (e.g. a
   // double-tap) can't both read the same quantitySold and jointly oversell
   // past what's actually left on the consignment.
@@ -764,7 +798,9 @@ export async function sellFromScaleConsignmentAction(
     for (const cart of cartItems) {
       const row = consignmentItems.find((r) => r.id === cart.consignmentItemId);
       if (!row) throw new Error("Consigned item not found.");
-      if (row.consignment.staffId !== session.id) throw new Error("Unauthorized for this consignment.");
+      const isOwnConsignment = row.consignment.staffId === session.id;
+      const isSharedAtOwnStore = row.consignment.staffId === null && row.consignment.storeId === activeStoreId;
+      if (!isOwnConsignment && !isSharedAtOwnStore) throw new Error("Unauthorized for this consignment.");
       if (row.consignment.status !== "out") throw new Error("This consignment has already been settled.");
 
       const baseQty = convertToBaseUnit(cart.enteredQty, cart.enteredUnit, row.unit);

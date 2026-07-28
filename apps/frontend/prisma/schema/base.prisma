@@ -303,7 +303,12 @@ model Notification {
 model Consignment {
   id             Int       @id @default(autoincrement())
   ownerId        Int
-  staffId        Int
+  // Nullable: null means this consignment is SHARED with every staff
+  // member at the store (see ownerSignOutScaleToStaffAction's "All Staff"
+  // mode) rather than signed out to one specific person. Every staff-facing
+  // scale query must match `staffId: session.id OR staffId: null` for the
+  // active store to also surface these.
+  staffId        Int?
   storeId        Int?
   recipientName  String
   recipientPhone String
@@ -313,7 +318,7 @@ model Consignment {
   settledAt      DateTime?
 
   owner          User      @relation("OwnerConsignments", fields: [ownerId], references: [id], onDelete: Cascade)
-  staff          User      @relation("StaffConsignments", fields: [staffId], references: [id], onDelete: SetNull)
+  staff          User?     @relation("StaffConsignments", fields: [staffId], references: [id], onDelete: SetNull)
   store          Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items          ConsignmentItem[]
   scaleItems     ScaleConsignmentItem[]

@@ -1,7 +1,7 @@
 "use client"; 
 
 import { useState, useEffect, use } from "react";
-import { ArrowLeft, Receipt, Printer, Search, MessageCircle } from "lucide-react";
+import { ArrowLeft, Receipt, Printer, Search, MessageCircle, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
 interface InvoicesPageProps {
@@ -119,6 +119,13 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
             <Receipt size={22} className="text-blue-500" />
             <h1 className="text-xl font-bold text-[var(--text-primary)]">Invoice History</h1>
           </div>
+
+          <Link
+            href="/owner/invoices/summary"
+            className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-blue-600/10 border border-blue-500/30 text-blue-500 hover:bg-blue-600/20 text-xs font-semibold transition-colors mb-2"
+          >
+            <BarChart3 size={13} /> Daily / Monthly Sales Summary
+          </Link>
 
           {/* 🌟 Interactive Search Filter Input Box */}
           <div className="relative w-full mb-2">

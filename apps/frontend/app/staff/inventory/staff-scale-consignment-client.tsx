@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import {
   Search, ShoppingCart, X, Package, Tag, ChevronRight,
-  AlertCircle, Trash2, Scale as ScaleIcon, Clock, CheckCircle2,
+  AlertCircle, Trash2, Scale as ScaleIcon, Clock, CheckCircle2, Users,
 } from "lucide-react";
 import { sellFromScaleConsignmentAction } from "@/lib/consignment.actions";
 import { convertToBaseUnit, unitsForBase } from "@/lib/scale-units";
@@ -19,6 +19,7 @@ interface ConsignmentLine {
   quantityWasted: number;
   remaining: number; // quantityOut - quantitySold - quantityWasted, what's actually sellable
   price: number; // per base unit
+  isShared: boolean; // true when this came from a store-wide shared consignment (staffId: null)
 }
 
 interface CartLine extends ConsignmentLine {
@@ -88,6 +89,7 @@ export default function StaffScaleConsignmentClient({
           quantityWasted: Number(i.quantityWasted ?? 0),
           remaining: Number(i.quantityOut) - Number(i.quantitySold) - Number(i.quantityWasted ?? 0),
           price: Number(i.priceAtTime),
+          isShared: c.staffId === null,
         }))
       ),
     [openConsignments]
@@ -381,10 +383,20 @@ export default function StaffScaleConsignmentClient({
                             DISCOUNT
                           </span>
                         )}
+                        {item.isShared && (
+                          <span className="absolute top-1.5 right-1.5 flex items-center gap-0.5 text-[9px] font-bold text-blue-300 bg-blue-950/80 px-1.5 py-0.5 rounded-full z-10">
+                            <Users size={9} /> SHARED
+                          </span>
+                        )}
                       </div>
 
                       <div className="p-2.5 flex-1 flex flex-col gap-1">
                         <p className="text-xs font-semibold text-[var(--text-primary)] line-clamp-2 leading-tight">{item.name}</p>
+                        {item.isShared && (
+                          <p className="text-[10px] text-blue-400 flex items-center gap-1">
+                            <Users size={10} /> Shared with all staff
+                          </p>
+                        )}
                         <p className="text-[11px] text-slate-500">
                           {item.remaining}{item.baseUnit} left · ₦{item.price.toLocaleString()}/{item.baseUnit}
                         </p>
