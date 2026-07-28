@@ -1,7 +1,7 @@
 "use client"; 
 
 import { useState, useEffect, use } from "react";
-import { ArrowLeft, Receipt, Printer, Search } from "lucide-react";
+import { ArrowLeft, Receipt, Printer, Search, MessageCircle } from "lucide-react";
 import Link from "next/link";
 
 interface InvoicesPageProps {
@@ -79,6 +79,24 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
   const selectedOrder = activeInvoiceId 
     ? allOrders.find((o: OrderType) => o.id === activeInvoiceId)
     : (filteredOrders.length > 0 ? filteredOrders[0] : null); 
+
+  const sendInvoiceViaWhatsApp = (order: OrderType) => {
+    const lines = [
+      `*${order.owner?.storeName || "Garrison Market"}* — Sales Invoice`,
+      `Invoice #${order.id} — ${new Date(order.date).toLocaleString()}`,
+      "",
+      ...order.items.map(
+        (item) => `${item.inventory?.name || "Item"} x${item.quantity} — ₦${(Number(item.priceAtTime) * item.quantity).toLocaleString()}`
+      ),
+      "",
+      `*Total: ₦${Number(order.total).toLocaleString()}*`,
+      "",
+      `Thank you for shopping with us!`,
+    ];
+    const message = encodeURIComponent(lines.join("\n"));
+    const url = `https://wa.me/?text=${message}`;
+    window.open(url, "_blank");
+  };
 
   if (loading) {
     return (
@@ -159,12 +177,20 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
             <div className="space-y-4">
               <div className="flex justify-between items-center bg-slate-100/30 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/60 p-3 rounded-xl print:hidden">
                 <span className="text-xs text-slate-500">Viewing invoice details</span>
-                <button 
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 border border-slate-300/60 dark:border-slate-700/60 text-xs text-[var(--text-primary)] font-semibold transition-all"
-                >
-                  <Printer size={13} /> Print / Export PDF
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => sendInvoiceViaWhatsApp(selectedOrder)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-semibold transition-all"
+                  >
+                    <MessageCircle size={13} /> Send via WhatsApp
+                  </button>
+                  <button 
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 border border-slate-300/60 dark:border-slate-700/60 text-xs text-[var(--text-primary)] font-semibold transition-all"
+                  >
+                    <Printer size={13} /> Print / Export PDF
+                  </button>
+                </div>
               </div>
 
               <div className="p-6 sm:p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/40 dark:bg-slate-900/40 backdrop-blur-xl print:border-none print:bg-transparent print:p-0 text-slate-700 dark:text-slate-300">

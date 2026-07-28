@@ -15,6 +15,18 @@ interface PrismaOrderItem {
   } | null;
 }
 
+interface PrismaScaleOrderItem {
+  id: number;
+  orderId: number;
+  scaleInventoryId: number;
+  quantity: any;
+  unit: string;
+  priceAtTime: any;
+  scaleInventory: {
+    name: string;
+  } | null;
+}
+
 interface PrismaOrder {
   id: number;
   total: any;
@@ -32,6 +44,7 @@ interface PrismaOrder {
     email: string;
   } | null;
   items: PrismaOrderItem[];
+  scaleItems: PrismaScaleOrderItem[];
 }
 
 export async function GET() {
@@ -42,24 +55,29 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Staff-facing endpoint — returns only the calling staff member's own
-    // sales. Owners should use a separate, broader endpoint.
-    if (session.role !== "staff") {
-      return NextResponse.json(
-        { error: "Forbidden: staff access only" },
-        { status: 403 }
-      );
+    // Serves BOTH invoice pages: /staff/invoice (staff — their own sales
+    // only) and /owner/invoices (owner — every order across the whole
+    // business). Previously this hard-blocked anyone who wasn't "staff",
+    // which meant the owner's own invoice page got a silent 403 on every
+    // load and never showed anything — that was the bug.
+    if (session.role !== "owner" && session.role !== "staff") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const ownerId = session.role === "owner" ? session.id : session.ownerId!;
+
     const ownerProfile = await prisma.user.findUnique({
-      where: { id: session.ownerId! },
+      where: { id: ownerId },
       select: { fullName: true },
     });
 
     const orders = (await prisma.order.findMany({
       where: {
-        ownerId: session.ownerId!,
-        staffId: session.id,
+        ownerId,
+        // Staff only ever see their own sales. Owners see everything —
+        // no staffId filter at all, so owner-made sales (staffId: null)
+        // and every staff member's sales all show up.
+        ...(session.role === "staff" ? { staffId: session.id } : {}),
       },
       include: {
         staff: { select: { fullName: true } },
@@ -67,6 +85,11 @@ export async function GET() {
         items: {
           include: {
             inventory: { select: { name: true } },
+          },
+        },
+        scaleItems: {
+          include: {
+            scaleInventory: { select: { name: true } },
           },
         },
       },
@@ -83,14 +106,28 @@ export async function GET() {
       buyerPhone: order.buyerPhone, // FIXED: Explicitly mapped and included in JSON response
       staff: order.staff,
       owner: order.owner,
-      items: order.items.map((item: PrismaOrderItem) => ({
-        id: item.id,
-        orderId: item.orderId,
-        inventoryId: item.inventoryId,
-        quantity: item.quantity,
-        priceAtTime: Number(item.priceAtTime.toString()),
-        inventory: item.inventory,
-      })),
+      items: [
+        ...order.items.map((item: PrismaOrderItem) => ({
+          id: item.id,
+          orderId: item.orderId,
+          inventoryId: item.inventoryId,
+          quantity: item.quantity,
+          priceAtTime: Number(item.priceAtTime.toString()),
+          inventory: item.inventory,
+        })),
+        // Scale-sold items (from Scale Consignment sales) previously never
+        // appeared here at all — this route only ever selected `items`,
+        // never `scaleItems`, so any scale sale showed up as a blank
+        // invoice with zero line items even though the sale was real.
+        ...order.scaleItems.map((item: PrismaScaleOrderItem) => ({
+          id: item.id,
+          orderId: item.orderId,
+          inventoryId: item.scaleInventoryId,
+          quantity: Number(item.quantity.toString()),
+          priceAtTime: Number(item.priceAtTime.toString()),
+          inventory: item.scaleInventory ? { name: `${item.scaleInventory.name} (${item.unit})` } : null,
+        })),
+      ],
     }));
 
     return NextResponse.json({
