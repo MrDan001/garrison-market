@@ -97,51 +97,57 @@ export async function GET() {
       orderBy: { date: "desc" },
     })) as unknown as PrismaOrder[];
 
-    const serializedOrders = orders.map((order: PrismaOrder) => {
-      // Calculate the true total from all merged items (standard + scale)
-      // This fixes the bug where scale items added after order creation
-      // weren't reflected in the stored order.total
-      const calculatedTotal = [
-        ...order.items.map((item: PrismaOrderItem) => Number(item.priceAtTime) * item.quantity),
-        ...order.scaleItems.map((item: PrismaScaleOrderItem) => Number(item.priceAtTime) * Number(item.quantity)),
-      ].reduce((sum, amount) => sum + amount, 0);
-
-      return {
-        id: order.id,
-        total: Number(order.total.toString()),
-        calculatedTotal, // ← Use this for invoice display instead of stored total
-        date: order.date.toISOString(),
-        ownerId: order.ownerId,
-        staffId: order.staffId,
-        buyerName: order.buyerName,
-        buyerPhone: order.buyerPhone, // FIXED: Explicitly mapped and included in JSON response
-        paymentMethod: order.paymentMethod,
-        staff: order.staff,
-        owner: order.owner,
-        items: [
-          ...order.items.map((item: PrismaOrderItem) => ({
-            id: item.id,
-            orderId: item.orderId,
-            inventoryId: item.inventoryId,
-            quantity: item.quantity,
-            priceAtTime: Number(item.priceAtTime.toString()),
-            inventory: item.inventory,
-          })),
-          // Scale-sold items (from Scale Consignment sales) previously never
-          // appeared here at all — this route only ever selected `items`,
-          // never `scaleItems`, so any scale sale showed up as a blank
-          // invoice with zero line items even though the sale was real.
-          ...order.scaleItems.map((item: PrismaScaleOrderItem) => ({
+    const serializedOrders = orders.map((order: PrismaOrder) => ({
+      id: order.id,
+      total: Number(order.total.toString()),
+      date: order.date.toISOString(),
+      ownerId: order.ownerId,
+      staffId: order.staffId,
+      buyerName: order.buyerName,
+      buyerPhone: order.buyerPhone, // FIXED: Explicitly mapped and included in JSON response
+      paymentMethod: order.paymentMethod,
+      staff: order.staff,
+      owner: order.owner,
+      items: [
+        ...order.items.map((item: PrismaOrderItem) => ({
+          id: item.id,
+          orderId: item.orderId,
+          inventoryId: item.inventoryId,
+          quantity: item.quantity,
+          priceAtTime: Number(item.priceAtTime.toString()),
+          inventory: item.inventory,
+        })),
+        // Scale-sold items (from Scale Consignment sales) previously never
+        // appeared here at all — this route only ever selected `items`,
+        // never `scaleItems`, so any scale sale showed up as a blank
+        // invoice with zero line items even though the sale was real.
+        //
+        // IMPORTANT: ScaleOrderItem.priceAtTime is stored as the LINE
+        // TOTAL (price-per-base-unit × quantity sold — see
+        // sellFromScaleConsignmentAction/processMergedSaleAction), unlike
+        // regular OrderItem.priceAtTime which is a genuine per-unit price.
+        // The invoice UI (and the WhatsApp summary below) always does
+        // `priceAtTime * quantity` to get the subtotal, so passing the
+        // stored total straight through as "priceAtTime" double-counted
+        // it — 8kg of rice at ₦2,500/kg (₦20,000 total) rendered as a
+        // ₦20,000 *unit* price with a ₦160,000 subtotal. Converting back
+        // to a real per-unit figure here keeps both call sites correct
+        // without touching how sales are actually recorded.
+        ...order.scaleItems.map((item: PrismaScaleOrderItem) => {
+          const lineTotal = Number(item.priceAtTime.toString());
+          const quantity = Number(item.quantity.toString());
+          const unitPrice = quantity > 0 ? lineTotal / quantity : 0;
+          return {
             id: item.id,
             orderId: item.orderId,
             inventoryId: item.scaleInventoryId,
-            quantity: Number(item.quantity.toString()),
-            priceAtTime: Number(item.priceAtTime.toString()),
+            quantity,
+            priceAtTime: unitPrice,
             inventory: item.scaleInventory ? { name: `${item.scaleInventory.name} (${item.unit})` } : null,
-          })),
-        ],
-      };
-    });
+          };
+        }),
+      ],
+    }));
 
     return NextResponse.json({
       orders: serializedOrders,
