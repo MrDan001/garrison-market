@@ -68,6 +68,7 @@ model User {
   
   ownerNotifications     Notification[] @relation("OwnerNotifications")
   recipientNotifications Notification[] @relation("RecipientNotifications")
+  notificationReads      NotificationRead[]
   supportOwnerScope      SupportMessage[] @relation("SupportOwnerScope")
   supportSent            SupportMessage[] @relation("SupportSender")
 
@@ -294,6 +295,13 @@ model Notification {
   type        String
   message     String
   link        String?
+  // Legacy single-row flag — kept so nothing existing breaks, but no
+  // longer what read status is computed from. A notification with
+  // recipientId: null is visible to the owner AND every staff member
+  // under them; this boolean lives on the ONE shared Notification row,
+  // so whichever of those people opened the bell first flipped it to
+  // true for everyone else too. Actual per-person read state now comes
+  // from the `reads` join below — see NotificationRead.
   read        Boolean  @default(false)
   ownerId     Int
   recipientId Int?
@@ -303,10 +311,29 @@ model Notification {
   owner       User     @relation("OwnerNotifications", fields: [ownerId], references: [id], onDelete: Cascade)
   recipient   User?    @relation("RecipientNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
   store       Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  reads       NotificationRead[]
 
   @@index([ownerId, read])
   @@index([recipientId, read])
   @@index([createdAt])
+}
+
+// One row per (notification, person who has actually opened it). Lets a
+// notification shared by several people (recipientId: null — owner + every
+// staff member) track read status independently per viewer, instead of one
+// boolean on the Notification row that any single viewer flips for
+// everyone else the moment they open their own notification bell.
+model NotificationRead {
+  id             Int      @id @default(autoincrement())
+  notificationId Int
+  userId         Int
+  readAt         DateTime @default(now())
+
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId])
 }
 
 model Consignment {

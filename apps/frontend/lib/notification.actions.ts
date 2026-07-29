@@ -41,10 +41,21 @@ export async function getNotificationsForStaff() {
     take: 20,
   });
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // Read status is per-viewer, not a single flag on the notification row —
+  // see NotificationRead. A notification with recipientId: null is shared
+  // by the owner and every staff member; without this, one person opening
+  // their bell would mark it read for everyone else too.
+  const myReads = await prisma.notificationRead.findMany({
+    where: { userId: session.id, notificationId: { in: notifications.map((n) => n.id) } },
+    select: { notificationId: true },
+  });
+  const readIds = new Set(myReads.map((r) => r.notificationId));
+
+  const withPersonalReadStatus = notifications.map((n) => ({ ...n, read: readIds.has(n.id) }));
+  const unreadCount = withPersonalReadStatus.filter((n) => !n.read).length;
 
   return {
-    notifications: JSON.parse(JSON.stringify(notifications)),
+    notifications: JSON.parse(JSON.stringify(withPersonalReadStatus)),
     unreadCount,
   };
 }
@@ -55,13 +66,21 @@ export async function markAllNotificationsRead() {
 
   const ownerScopeId = session.ownerId ?? session.id;
 
-  await prisma.notification.updateMany({
+  const visible = await prisma.notification.findMany({
     where: {
       ownerId: ownerScopeId,
       OR: [{ recipientId: session.id }, { recipientId: null }],
-      read: false,
     },
-    data: { read: true },
+    select: { id: true },
+  });
+
+  // Record read status for THIS viewer only — createMany + skipDuplicates
+  // is a no-op for any (notification, user) pair already recorded, so this
+  // is safe to call repeatedly. Never touches the legacy Notification.read
+  // column, which stays untouched so it can't leak into anyone else's view.
+  await prisma.notificationRead.createMany({
+    data: visible.map((n) => ({ notificationId: n.id, userId: session.id })),
+    skipDuplicates: true,
   });
 
   revalidatePath("/staff/dashboard");

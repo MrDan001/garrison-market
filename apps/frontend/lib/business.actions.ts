@@ -119,9 +119,16 @@ export async function submitDailyReport(authorId: number, content: string) {
       hour12: true,
     });
 
+    // recipientId targeted at the owner specifically (not null/broadcast) —
+    // this used to go out with recipientId: null, which getNotificationsForStaff
+    // treats as "visible to everyone under this owner", so every staff member
+    // (including whoever just submitted) saw "X submitted a report" in their
+    // own notification feed. Staff should only ever hear back once their
+    // report is approved/declined (see updateReportStatus below), never on
+    // submission itself.
     await createNotification({
       ownerId: session.ownerId!,
-      recipientId: null,
+      recipientId: session.ownerId!,
       storeId: author?.staffStoreId ?? null,
       type: "report_submitted",
       message: `${author?.fullName || "A staff member"} submitted a daily report on ${submittedAt}.`,
@@ -223,9 +230,16 @@ export async function submitDailyReport(authorId: number, content: string) {
     hour12: true,
   });
 
+  // recipientId targeted at the owner specifically (not null/broadcast) —
+  // this used to go out with recipientId: null, which getNotificationsForStaff
+  // treats as "visible to everyone under this owner", so every staff member
+  // (including whoever just submitted) saw "X submitted a report" in their
+  // own notification feed. Staff should only ever hear back once their
+  // report is approved/declined (see updateReportStatus below), never on
+  // submission itself.
   await createNotification({
     ownerId: session.ownerId!,
-    recipientId: null,
+    recipientId: session.ownerId!,
     storeId: author?.staffStoreId ?? null,
     type: "report_submitted",
     message: `${author?.fullName || "A staff member"} submitted a daily report on ${submittedAt}.`,
@@ -719,9 +733,12 @@ export async function resubmitReportAction(reportId: number, clarification: stri
     },
   });
 
+  // Same fix as submitDailyReport's report_submitted notifications above —
+  // this is still a "staff submitted something" event, just on the
+  // resubmit-after-correction path, so it gets the same owner-only targeting.
   await createNotification({
     ownerId: report.ownerId,
-    recipientId: null,
+    recipientId: report.ownerId,
     type: "report_status",
     message: "A staff report was resubmitted with a clarification.",
     link: "/owner/report",
@@ -758,9 +775,16 @@ export async function getStaffOrderHistory() {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
 
+  // Previously only fetched `items` (standard Inventory lines), so any
+  // scale sale — including the scale half of a merged-cart order — never
+  // showed up here at all. Both relations live on the same Order already;
+  // this was purely a missing include.
   const data = await prisma.order.findMany({
     where: { staffId: session.id },
-    include: { items: { include: { inventory: true } } },
+    include: {
+      items: { include: { inventory: true } },
+      scaleItems: { include: { scaleInventory: true } },
+    },
     orderBy: { date: 'desc' },
     take: 100
   });

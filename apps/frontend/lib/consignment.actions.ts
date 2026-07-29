@@ -225,9 +225,14 @@ export async function settleConsignment(
     data: { status: "settled", settledAt: new Date() },
   });
 
+  // Same broadcast bug as the other notifications above: recipientId: null
+  // meant the staff member who just settled this (and every other staff
+  // member) saw "Consignment with X was settled" in their own feed too.
+  // This is owner-facing reconciliation info, not something staff need
+  // pinged about, so it's targeted at the owner specifically.
   await createNotification({
     ownerId: consignment.ownerId,
-    recipientId: null,
+    recipientId: consignment.ownerId,
     storeId: consignment.storeId,
     type: "announcement",
     message: `Consignment with ${consignment.recipientName} was settled — ₦${total.toLocaleString()} in sales.`,
@@ -516,9 +521,14 @@ export async function settleScaleConsignment(
     data: { status: "settled", settledAt: new Date() },
   });
 
+  // Same broadcast bug as the other notifications above: recipientId: null
+  // meant the staff member who just settled this (and every other staff
+  // member) saw "Consignment with X was settled" in their own feed too.
+  // This is owner-facing reconciliation info, not something staff need
+  // pinged about, so it's targeted at the owner specifically.
   await createNotification({
     ownerId: consignment.ownerId,
-    recipientId: null,
+    recipientId: consignment.ownerId,
     storeId: consignment.storeId,
     type: "announcement",
     message: `Consignment with ${consignment.recipientName} was settled — ₦${total.toLocaleString()} in sales.`,
@@ -1146,9 +1156,16 @@ export async function autoSettleScaleConsignment(consignmentId: number, source: 
     data: { status: "settled", settledAt: new Date() },
   });
 
+  // Same broadcast bug as report_submitted: recipientId: null means
+  // getNotificationsForStaff shows this to EVERY staff member under this
+  // owner, not just the owner — so the staff member whose own consignment
+  // was settled (and every other staff member too) was seeing "X's scale
+  // consignment was auto-settled..." in their own feed. This is
+  // owner-facing inventory info, not something staff need pinged about,
+  // so it's now targeted at the owner specifically.
   await createNotification({
     ownerId: consignment.ownerId,
-    recipientId: null,
+    recipientId: consignment.ownerId,
     storeId: consignment.storeId,
     type: "announcement",
     message:

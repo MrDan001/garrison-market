@@ -22,10 +22,18 @@ export default async function ReportPage() {
   // submitDailyReport already correctly captured them once submitted.
   // Now both relations are requested together whenever the override is
   // on, regardless of the store's native type.
+  //
+  // Bug fix: scaleConsignmentEnabled only ever lives on the OWNER's user
+  // row, never on a staff row. This was looking it up by session.id (the
+  // logged-in STAFF member's own id), which is never the owner unless
+  // the person viewing the page happens to be the owner themselves — so
+  // for actual staff it always read as false, silently hiding every
+  // scale line regardless of the store's real settings.
   let ownerScaleEnabled = false;
   if (!isNativeScale) {
+    const ownerScopeId = session!.role === "owner" ? session!.id : session!.ownerId!;
     const owner = await prisma.user.findUnique({
-      where: { id: session!.id },
+      where: { id: ownerScopeId },
       select: { scaleConsignmentEnabled: true },
     });
     ownerScaleEnabled = !!owner?.scaleConsignmentEnabled;
