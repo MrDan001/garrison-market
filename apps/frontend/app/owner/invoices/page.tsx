@@ -22,6 +22,7 @@ interface OrderItemType {
 interface OrderType {
   id: number;
   total: any;
+  calculatedTotal: any; // ← NEW: Calculated from merged items
   date: string; 
   ownerId: number;
   staffId: number | null;
@@ -89,7 +90,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
         (item) => `${item.inventory?.name || "Item"} x${item.quantity} — ₦${(Number(item.priceAtTime) * item.quantity).toLocaleString()}`
       ),
       "",
-      `*Total: ₦${Number(order.total).toLocaleString()}*`,
+      `*Total: ₦${Number(order.calculatedTotal).toLocaleString()}*`,
       "",
       `Thank you for shopping with us!`,
     ];
@@ -169,7 +170,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                         <p className="text-[11px] text-slate-500 uppercase tracking-wide leading-none">Processed by</p>
                         <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">{order.staff?.fullName || "Owner"}</p>
                       </div>
-                      <p className="text-sm font-bold text-blue-400">₦{Number(order.total).toLocaleString()}</p>
+                      <p className="text-sm font-bold text-blue-400">₦{Number(order.calculatedTotal).toLocaleString()}</p>
                     </div>
                   </Link>
                 );
@@ -263,12 +264,12 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                   </div>
                 </div>
 
-                {/* Mathematical Totals Panel block */}
+                {/* Mathematical Totals Panel block — NOW USES calculatedTotal */}
                 <div className="mt-6 flex justify-end">
                   <div className="w-full sm:w-72 space-y-2 border-t border-slate-200/80 dark:border-slate-800/80 pt-4 print:border-slate-700 print:dark:border-slate-300">
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Gross Subtotal</span>
-                      <span className="font-medium text-slate-700 dark:text-slate-300">₦{Number(selectedOrder.total).toLocaleString()}</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">₦{Number(selectedOrder.calculatedTotal).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Applied Surcharges</span>
@@ -277,7 +278,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                     <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-800 border-dashed items-center print:border-slate-700 print:dark:border-slate-300">
                       <span className="font-bold text-[var(--text-primary)]">Amount Settled</span>
                       <span className="text-base font-black text-blue-400 print:text-black">
-                        ₦{Number(selectedOrder.total).toLocaleString()}
+                        ₦{Number(selectedOrder.calculatedTotal).toLocaleString()}
                       </span>
                     </div>
                   </div>
