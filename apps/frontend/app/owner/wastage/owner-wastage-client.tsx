@@ -74,21 +74,27 @@ export default function OwnerWastageClient({ data }: { data: any }) {
             <thead>
               <tr>
                 <th>Item Name</th>
+                <th>Staff Name</th>
                 <th>Reason</th>
                 <th>Quantity</th>
+                <th>Value Lost</th>
               </tr>
             </thead>
             <tbody>
               ${bucket.entries
-                .map(
-                  (entry: any) => `
+                .map((entry: any) => {
+                  const unitValue = entry.scaleInventory.costPrice != null ? Number(entry.scaleInventory.costPrice) : Number(entry.scaleInventory.price);
+                  const entryValue = unitValue * Number(entry.quantityInBaseUnit);
+                  return `
                 <tr>
                   <td>${entry.scaleInventory.name}</td>
+                  <td>${entry.staff?.fullName || "Staff"}</td>
                   <td>${WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason}</td>
                   <td>${entry.quantity}${entry.unit}</td>
+                  <td>₦${entryValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                 </tr>
-              `
-                )
+              `;
+                })
                 .join("")}
             </tbody>
           </table>
@@ -154,7 +160,7 @@ export default function OwnerWastageClient({ data }: { data: any }) {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  {entry.quantity}{entry.unit} · {WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason} · logged by {entry.staff?.fullName || "Staff"}
+                  {entry.quantity}{entry.unit} · {WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason} · logged by <span className="font-semibold text-slate-700 dark:text-slate-300">{entry.staff?.fullName || "Staff"}</span>
                 </p>
                 {entry.note && <p className="text-xs text-slate-400 dark:text-slate-600 italic">"{entry.note}"</p>}
 
@@ -218,19 +224,29 @@ export default function OwnerWastageClient({ data }: { data: any }) {
                 >
                   <div className="text-left">
                     <p className="text-sm font-semibold text-[var(--text-primary)]">{bucket.month}</p>
-                    <p className="text-xs text-slate-500">₦{bucket.value.toLocaleString(undefined, { maximumFractionDigits: 0 })} lost</p>
+                    <p className="text-xs font-bold text-rose-500 dark:text-rose-400 mt-0.5">₦{bucket.value.toLocaleString(undefined, { maximumFractionDigits: 0 })} lost</p>
                   </div>
                   {openMonth === bucket.key ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
                 </button>
                 {openMonth === bucket.key && (
                   <div className="border-t border-slate-200 dark:border-slate-800 p-3 space-y-3">
-                    <div className="space-y-1.5">
-                      {bucket.entries.map((entry: any) => (
-                        <div key={entry.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
-                          <span>{entry.scaleInventory.name} — {WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason}</span>
-                          <span>{entry.quantity}{entry.unit}</span>
-                        </div>
-                      ))}
+                    <div className="space-y-2">
+                      {bucket.entries.map((entry: any) => {
+                        const unitValue = entry.scaleInventory.costPrice != null ? Number(entry.scaleInventory.costPrice) : Number(entry.scaleInventory.price);
+                        const entryValue = unitValue * Number(entry.quantityInBaseUnit);
+                        return (
+                          <div key={entry.id} className="flex justify-between items-start text-xs text-slate-600 dark:text-slate-400 border-b border-slate-100 dark:border-slate-900/50 pb-1.5 last:border-none">
+                            <div>
+                              <span className="font-semibold text-[var(--text-primary)]">{entry.scaleInventory.name}</span>
+                              <span className="text-[11px] text-slate-400 block">Logged by <span className="text-slate-600 dark:text-slate-300">{entry.staff?.fullName || "Staff"}</span> · {WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason}</span>
+                            </div>
+                            <div className="text-right whitespace-nowrap ml-2">
+                              <span className="font-bold text-[var(--text-primary)] block">{entry.quantity}{entry.unit}</span>
+                              <span className="text-[11px] text-rose-500 dark:text-rose-400 font-medium">₦{entryValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     <button
