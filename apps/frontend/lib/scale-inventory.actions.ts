@@ -358,10 +358,13 @@ export async function processScaleSaleAction(
           quantity: item.enteredQty,
           unit: item.enteredUnit,
           quantityInBaseUnit: baseQty,
-          priceAtTime: item.price * baseQty,
+          // ✅ FIXED: priceAtTime now strictly stores the unit price per base unit, 
+          // matching standard inventory behavior. Total calculation happens in memory 
+          // or via dedicated fields where needed.
+          priceAtTime: item.price,
           ...(item.discountValue
             ? {
-                originalPrice: (item.originalPrice ?? item.price) * baseQty,
+                originalPrice: item.originalPrice ?? item.price,
                 discountValue: item.discountValue,
                 discountType: item.discountType ?? null,
                 discountReason: item.discountReason ?? null,

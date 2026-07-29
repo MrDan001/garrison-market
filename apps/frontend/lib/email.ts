@@ -293,3 +293,44 @@ export async function sendConsignmentSettlementEmail(
   });
   return send(to, `Consignment settled — ${naira(params.totalSales)} in sales`, html);
 }
+
+// =====================================================================
+// 6. ADMIN BROADCAST / MAILBOX MESSAGE  (admin -> one or all owners)
+// =====================================================================
+// Mirrors what's saved in AdminMessage / shown on /owner/messages — same
+// subject, body, optional link, optional image. The in-app mailbox is
+// the permanent copy; this email is just the "you've got a message"
+// alert, so it always points back to the full message rather than
+// trying to be the whole experience itself.
+
+export async function sendAdminBroadcastEmail(
+  to: string,
+  ownerFullName: string,
+  params: { subject: string; body: string; link?: string | null; imageUrl?: string | null; messageUrl: string }
+) {
+  const firstName = ownerFullName?.split(" ")[0] || "there";
+
+  // params.body is plain text from a textarea — escape it before turning
+  // newlines into <br> so it can never inject markup into the email.
+  const escapeHtml = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const bodyHtml = escapeHtml(params.body).replace(/\n/g, "<br>");
+
+  const html = layout({
+    preheader: params.subject,
+    badge: { label: "Message", color: "#4f46e5" },
+    body: `
+      ${heading(params.subject)}
+      ${paragraph(`Hi ${firstName},`)}
+      ${paragraph(bodyHtml)}
+      ${
+        params.imageUrl
+          ? `<img src="${params.imageUrl}" alt="" style="width:100%; max-width:416px; border-radius:10px; margin:8px 0 16px; display:block;">`
+          : ""
+      }
+      ${params.link ? button(params.link, "Open Link") : ""}
+      ${button(params.messageUrl, "View in Garrison Market", "#0f1117")}
+    `,
+  });
+  return send(to, params.subject, html);
+}

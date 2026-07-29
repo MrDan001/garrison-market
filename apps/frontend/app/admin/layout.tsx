@@ -6,6 +6,7 @@ import {
   LayoutDashboard, 
   Users, 
   MessageSquare, // <-- Added Support icon
+  Mail,
   LogOut, 
   Menu, 
   X, 
@@ -27,6 +28,7 @@ export default function AdminLayout({
     { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
     { name: "Manage Users", href: "/admin/users", icon: Users },
     { name: "Support Tickets", href: "/admin/support", icon: MessageSquare }, 
+    { name: "Messages", href: "/admin/messages", icon: Mail },
   ];
 
   // Helper to determine active section name for the header
@@ -34,6 +36,7 @@ export default function AdminLayout({
     if (path === "/admin/dashboard") return "System Overview";
     if (path === "/admin/support") return "Support Desk";
     if (path === "/admin/users") return "Account Configurations";
+    if (path === "/admin/messages") return "Owner Messages";
     return "Admin Console";
   };
 

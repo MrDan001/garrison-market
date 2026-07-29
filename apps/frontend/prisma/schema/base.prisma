@@ -73,6 +73,12 @@ model User {
   supportOwnerScope      SupportMessage[] @relation("SupportOwnerScope")
   supportSent            SupportMessage[] @relation("SupportSender")
 
+  // Admin -> owner mailbox (see AdminMessage below). sentAdminMessages is
+  // populated only for admin-role users; the other two only for owners.
+  sentAdminMessages      AdminMessage[]     @relation("AdminMessageSender")
+  targetedAdminMessages  AdminMessage[]     @relation("AdminMessageTarget")
+  adminMessageReads      AdminMessageRead[]
+
   shopAddress   String?
   shopCity      String?
   shopState     String?
@@ -509,6 +515,52 @@ model SupportIntake {
 
   @@index([threadType, ownerId, status])
   @@index([threadType, staffId, status])
+}
+
+// Admin -> owner "mailbox" — one-way broadcast/announcement messages from
+// the Garrison Market admin team to owners, distinct from the two-way
+// SupportMessage thread above. An admin composes one of these once; it
+// fans out to either every owner or a single targeted one via the
+// notification system (see notification.actions.ts, type "admin_message")
+// and email (see sendAdminBroadcastEmail in lib/email.ts). The row itself
+// is the single source of truth for the full message content — the
+// Notification created alongside it only carries a short preview + a link
+// back to /owner/messages/[id], same pattern as every other notification
+// type in this app.
+model AdminMessage {
+  id        Int      @id @default(autoincrement())
+  subject   String
+  body      String
+  link      String?
+  imageUrl  String?
+
+  // "all_owners" -> every approved owner account at send time.
+  // "single_owner" -> just targetOwnerId.
+  audience      String
+  targetOwnerId Int?
+
+  sentById  Int
+  createdAt DateTime @default(now())
+
+  sentBy      User               @relation("AdminMessageSender", fields: [sentById], references: [id], onDelete: Cascade)
+  targetOwner User?              @relation("AdminMessageTarget", fields: [targetOwnerId], references: [id], onDelete: Cascade)
+  reads       AdminMessageRead[]
+
+  @@index([audience, targetOwnerId])
+  @@index([createdAt])
+}
+
+model AdminMessageRead {
+  id        Int      @id @default(autoincrement())
+  messageId Int
+  ownerId   Int
+  readAt    DateTime @default(now())
+
+  message AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  owner   User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, ownerId])
+  @@index([ownerId])
 }
 
 model Payment {

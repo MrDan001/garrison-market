@@ -2,7 +2,7 @@ import {
   ChevronRight, Store, LayoutDashboard,
   Activity, CreditCard, Users, Receipt,
   LogOut, ArrowLeft, History,
-  Zap, Calendar, Gift, ChevronDown, UserPlus, Scale as ScaleIcon
+  Zap, Calendar, Gift, ChevronDown, UserPlus, Scale as ScaleIcon, Mail
 } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -245,6 +245,7 @@ export default async function MorePage() {
           title="Business Management"
           items={[
             { label: "Customers",  icon: Users,          href: "/owner/customers" },
+            { label: "Messages",   icon: Mail,           href: "/owner/messages" },
             { label: "Invoices",   icon: Receipt,        href: "/owner/invoices" },
             { label: "Expenses",   icon: CreditCard,     href: "/owner/expenses" },
             { label: "Reports",    icon: Activity,       href: "/owner/report" },

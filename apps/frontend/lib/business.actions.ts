@@ -384,6 +384,7 @@ export async function addItemAction(
   await createNotification({
     ownerId: session.id,
     recipientId: null,
+    storeId: storeId ?? null,
     type: "new_item",
     message: `${newItem.name} was added to inventory.`,
     link: "/staff/inventory",
@@ -440,8 +441,10 @@ export async function updateItemAction(formData: FormData) {
   // previously never generated any notification at all.
   const before = await prisma.inventory.findUnique({
     where: { id },
-    select: { quantity: true, restockLevel: true, storeId: true },
+    select: { quantity: true, restockLevel: true, storeId: true, ownerId: true },
   });
+
+  if (!before || before.ownerId !== session.id) throw new Error("Unauthorized");
 
   let updated;
   try {
@@ -704,6 +707,12 @@ export async function requestReportRevision(reportId: number, note: string) {
   // actions have.
   await assertSubscriptionActive(session.id);
 
+  const existingReport = await prisma.report.findUnique({
+    where: { id: reportId },
+    select: { ownerId: true },
+  });
+  if (!existingReport || existingReport.ownerId !== session.id) throw new Error("Unauthorized");
+
   const report = await prisma.report.update({
     where: { id: reportId },
     data: { status: "revision_requested", ownerNote: note.trim() },
@@ -819,7 +828,7 @@ export async function createStoreAction(
   // as data instead of thrown, the same way registerStaffAction already does.
   try {
     await assertSubscriptionActive(user.id);
-  } catch (err: any) {
+    } catch (err: any) {
     return { success: false, error: err?.message || "Your trial or subscription has ended." };
   }
 
