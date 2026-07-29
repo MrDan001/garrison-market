@@ -877,6 +877,232 @@ export async function sellFromScaleConsignmentAction(
 }
 
 // ============================================================================
+// Merged cart checkout (admin-override mode: scaleConsignmentEnabled AND
+// mergedCartEnabled both on for the owner)
+// ============================================================================
+// One sale, one Order row — combines standard Inventory items (Order.items)
+// and consignment-signed-out Scale items (Order.scaleItems), which the
+// schema already supports on a single Order. Modeled directly on
+// sellFromScaleConsignmentAction above: wrapped in one $transaction with
+// optimistic-lock guards on every row, so a concurrent sale on either side
+// can't oversell.
+type MergedListCartItem = {
+  id: number; // Inventory id
+  qty: number;
+  price: number; // post-discount unit price
+  originalPrice?: number;
+  discountValue?: number;
+  discountType?: "percent" | "flat";
+  discountReason?: string;
+};
+
+type MergedScaleCartItem = ConsignmentSaleCartItem & {
+  originalPrice?: number;
+  discountValue?: number;
+  discountType?: "percent" | "flat";
+  discountReason?: string;
+};
+
+export async function processMergedSaleAction(
+  listCartItems: MergedListCartItem[],
+  scaleCartItems: MergedScaleCartItem[],
+  paymentMethod: "cash" | "transfer",
+  buyerName?: string,
+  buyerPhone?: string
+) {
+  const session = await getSessionUser();
+  if (!session) throw new Error("Unauthorized");
+  if (listCartItems.length === 0 && scaleCartItems.length === 0) throw new Error("Cart is empty");
+
+  const ownerId = session.role === "owner" ? session.id : session.ownerId!;
+  await assertSubscriptionActive(ownerId);
+
+  const owner = await prisma.user.findUnique({
+    where: { id: ownerId },
+    select: { discountEnabled: true, scaleConsignmentEnabled: true, mergedCartEnabled: true },
+  });
+  if (!owner?.scaleConsignmentEnabled || !owner?.mergedCartEnabled) {
+    throw new Error("Merged Cart is not enabled for this store.");
+  }
+
+  // Re-check discountEnabled server-side (client UI already hides the
+  // discount option when it's off, but that's not a guarantee against a
+  // tampered request) and strip discount fields from both cart types if so.
+  if (!owner.discountEnabled) {
+    for (const item of listCartItems) {
+      delete item.discountValue;
+      delete item.discountType;
+      delete item.discountReason;
+      delete item.originalPrice;
+    }
+    for (const item of scaleCartItems) {
+      delete item.discountValue;
+      delete item.discountType;
+      delete item.discountReason;
+      delete item.originalPrice;
+    }
+  }
+
+  const activeStoreId = await getActiveStoreId();
+
+  const result = await prisma.$transaction(async (tx) => {
+    // --- Resolve + validate list items against Inventory ---
+    const inventoryRows = listCartItems.length
+      ? await tx.inventory.findMany({ where: { id: { in: listCartItems.map((c) => c.id) } } })
+      : [];
+    const resolvedList: { cart: MergedListCartItem; row: (typeof inventoryRows)[number] }[] = [];
+    for (const cart of listCartItems) {
+      const row = inventoryRows.find((r) => r.id === cart.id);
+      if (!row) throw new Error(`Item ${cart.id} not found.`);
+      if (row.quantity < cart.qty) {
+        throw new Error(`Insufficient stock for ${row.name}. Available: ${row.quantity}`);
+      }
+      resolvedList.push({ cart, row });
+    }
+
+    // --- Resolve + validate scale items against the staff's open consignments ---
+    const consignmentItems = scaleCartItems.length
+      ? await tx.scaleConsignmentItem.findMany({
+          where: { id: { in: scaleCartItems.map((c) => c.consignmentItemId) } },
+          include: { consignment: true, scaleInventory: true },
+        })
+      : [];
+    const resolvedScale: { cart: MergedScaleCartItem; baseQty: number; row: (typeof consignmentItems)[number] }[] = [];
+    for (const cart of scaleCartItems) {
+      const row = consignmentItems.find((r) => r.id === cart.consignmentItemId);
+      if (!row) throw new Error("Consigned item not found.");
+      const isOwnConsignment = row.consignment.staffId === session.id;
+      const isSharedAtOwnStore = row.consignment.staffId === null && row.consignment.storeId === activeStoreId;
+      if (!isOwnConsignment && !isSharedAtOwnStore) throw new Error("Unauthorized for this consignment.");
+      if (row.consignment.status !== "out") throw new Error("This consignment has already been settled.");
+
+      const baseQty = convertToBaseUnit(cart.enteredQty, cart.enteredUnit, row.unit);
+      if (baseQty <= 0) throw new Error(`Invalid quantity for ${row.scaleInventory?.name}.`);
+      const remaining = Number(row.quantityOut) - Number(row.quantitySold) - Number(row.quantityWasted ?? 0);
+      if (baseQty > remaining) {
+        throw new Error(`Only ${remaining}${row.unit} of ${row.scaleInventory?.name} left to sell today.`);
+      }
+      resolvedScale.push({ cart, baseQty, row });
+    }
+
+    const listTotal = resolvedList.reduce((sum, r) => sum + r.cart.price * r.cart.qty, 0);
+    const scaleTotal = resolvedScale.reduce((sum, r) => sum + r.cart.price * r.baseQty, 0);
+    const total = listTotal + scaleTotal;
+
+    // Storefront for the sale: prefer the active store cookie, falling back
+    // to wherever the scale consignment lines were signed out under (both
+    // should normally agree for a merged-mode staff member).
+    const saleStoreId = activeStoreId ?? resolvedScale[0]?.row.consignment.storeId ?? null;
+
+    await tx.order.create({
+      data: {
+        total,
+        paymentMethod,
+        buyerName: buyerName?.trim() || "Walk-in Customer",
+        buyerPhone: buyerPhone?.trim() || null,
+        ownerId,
+        staffId: session.id,
+        storeId: saleStoreId,
+        items: {
+          create: resolvedList.map(({ cart }) => ({
+            inventoryId: cart.id,
+            quantity: cart.qty,
+            priceAtTime: cart.price,
+            ...(cart.discountValue
+              ? {
+                  originalPrice: cart.originalPrice,
+                  discountValue: cart.discountValue,
+                  discountType: cart.discountType ?? null,
+                  discountReason: cart.discountReason ?? null,
+                }
+              : {}),
+          })),
+        },
+        scaleItems: {
+          create: resolvedScale.map(({ cart, baseQty, row }) => ({
+            scaleInventoryId: row.scaleInventoryId,
+            quantity: cart.enteredQty,
+            unit: cart.enteredUnit,
+            quantityInBaseUnit: baseQty,
+            priceAtTime: cart.price * baseQty,
+            ...(cart.discountValue
+              ? {
+                  originalPrice: (cart.originalPrice ?? cart.price) * baseQty,
+                  discountValue: cart.discountValue,
+                  discountType: cart.discountType ?? null,
+                  discountReason: cart.discountReason ?? null,
+                }
+              : {}),
+          })),
+        },
+      },
+    });
+
+    // Decrement Inventory with an optimistic lock (guards the same race
+    // processSaleAction has, now closed for the merged path).
+    for (const { cart, row } of resolvedList) {
+      const updateResult = await tx.inventory.updateMany({
+        where: { id: row.id, quantity: row.quantity },
+        data: { quantity: { decrement: cart.qty } },
+      });
+      if (updateResult.count === 0) {
+        throw new Error(`${row.name} was just sold by another request — please try again.`);
+      }
+    }
+
+    // Increment quantitySold on the consignment item, same optimistic lock
+    // sellFromScaleConsignmentAction uses.
+    for (const { baseQty, row } of resolvedScale) {
+      const updateResult = await tx.scaleConsignmentItem.updateMany({
+        where: { id: row.id, quantitySold: row.quantitySold },
+        data: { quantitySold: { increment: baseQty } },
+      });
+      if (updateResult.count === 0) {
+        throw new Error(`${row.scaleInventory?.name} was just sold by another request — please try again.`);
+      }
+    }
+
+    return { total, saleStoreId };
+  });
+
+  const naira = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(result.total);
+  const staffName = await prisma.user.findUnique({ where: { id: session.id }, select: { fullName: true } });
+
+  await createNotification({
+    ownerId,
+    recipientId: null,
+    storeId: result.saleStoreId,
+    type: "sale_made",
+    message: staffName?.fullName ? `${staffName.fullName} made a sale of ${naira}.` : `A sale of ${naira} was made.`,
+    link: "/owner/dashboard",
+  });
+
+  // Low-stock notifications for the list side (scale side already covered
+  // by the same check inside sellFromScaleConsignmentAction's flow — here
+  // we mirror it for consistency, keyed off Inventory.restockLevel).
+  for (const cart of listCartItems) {
+    const updated = await prisma.inventory.findUnique({ where: { id: cart.id } });
+    if (updated?.restockLevel != null && updated.quantity <= updated.restockLevel) {
+      await createNotification({
+        ownerId,
+        recipientId: null,
+        storeId: result.saleStoreId,
+        type: "low_stock",
+        message: updated.quantity <= 0
+          ? `${updated.name} is now out of stock.`
+          : `${updated.name} is running low (${updated.quantity} left).`,
+        link: "/staff/inventory",
+      });
+    }
+  }
+
+  revalidatePath("/staff/inventory");
+  revalidatePath("/owner/dashboard");
+  revalidatePath("/owner/consignments");
+  return { success: true, total: result.total };
+}
+
+// ============================================================================
 // Auto-settlement for admin-override scale consignments
 // ============================================================================
 // Distinct from settleScaleConsignment above (which is the staff-entered,

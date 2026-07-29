@@ -636,6 +636,38 @@ export async function setScaleConsignmentOverrideAction(ownerId: number, enabled
   }
 }
 
+// Same pattern as setScaleConsignmentOverrideAction above, and only takes
+// effect alongside it: when both are on, staff get one merged catalog +
+// cart (both standard Inventory items and consignment-signed-out scale
+// items in a single sale) instead of the List/Scale mode switcher.
+export async function setMergedCartOverrideAction(ownerId: number, enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+
+  try {
+    const owner = await prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { id: true, scaleConsignmentEnabled: true },
+    });
+    if (!owner) return { success: false, error: "Owner not found." };
+    if (enabled && !owner.scaleConsignmentEnabled) {
+      return { success: false, error: "Enable Scale Consignment for this owner first." };
+    }
+
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { mergedCartEnabled: enabled },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    revalidatePath("/staff/inventory");
+    return { success: true };
+  } catch (error) {
+    console.error("Set merged cart override error:", error);
+    return { success: false, error: "Failed to update merged cart override." };
+  }
+}
+
 /**
  * Manual admin override for the Max Package unlock. This is the same flag
  * that flips on automatically when a Max Package payment succeeds (see

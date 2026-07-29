@@ -97,6 +97,15 @@ model User {
   // fresh stock. See lib/scale-consignment-reset.ts for the cron logic.
   scaleConsignmentEnabled Boolean @default(false)
 
+  // Admin-only override (set from the admin panel, never by the owner
+  // themselves) — same pattern as scaleConsignmentEnabled above, and only
+  // meaningful when that flag is also on. When both are on, staff get a
+  // single merged catalog + cart instead of the List/Scale mode switcher,
+  // so one sale can contain both standard Inventory items and scale items
+  // signed out via consignment. See processMergedSaleAction in
+  // lib/consignment.actions.ts.
+  mergedCartEnabled Boolean @default(false)
+
   // --- Max Package (negotiated price, admin-gated) ---
   // Like Basic/Premium, Max has no static price — an owner requests it by
   // contacting admin via Support or email, admin negotiates and sets a rate

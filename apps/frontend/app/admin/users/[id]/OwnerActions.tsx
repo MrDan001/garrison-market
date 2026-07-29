@@ -4,8 +4,8 @@
 
 import { useState, useTransition, type TransitionStartFunction } from "react";
 import { useRouter } from "next/navigation";
-import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction, setScaleConsignmentOverrideAction, setMaxPackageOverrideAction } from "@/lib/auth.actions";
-import { CalendarPlus, Tag, Scale, Crown } from "lucide-react";
+import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction, setScaleConsignmentOverrideAction, setMergedCartOverrideAction, setMaxPackageOverrideAction } from "@/lib/auth.actions";
+import { CalendarPlus, Tag, Scale, Crown, Combine } from "lucide-react";
 
 const naira = (n: number) =>
   new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n);
@@ -24,6 +24,7 @@ interface OwnerActionsProps {
   customPriceMaxNote?: string | null;
   customPriceUpdatedAt?: string | null;
   scaleConsignmentEnabled?: boolean;
+  mergedCartEnabled?: boolean;
   maxPackageEnabled?: boolean;
 }
 
@@ -40,12 +41,14 @@ export function OwnerActions({
   customPriceMaxNote,
   customPriceUpdatedAt,
   scaleConsignmentEnabled,
+  mergedCartEnabled,
   maxPackageEnabled,
 }: OwnerActionsProps) {
   const [isPending, startTransition] = useTransition();
   const [days, setDays] = useState("7");
   const [extendMsg, setExtendMsg] = useState<string | null>(null);
   const [scaleMsg, setScaleMsg] = useState<string | null>(null);
+  const [mergedMsg, setMergedMsg] = useState<string | null>(null);
   const [maxMsg, setMaxMsg] = useState<string | null>(null);
   const router = useRouter();
 
@@ -81,6 +84,22 @@ export function OwnerActions({
           ? next
             ? "Scale Consignment turned ON for this owner."
             : "Scale Consignment turned OFF for this owner."
+          : result.error || "Failed to update."
+      );
+      router.refresh();
+    });
+  };
+
+  const handleMergedToggle = () => {
+    if (!ownerId) return;
+    const next = !mergedCartEnabled;
+    startTransition(async () => {
+      const result = await setMergedCartOverrideAction(ownerId, next);
+      setMergedMsg(
+        result.success
+          ? next
+            ? "Merged Cart turned ON for this owner."
+            : "Merged Cart turned OFF for this owner."
           : result.error || "Failed to update."
       );
       router.refresh();
@@ -247,6 +266,43 @@ export function OwnerActions({
             {scaleConsignmentEnabled ? "Turn Off" : "Turn On"}
           </button>
           {scaleMsg && <span className="ml-2 text-[11px] text-slate-400">{scaleMsg}</span>}
+        </div>
+      )}
+      {ownerId && (
+        <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <Combine size={14} className="text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-400">Merged Cart override</span>
+            <span
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                mergedCartEnabled
+                  ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+            >
+              {mergedCartEnabled ? "On" : "Off"}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            Requires Scale Consignment (above) to be ON. When ON, staff get a single catalog + cart combining
+            standard Inventory items and consignment-signed-out Scale items, so one sale can contain both —
+            instead of the separate List/Scale mode switcher.
+          </p>
+          <button
+            disabled={isPending || !scaleConsignmentEnabled}
+            onClick={handleMergedToggle}
+            className={`px-3 py-1.5 disabled:opacity-50 rounded-lg text-xs font-bold transition-colors ${
+              mergedCartEnabled
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                : "bg-teal-600 hover:bg-teal-500 text-white"
+            }`}
+          >
+            {mergedCartEnabled ? "Turn Off" : "Turn On"}
+          </button>
+          {!scaleConsignmentEnabled && (
+            <p className="text-[10px] text-amber-500">Turn on Scale Consignment first.</p>
+          )}
+          {mergedMsg && <span className="ml-2 text-[11px] text-slate-400">{mergedMsg}</span>}
         </div>
       )}
       {ownerId && (

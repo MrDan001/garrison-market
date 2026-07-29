@@ -11,6 +11,7 @@ import { getActiveStore } from "@/lib/store-context";
 import InventoryClient from "./inventory-client";
 import ScaleInventoryClient from "./scale-inventory-client";
 import StaffInventoryModeSwitcher from "./staff-inventory-mode-switcher";
+import MergedInventoryClient from "./merged-inventory-client";
 
 function sanitize(data: any) {
   return JSON.parse(
@@ -34,12 +35,13 @@ export default async function InventoryPage() {
       where: { email: session.email },
       select: {
         ownerId: true,
-        owner: { select: { discountEnabled: true, scaleConsignmentEnabled: true } },
+        owner: { select: { discountEnabled: true, scaleConsignmentEnabled: true, mergedCartEnabled: true } },
       },
     });
 
     const discountEnabled = staffUser?.owner?.discountEnabled ?? false;
     const scaleConsignmentEnabled = staffUser?.owner?.scaleConsignmentEnabled ?? false;
+    const mergedCartEnabled = staffUser?.owner?.mergedCartEnabled ?? false;
 
     // storeType (chosen permanently at store creation) decides which
     // inventory system this staff member's assigned store runs on.
@@ -67,6 +69,20 @@ export default async function InventoryPage() {
         getOpenScaleConsignmentsForStaff(),
         getScaleConsignmentHistoryForStaff(),
       ]);
+
+      // Further admin-only override: mergedCartEnabled replaces the
+      // List/Scale switcher with one catalog + one cart, so a single sale
+      // can hold both standard Inventory items and consignment-signed-out
+      // scale items.
+      if (mergedCartEnabled) {
+        return (
+          <MergedInventoryClient
+            listItems={serializedItems}
+            discountEnabled={discountEnabled}
+            scaleOpenConsignments={sanitize(openConsignments || [])}
+          />
+        );
+      }
 
       return (
         <StaffInventoryModeSwitcher

@@ -479,48 +479,80 @@ export async function processSaleAction(
   const saleOwnerScopeId = session.role === "owner" ? session.id : session.ownerId!;
   await assertSubscriptionActive(saleOwnerScopeId);
 
-  const total = cartItems.reduce((sum: number, item: any) => sum + (Number(item.price) * item.qty), 0);
+  const saleOwnerId = session.role === 'owner' ? session.id : session.ownerId!;
 
-  for (const item of cartItems) {
-    const inventory = await prisma.inventory.findUnique({
-      where: { id: item.id }
-    });
-
-    if (!inventory) throw new Error(`Item ${item.id} not found.`);
-    if (inventory.quantity < item.qty) {
-      throw new Error(`Insufficient stock for ${inventory.name}. Available: ${inventory.quantity}`);
+  // Re-check discountEnabled server-side — the staff UI already hides the
+  // discount option when it's off, but that's a client-side nicety, not a
+  // guarantee against a tampered request. Mirrors the same check in
+  // processScaleSaleAction.
+  const ownerRecord = await prisma.user.findUnique({
+    where: { id: saleOwnerId },
+    select: { discountEnabled: true },
+  });
+  if (!ownerRecord?.discountEnabled) {
+    for (const item of cartItems) {
+      delete item.discountValue;
+      delete item.discountType;
+      delete item.discountReason;
+      delete item.originalPrice;
     }
   }
 
+  const total = cartItems.reduce((sum: number, item: any) => sum + (Number(item.price) * item.qty), 0);
+
   const cleanName = buyerName?.trim();
   const cleanPhone = buyerPhone?.trim();
-
-  const saleOwnerId = session.role === 'owner' ? session.id : session.ownerId!;
   const saleStoreId = await getActiveStoreId();
 
-  await prisma.order.create({
-    data: {
-      total: total,
-      paymentMethod,
-      buyerName: cleanName || "Walk-in Customer",
-      buyerPhone: cleanPhone || null,
-      ownerId: saleOwnerId,
-      staffId: session.id,
-      storeId: saleStoreId,
-      items: {
-        create: cartItems.map((item: any) => ({
-          inventoryId: item.id,
-          quantity: item.qty,
-          priceAtTime: Number(item.price),
-          ...(item.discountValue
-            ? {
-                originalPrice: Number(item.originalPrice),
-                discountValue: Number(item.discountValue),
-                discountType: item.discountType ?? null,
-                discountReason: item.discountReason ?? null,
-              }
-            : {}),
-        }))
+  // Wrapped in a transaction with an optimistic-lock guard on each
+  // decrement, so two near-simultaneous sales can't both read the same
+  // stock level and jointly oversell past what's actually available.
+  await prisma.$transaction(async (tx) => {
+    const inventoryRows = await tx.inventory.findMany({ where: { id: { in: cartItems.map((i) => i.id) } } });
+
+    for (const item of cartItems) {
+      const inventory = inventoryRows.find((r) => r.id === item.id);
+      if (!inventory) throw new Error(`Item ${item.id} not found.`);
+      if (inventory.quantity < item.qty) {
+        throw new Error(`Insufficient stock for ${inventory.name}. Available: ${inventory.quantity}`);
+      }
+    }
+
+    await tx.order.create({
+      data: {
+        total: total,
+        paymentMethod,
+        buyerName: cleanName || "Walk-in Customer",
+        buyerPhone: cleanPhone || null,
+        ownerId: saleOwnerId,
+        staffId: session.id,
+        storeId: saleStoreId,
+        items: {
+          create: cartItems.map((item: any) => ({
+            inventoryId: item.id,
+            quantity: item.qty,
+            priceAtTime: Number(item.price),
+            ...(item.discountValue
+              ? {
+                  originalPrice: Number(item.originalPrice),
+                  discountValue: Number(item.discountValue),
+                  discountType: item.discountType ?? null,
+                  discountReason: item.discountReason ?? null,
+                }
+              : {}),
+          }))
+        }
+      }
+    });
+
+    for (const item of cartItems) {
+      const row = inventoryRows.find((r) => r.id === item.id)!;
+      const updateResult = await tx.inventory.updateMany({
+        where: { id: item.id, quantity: row.quantity },
+        data: { quantity: { decrement: item.qty } },
+      });
+      if (updateResult.count === 0) {
+        throw new Error(`${row.name} was just sold by another request — please try again.`);
       }
     }
   });
@@ -543,19 +575,10 @@ export async function processSaleAction(
   });
 
   for (const item of cartItems) {
-    const before = await prisma.inventory.findUnique({ where: { id: item.id } });
+    const updated = await prisma.inventory.findUnique({ where: { id: item.id } });
+    if (!updated) continue;
 
-    const updated = await prisma.inventory.update({
-      where: { id: item.id },
-      data: { quantity: { decrement: item.qty } }
-    });
-
-    if (
-      before &&
-      updated.restockLevel != null &&
-      before.quantity > updated.restockLevel &&
-      updated.quantity <= updated.restockLevel
-    ) {
+    if (updated.restockLevel != null && updated.quantity <= updated.restockLevel) {
       await createNotification({
         ownerId: updated.ownerId,
         recipientId: null,

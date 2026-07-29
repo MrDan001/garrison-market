@@ -275,6 +275,7 @@ export default async function OwnerDetailsPage({
               customPriceMaxNote={owner.customPriceMaxNote}
               customPriceUpdatedAt={owner.customPriceUpdatedAt ? owner.customPriceUpdatedAt.toISOString() : null}
               scaleConsignmentEnabled={owner.scaleConsignmentEnabled}
+              mergedCartEnabled={owner.mergedCartEnabled}
               maxPackageEnabled={owner.maxPackageEnabled}
             />
           </div>
