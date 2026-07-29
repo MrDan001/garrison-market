@@ -35,7 +35,7 @@ self.addEventListener('install', () => {
     const options = {
       body: payload.body || '',
       icon: '/icon-192x192.png',
-      badge: '/icon-192x192.png',
+      badge: '/badge-192x192.png',
       tag: payload.tag || 'garrison-market-notification',
       renotify: true,
       data: { link: payload.link || '/' },
