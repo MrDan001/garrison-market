@@ -81,34 +81,48 @@ export async function signOutConsignment(params: {
     }
   }
 
-  const consignment = await prisma.consignment.create({
-    data: {
-      ownerId,
-      staffId: session.id,
-      storeId: storeId ?? undefined,
-      recipientName: params.recipientName.trim(),
-      recipientPhone: params.recipientPhone.trim(),
-      recipientNote: params.recipientNote?.trim() || null,
-      status: "out",
-      items: {
-        create: params.items.map((item) => {
-          const inv = inventoryRows.find((r) => r.id === item.inventoryId)!;
-          return {
-            inventoryId: item.inventoryId,
-            quantityOut: item.quantityOut,
-            priceAtTime: inv.price,
-          };
-        }),
+  // Create the consignment and decrement stock together, atomically —
+  // previously these were two separate top-level calls, so a failed or
+  // interleaved decrement could leave a consignment recording more stock
+  // signed out than was actually deducted. Each decrement also re-checks
+  // the quantity we originally read (optimistic lock) so a concurrent
+  // sign-out of the same item can't push stock negative.
+  const consignment = await prisma.$transaction(async (tx) => {
+    const created = await tx.consignment.create({
+      data: {
+        ownerId,
+        staffId: session.id,
+        storeId: storeId ?? undefined,
+        recipientName: params.recipientName.trim(),
+        recipientPhone: params.recipientPhone.trim(),
+        recipientNote: params.recipientNote?.trim() || null,
+        status: "out",
+        items: {
+          create: params.items.map((item) => {
+            const inv = inventoryRows.find((r) => r.id === item.inventoryId)!;
+            return {
+              inventoryId: item.inventoryId,
+              quantityOut: item.quantityOut,
+              priceAtTime: inv.price,
+            };
+          }),
+        },
       },
-    },
-  });
-
-  for (const item of params.items) {
-    await prisma.inventory.update({
-      where: { id: item.inventoryId },
-      data: { quantity: { decrement: item.quantityOut } },
     });
-  }
+
+    for (const item of params.items) {
+      const inv = inventoryRows.find((r) => r.id === item.inventoryId)!;
+      const updateResult = await tx.inventory.updateMany({
+        where: { id: item.inventoryId, quantity: inv.quantity },
+        data: { quantity: { decrement: item.quantityOut } },
+      });
+      if (updateResult.count === 0) {
+        throw new Error(`${inv.name} stock changed before sign-out could complete — please try again.`);
+      }
+    }
+
+    return created;
+  });
 
   revalidatePath("/staff/consignment");
   revalidatePath("/owner/consignments");
@@ -182,47 +196,59 @@ export async function settleConsignment(
 
   const soldItems = settlements.filter((s) => s.quantitySold > 0);
 
-  if (soldItems.length > 0) {
-    await prisma.order.create({
-      data: {
-        total,
-        ownerId: consignment.ownerId,
-        staffId: consignment.staffId,
-        storeId: consignment.storeId,
-        consignmentId: consignment.id,
-        items: {
-          create: soldItems.map((s) => {
-            const item = consignment.items.find((i) => i.id === s.itemId)!;
-            return {
-              inventoryId: item.inventoryId,
-              quantity: s.quantitySold,
-              priceAtTime: item.priceAtTime,
-            };
-          }),
+  // Everything below runs in one transaction, and the status flip happens
+  // FIRST via an optimistic-lock updateMany (only succeeds if status is
+  // still "out"). Previously the "already settled" check above was a
+  // plain read followed by several separate writes — two near-simultaneous
+  // submits (e.g. a double-tap) could both pass that read before either
+  // committed, producing duplicate Orders and duplicate inventory returns.
+  // Locking the status first means only one concurrent call can proceed.
+  await prisma.$transaction(async (tx) => {
+    const lock = await tx.consignment.updateMany({
+      where: { id: consignmentId, status: "out" },
+      data: { status: "settled", settledAt: new Date() },
+    });
+    if (lock.count === 0) {
+      throw new Error("This consignment is already settled");
+    }
+
+    if (soldItems.length > 0) {
+      await tx.order.create({
+        data: {
+          total,
+          ownerId: consignment.ownerId,
+          staffId: consignment.staffId,
+          storeId: consignment.storeId,
+          consignmentId: consignment.id,
+          items: {
+            create: soldItems.map((s) => {
+              const item = consignment.items.find((i) => i.id === s.itemId)!;
+              return {
+                inventoryId: item.inventoryId,
+                quantity: s.quantitySold,
+                priceAtTime: item.priceAtTime,
+              };
+            }),
+          },
         },
-      },
-    });
-  }
-
-  for (const s of settlements) {
-    const item = consignment.items.find((i) => i.id === s.itemId)!;
-
-    await prisma.consignmentItem.update({
-      where: { id: s.itemId },
-      data: { quantitySold: s.quantitySold, quantityReturned: s.quantityReturned },
-    });
-
-    if (s.quantityReturned > 0) {
-      await prisma.inventory.update({
-        where: { id: item.inventoryId },
-        data: { quantity: { increment: s.quantityReturned } },
       });
     }
-  }
 
-  await prisma.consignment.update({
-    where: { id: consignmentId },
-    data: { status: "settled", settledAt: new Date() },
+    for (const s of settlements) {
+      const item = consignment.items.find((i) => i.id === s.itemId)!;
+
+      await tx.consignmentItem.update({
+        where: { id: s.itemId },
+        data: { quantitySold: s.quantitySold, quantityReturned: s.quantityReturned },
+      });
+
+      if (s.quantityReturned > 0) {
+        await tx.inventory.update({
+          where: { id: item.inventoryId },
+          data: { quantity: { increment: s.quantityReturned } },
+        });
+      }
+    }
   });
 
   // Same broadcast bug as the other notifications above: recipientId: null
@@ -358,32 +384,42 @@ export async function signOutScaleConsignment(params: {
     resolved.push({ item, baseQty, inv });
   }
 
-  const consignment = await prisma.consignment.create({
-    data: {
-      ownerId,
-      staffId: session.id,
-      storeId: activeStore.id,
-      recipientName: params.recipientName.trim(),
-      recipientPhone: params.recipientPhone.trim(),
-      recipientNote: params.recipientNote?.trim() || null,
-      status: "out",
-      scaleItems: {
-        create: resolved.map(({ item, baseQty, inv }) => ({
-          scaleInventoryId: item.scaleInventoryId,
-          quantityOut: baseQty,
-          unit: inv.unit,
-          priceAtTime: inv.price,
-        })),
+  // Create the consignment and decrement stock together, atomically — see
+  // the same fix in signOutConsignment above for why. Each decrement
+  // re-checks the quantity we originally read (optimistic lock).
+  const consignment = await prisma.$transaction(async (tx) => {
+    const created = await tx.consignment.create({
+      data: {
+        ownerId,
+        staffId: session.id,
+        storeId: activeStore.id,
+        recipientName: params.recipientName.trim(),
+        recipientPhone: params.recipientPhone.trim(),
+        recipientNote: params.recipientNote?.trim() || null,
+        status: "out",
+        scaleItems: {
+          create: resolved.map(({ item, baseQty, inv }) => ({
+            scaleInventoryId: item.scaleInventoryId,
+            quantityOut: baseQty,
+            unit: inv.unit,
+            priceAtTime: inv.price,
+          })),
+        },
       },
-    },
-  });
-
-  for (const { item, baseQty } of resolved) {
-    await prisma.scaleInventory.update({
-      where: { id: item.scaleInventoryId },
-      data: { quantity: { decrement: baseQty } },
     });
-  }
+
+    for (const { item, baseQty, inv } of resolved) {
+      const updateResult = await tx.scaleInventory.updateMany({
+        where: { id: item.scaleInventoryId, quantity: inv.quantity },
+        data: { quantity: { decrement: baseQty } },
+      });
+      if (updateResult.count === 0) {
+        throw new Error(`${inv.name} stock changed before sign-out could complete — please try again.`);
+      }
+    }
+
+    return created;
+  });
 
   revalidatePath("/staff/consignment");
   revalidatePath("/owner/consignments");
@@ -476,49 +512,59 @@ export async function settleScaleConsignment(
 
   const soldItems = settlements.filter((s) => s.quantitySold > 0);
 
-  if (soldItems.length > 0) {
-    await prisma.order.create({
-      data: {
-        total,
-        ownerId: consignment.ownerId,
-        staffId: consignment.staffId,
-        storeId: consignment.storeId,
-        consignmentId: consignment.id,
-        scaleItems: {
-          create: soldItems.map((s) => {
-            const item = consignment.scaleItems.find((i) => i.id === s.itemId)!;
-            return {
-              scaleInventoryId: item.scaleInventoryId,
-              quantity: s.quantitySold,
-              unit: item.unit,
-              quantityInBaseUnit: s.quantitySold,
-              priceAtTime: Number(item.priceAtTime) * s.quantitySold,
-            };
-          }),
+  // Everything below runs in one transaction, and the status flip happens
+  // FIRST via an optimistic-lock updateMany (only succeeds if status is
+  // still "out") — same fix as settleConsignment above, closing the
+  // double-submit race where two near-simultaneous settle calls could
+  // both pass the earlier status read before either committed.
+  await prisma.$transaction(async (tx) => {
+    const lock = await tx.consignment.updateMany({
+      where: { id: consignmentId, status: "out" },
+      data: { status: "settled", settledAt: new Date() },
+    });
+    if (lock.count === 0) {
+      throw new Error("This consignment is already settled");
+    }
+
+    if (soldItems.length > 0) {
+      await tx.order.create({
+        data: {
+          total,
+          ownerId: consignment.ownerId,
+          staffId: consignment.staffId,
+          storeId: consignment.storeId,
+          consignmentId: consignment.id,
+          scaleItems: {
+            create: soldItems.map((s) => {
+              const item = consignment.scaleItems.find((i) => i.id === s.itemId)!;
+              return {
+                scaleInventoryId: item.scaleInventoryId,
+                quantity: s.quantitySold,
+                unit: item.unit,
+                quantityInBaseUnit: s.quantitySold,
+                priceAtTime: Number(item.priceAtTime) * s.quantitySold,
+              };
+            }),
+          },
         },
-      },
-    });
-  }
-
-  for (const s of settlements) {
-    const item = consignment.scaleItems.find((i) => i.id === s.itemId)!;
-
-    await prisma.scaleConsignmentItem.update({
-      where: { id: s.itemId },
-      data: { quantitySold: s.quantitySold, quantityReturned: s.quantityReturned },
-    });
-
-    if (s.quantityReturned > 0) {
-      await prisma.scaleInventory.update({
-        where: { id: item.scaleInventoryId },
-        data: { quantity: { increment: s.quantityReturned } },
       });
     }
-  }
 
-  await prisma.consignment.update({
-    where: { id: consignmentId },
-    data: { status: "settled", settledAt: new Date() },
+    for (const s of settlements) {
+      const item = consignment.scaleItems.find((i) => i.id === s.itemId)!;
+
+      await tx.scaleConsignmentItem.update({
+        where: { id: s.itemId },
+        data: { quantitySold: s.quantitySold, quantityReturned: s.quantityReturned },
+      });
+
+      if (s.quantityReturned > 0) {
+        await tx.scaleInventory.update({
+          where: { id: item.scaleInventoryId },
+          data: { quantity: { increment: s.quantityReturned } },
+        });
+      }
+    }
   });
 
   // Same broadcast bug as the other notifications above: recipientId: null
@@ -693,6 +739,22 @@ export async function ownerSignOutScaleToStaffAction(params: {
       include: { scaleItems: true },
     });
 
+    // Decrement stock in the SAME transaction as the create/top-up below —
+    // previously this ran as a separate step after the transaction
+    // committed, so a failed decrement could leave a consignment recording
+    // more stock signed out than was actually deducted. Optimistic lock on
+    // the quantity we originally read guards against a concurrent sign-out
+    // of the same item.
+    for (const { item, baseQty, inv } of resolved) {
+      const updateResult = await tx.scaleInventory.updateMany({
+        where: { id: item.scaleInventoryId, quantity: inv.quantity },
+        data: { quantity: { decrement: baseQty } },
+      });
+      if (updateResult.count === 0) {
+        throw new Error(`${inv.name} stock changed before sign-out could complete — please try again.`);
+      }
+    }
+
     if (existing) {
       for (const { item, baseQty, inv } of resolved) {
         const existingLine = existing.scaleItems.find((si) => si.scaleInventoryId === item.scaleInventoryId);
@@ -737,13 +799,6 @@ export async function ownerSignOutScaleToStaffAction(params: {
     });
   });
 
-  for (const { item, baseQty } of resolved) {
-    await prisma.scaleInventory.update({
-      where: { id: item.scaleInventoryId },
-      data: { quantity: { decrement: baseQty } },
-    });
-  }
-
   await createNotification({
     ownerId: session.id,
     recipientId: isAllStaff ? null : staff!.id,
@@ -784,7 +839,8 @@ export async function sellFromScaleConsignmentAction(
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
 
-  const ownerId = session.role === "owner" ? session.id : session.ownerId!;
+  const ownerId = session.role === "owner" ? session.id : session.ownerId;
+  if (!ownerId) throw new Error("No owner scope found for this account");
   await assertSubscriptionActive(ownerId);
 
   if (cartItems.length === 0) throw new Error("Cart is empty");
@@ -816,7 +872,7 @@ export async function sellFromScaleConsignmentAction(
       const baseQty = convertToBaseUnit(cart.enteredQty, cart.enteredUnit, row.unit);
       if (baseQty <= 0) throw new Error(`Invalid quantity for ${row.scaleInventory?.name}.`);
 
-      const remaining = Number(row.quantityOut) - Number(row.quantitySold);
+      const remaining = Number(row.quantityOut) - Number(row.quantitySold) - Number(row.quantityWasted ?? 0);
       if (baseQty > remaining) {
         throw new Error(`Only ${remaining}${row.unit} of ${row.scaleInventory?.name} left to sell today.`);
       }
@@ -941,7 +997,8 @@ export async function processMergedSaleAction(
   if (!session) throw new Error("Unauthorized");
   if (listCartItems.length === 0 && scaleCartItems.length === 0) throw new Error("Cart is empty");
 
-  const ownerId = session.role === "owner" ? session.id : session.ownerId!;
+  const ownerId = session.role === "owner" ? session.id : session.ownerId;
+  if (!ownerId) throw new Error("No owner scope found for this account");
   await assertSubscriptionActive(ownerId);
 
   const owner = await prisma.user.findUnique({
@@ -1156,7 +1213,15 @@ export async function processMergedSaleAction(
 // day out: whatever's left (quantityOut - quantitySold) goes back onto
 // ScaleInventory, and the consignment is marked settled. No new Order is
 // created (those were already created at time of sale).
-export async function autoSettleScaleConsignment(consignmentId: number, source: "manual" | "midnight" = "manual") {
+//
+// NOT exported: this does the actual settlement with no session/ownership
+// check of its own, so it must only ever be reached through one of the two
+// narrow, purpose-built entry points below — ownerReconcileScaleConsignmentAction
+// (owner-authed) or autoSettleScaleConsignmentForCron (only ever called from
+// the CRON_SECRET-protected midnight route). Keeping it unexported means
+// nothing else in the codebase can import and call it directly with an
+// arbitrary consignmentId.
+async function settleScaleConsignmentCore(consignmentId: number, source: "manual" | "midnight" = "manual") {
   const consignment = await prisma.consignment.findUnique({
     where: { id: consignmentId },
     include: {
@@ -1225,7 +1290,17 @@ export async function ownerReconcileScaleConsignmentAction(consignmentId: number
   });
   if (!consignment || consignment.ownerId !== session.id) throw new Error("Not found");
 
-  return autoSettleScaleConsignment(consignmentId, "manual");
+  return settleScaleConsignmentCore(consignmentId, "manual");
+}
+
+// Cron-only entry point — called exclusively from runMidnightScaleConsignmentReset,
+// which is itself only reachable via the CRON_SECRET-protected route at
+// app/api/cron/scale-consignment-reset/route.ts. There's no user session at
+// midnight, so this can't check a session the way ownerReconcileScaleConsignmentAction
+// does; the narrow name and scope (vs. the old generic autoSettleScaleConsignment)
+// make it much harder to accidentally reach from anywhere else.
+export async function autoSettleScaleConsignmentForCron(consignmentId: number) {
+  return settleScaleConsignmentCore(consignmentId, "midnight");
 }
 
 export async function getScaleConsignmentsForOwner(storeId?: number) {

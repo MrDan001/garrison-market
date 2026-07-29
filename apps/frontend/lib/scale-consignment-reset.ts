@@ -1,7 +1,7 @@
 // FILE: apps/frontend/lib/scale-consignment-reset.ts
 
 import prisma from "@/lib/prisma";
-import { autoSettleScaleConsignment } from "@/lib/consignment.actions";
+import { autoSettleScaleConsignmentForCron } from "@/lib/consignment.actions";
 
 // Runs once a day (see app/api/cron/scale-consignment-reset/route.ts).
 // Only touches consignments on STANDARD stores (the override-created kind)
@@ -24,7 +24,7 @@ export async function runMidnightScaleConsignmentReset() {
 
   for (const c of openConsignments) {
     try {
-      await autoSettleScaleConsignment(c.id, "midnight");
+      await autoSettleScaleConsignmentForCron(c.id);
       results.push({ id: c.id, success: true });
     } catch (err: any) {
       results.push({ id: c.id, success: false, error: err?.message || "Unknown error" });
