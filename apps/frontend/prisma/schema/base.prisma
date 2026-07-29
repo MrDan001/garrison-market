@@ -69,6 +69,7 @@ model User {
   ownerNotifications     Notification[] @relation("OwnerNotifications")
   recipientNotifications Notification[] @relation("RecipientNotifications")
   notificationReads      NotificationRead[]
+  pushSubscriptions      PushSubscription[]
   supportOwnerScope      SupportMessage[] @relation("SupportOwnerScope")
   supportSent            SupportMessage[] @relation("SupportSender")
 
@@ -333,6 +334,25 @@ model NotificationRead {
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([notificationId, userId])
+  @@index([userId])
+}
+
+// One row per browser/device the user has granted push permission on
+// (a phone and a laptop both get their own row). endpoint is unique
+// because the browser's push service issues one per subscription — if
+// the same device re-subscribes (e.g. after clearing site data) we
+// upsert on endpoint rather than accumulating dead rows.
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Download, CheckCircle2, Bell, BellOff, BellRing } from "lucide-react";
+import { Download, CheckCircle2, Bell, BellOff, BellRing, Loader2 } from "lucide-react";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export function InstallAppCard() {
   const { isInstallable, isInstalled, checked, install } = usePwaInstall();
@@ -54,46 +54,42 @@ export function InstallAppCard() {
 }
 
 export function PushNotificationCard() {
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
+  const { isSupported, checked, permission, subscribed, busy, subscribe, unsubscribe } = usePushNotifications();
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      setPermission("unsupported");
-      return;
-    }
-    setPermission(Notification.permission);
-  }, []);
+  if (!checked) return null;
+  if (!isSupported || permission === "unsupported") return null;
 
-  const requestPermission = async () => {
-    if (!("Notification" in window)) return;
-    const result = await Notification.requestPermission();
-    setPermission(result);
-  };
-
-  if (permission === "unsupported") return null;
+  const isLiveAndEnabled = permission === "granted" && subscribed;
 
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[var(--bg-surface)] p-4">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-0.5">Push Notifications</h3>
-          <p className="text-[12px] text-slate-500">Get real-time notifications on your device</p>
+          <p className="text-[12px] text-slate-500">
+            Get notified instantly — even when the app is closed, just like a native app
+          </p>
         </div>
 
-        {permission === "granted" ? (
-          <span className="shrink-0 flex items-center gap-1.5 text-[12px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
-            <BellRing size={14} /> Enabled
-          </span>
+        {isLiveAndEnabled ? (
+          <button
+            onClick={unsubscribe}
+            disabled={busy}
+            className="shrink-0 flex items-center gap-1.5 text-[12px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 rounded-xl px-3 py-2 transition-colors disabled:opacity-60"
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <BellRing size={14} />} Enabled
+          </button>
         ) : permission === "denied" ? (
           <span className="shrink-0 flex items-center gap-1.5 text-[12px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2">
             <BellOff size={14} /> Blocked
           </span>
         ) : (
           <button
-            onClick={requestPermission}
-            className="shrink-0 flex items-center gap-1.5 text-[12px] font-semibold text-slate-800 dark:text-slate-200 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 rounded-xl px-3 py-2 transition-colors"
+            onClick={subscribe}
+            disabled={busy}
+            className="shrink-0 flex items-center gap-1.5 text-[12px] font-semibold text-slate-800 dark:text-slate-200 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 rounded-xl px-3 py-2 transition-colors disabled:opacity-60"
           >
-            <Bell size={14} /> Enable Notifications
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Bell size={14} />} Enable Notifications
           </button>
         )}
       </div>

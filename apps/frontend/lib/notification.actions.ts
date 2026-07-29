@@ -3,8 +3,24 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { sendPushToUsers } from "@/lib/push";
 
 type NotificationType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock" | "wastage_submitted" | "wastage_status";
+
+// Mirrors the labels in NotificationBell's typeConfig — kept as plain
+// text here (no icons/JSX) since this file runs on the server and
+// feeds a native OS notification title, not the in-app dropdown.
+const PUSH_TITLES: Record<NotificationType, string> = {
+  report_status: "Report Update",
+  low_stock: "Stock Alert",
+  new_item: "New Item",
+  announcement: "Announcement",
+  sale_made: "Sale Made",
+  report_submitted: "Report Submitted",
+  restock: "Restocked",
+  wastage_submitted: "Wastage Logged",
+  wastage_status: "Wastage Update",
+};
 
 export async function createNotification(params: {
   ownerId: number;
@@ -23,6 +39,47 @@ export async function createNotification(params: {
       message: params.message,
       link: params.link ?? null,
     },
+  });
+
+  // Fire the native/OS-level push in the background — never let a slow
+  // or failed push send delay or break the caller's action (a sale,
+  // a report submission, etc). This is what makes notifications show
+  // up even when the app is closed or backgrounded, same as a native
+  // app; the in-app bell (polling) keeps working independently of this.
+  void deliverPush(params).catch((err) => {
+    console.error("[push] deliverPush failed", err);
+  });
+}
+
+async function deliverPush(params: {
+  ownerId: number;
+  recipientId?: number | null;
+  type: NotificationType;
+  message: string;
+  link?: string;
+}) {
+  let recipientUserIds: number[];
+
+  if (params.recipientId) {
+    recipientUserIds = [params.recipientId];
+  } else {
+    // recipientId: null means "everyone under this owner" — the owner
+    // themself plus every staff member scoped to them, same audience
+    // the in-app bell resolves in getNotificationsForStaff.
+    const audience = await prisma.user.findMany({
+      where: { OR: [{ id: params.ownerId }, { ownerId: params.ownerId }] },
+      select: { id: true },
+    });
+    recipientUserIds = audience.map((u) => u.id);
+  }
+
+  if (recipientUserIds.length === 0) return;
+
+  await sendPushToUsers(recipientUserIds, {
+    title: PUSH_TITLES[params.type] ?? "Garrison Market",
+    body: params.message,
+    link: params.link ?? null,
+    tag: params.type,
   });
 }
 

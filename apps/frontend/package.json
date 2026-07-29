@@ -18,7 +18,8 @@
     "react-dom": "^19.0.0",
     "react-is": "^19.2.7",
     "recharts": "^3.9.0",
-    "resend": "^4.0.1"
+    "resend": "^4.0.1",
+    "web-push": "^3.6.7"
   },
   "scripts": {
     "dev": "next dev",
@@ -26,6 +27,7 @@
     "start": "next start",
     "lint": "next lint",
     "seed-db": "tsx prisma/seed.ts",
+    "generate-vapid-keys": "tsx scripts/generate-vapid-keys.ts",
     "postinstall": "prisma generate"
   },
   "devDependencies": {
@@ -35,6 +37,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.5.0",
     "postcss": "^8.5.15",
     "prisma": "^7.8.0",
