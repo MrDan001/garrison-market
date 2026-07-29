@@ -138,6 +138,8 @@ model User {
   consignmentsOwned   Consignment[] @relation("OwnerConsignments")
   consignmentsStaffed Consignment[] @relation("StaffConsignments")
 
+  customers      Customer[] @relation("OwnerCustomers")
+
   // --- Scale (weight/volume) inventory relations ---
   scaleInventory        ScaleInventory[]
   scaleWastageOwned     ScaleWastage[]   @relation("ScaleWastageOwner")
@@ -176,6 +178,7 @@ model Store {
   consignments  Consignment[]
   staff         User[]         @relation("StoreStaff")
   notifications Notification[]
+  customers     Customer[]
 
   scaleInventory ScaleInventory[]
   scaleWastage   ScaleWastage[]
@@ -269,9 +272,21 @@ model Order {
   consignmentId Int?
   consignment   Consignment?  @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
 
+  // Set only when the staff member picked (or matched into) an existing
+  // customer profile at checkout — see resolveOrCreateCustomer in
+  // customer.actions.ts. Free-text buyerName/buyerPhone above still get
+  // written on every order regardless (that's what the invoice/receipt
+  // reads from); customerId is what lets the owner's Customers page roll
+  // orders up into a running per-customer total. Orders placed before this
+  // feature existed, or where staff left the fields blank, simply have no
+  // customerId and are invisible to that ranking — nothing to backfill.
+  customerId    Int?
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
   @@index([ownerId, date])
   @@index([storeId, date])
   @@index([staffId, date])
+  @@index([customerId, date])
 }
 
 model OrderItem {
@@ -289,6 +304,49 @@ model OrderItem {
 
   @@index([orderId])
   @@index([inventoryId])
+}
+
+// A per-store customer profile — the thing the owner's Customers page ranks
+// by total spend. Deliberately scoped to ONE store (not the owner as a
+// whole): an owner running several shops gets a separate customer list and
+// ranking per shop, same as the rest of the app scopes inventory/orders/
+// reports. Two different stores can have a customer with the same phone
+// number and that's two unrelated rows here — there's no cross-store
+// identity merging.
+//
+// Created lazily the first time a staff member matches or types a new
+// name+phone at checkout (see resolveOrCreateCustomer in
+// customer.actions.ts) — nothing is backfilled from historical orders, so
+// an owner's ranking simply starts accumulating from whenever they (or
+// their staff) first use the picker.
+//
+// totalSpent is NOT stored here — it's intentionally left as a derived
+// number, computed on the fly from linked Order rows only when the owner
+// opens the Customers page (see getCustomersForOwner). That keeps it
+// consistent with the "auto-update only happens on the owner Customers
+// page" requirement: nothing about a sale's running total is written,
+// shown, or pushed anywhere else the moment a staff member checks out.
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String
+  ownerId   Int
+  storeId   Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner     User     @relation("OwnerCustomers", fields: [ownerId], references: [id], onDelete: Cascade)
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders    Order[]
+
+  // Phone is the real identity key within a store — name is editable/
+  // re-typeable and can vary sale to sale, phone is what checkout matches
+  // on. Blank-phone walk-ins never create a Customer row at all (see
+  // resolveOrCreateCustomer), so this uniqueness constraint is never
+  // tested against empty strings.
+  @@unique([storeId, phone])
+  @@index([ownerId])
+  @@index([storeId, name])
 }
 
 model Notification {

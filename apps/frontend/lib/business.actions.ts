@@ -8,6 +8,7 @@ import { getSessionUser } from "./auth.actions";
 import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { createNotification } from "./notification.actions";
+import { resolveOrCreateCustomer } from "./customer.actions";
 import { getActiveStoreId } from "./store-context";
 import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
 
@@ -518,6 +519,16 @@ export async function processSaleAction(
   const cleanPhone = buyerPhone?.trim();
   const saleStoreId = await getActiveStoreId();
 
+  // Resolved outside the stock transaction below — it's an identity
+  // lookup/write, not an inventory mutation, so it doesn't need the same
+  // optimistic-lock protection the stock decrements do.
+  const customerId = await resolveOrCreateCustomer({
+    ownerId: saleOwnerId,
+    storeId: saleStoreId,
+    name: cleanName,
+    phone: cleanPhone,
+  });
+
   // Wrapped in a transaction with an optimistic-lock guard on each
   // decrement, so two near-simultaneous sales can't both read the same
   // stock level and jointly oversell past what's actually available.
@@ -541,6 +552,7 @@ export async function processSaleAction(
         ownerId: saleOwnerId,
         staffId: session.id,
         storeId: saleStoreId,
+        customerId,
         items: {
           create: cartItems.map((item: any) => ({
             inventoryId: item.id,

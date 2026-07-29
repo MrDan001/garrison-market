@@ -22,6 +22,18 @@ const PUSH_TITLES: Record<NotificationType, string> = {
   wastage_status: "Wastage Update",
 };
 
+// These types are always broadcast (recipientId: null) from an action the
+// OWNER themselves just took — sending an announcement, signing stock out
+// to staff, adding an item, or crossing back above the restock level. The
+// owner already knows they just did it, so unlike other broadcasts (e.g.
+// sale_made, low_stock — which staff trigger and the owner genuinely needs
+// to hear about) these are staff-facing only and must never reach the
+// owner's own bell or push. This only applies when recipientId is null
+// (a true broadcast) — an "announcement" targeted at the owner specifically
+// via recipientId (e.g. a settled consignment) is unaffected and still
+// shows normally.
+const STAFF_ONLY_BROADCAST_TYPES: NotificationType[] = ["announcement", "new_item", "restock"];
+
 export async function createNotification(params: {
   ownerId: number;
   recipientId?: number | null;
@@ -71,6 +83,12 @@ async function deliverPush(params: {
       select: { id: true },
     });
     recipientUserIds = audience.map((u) => u.id);
+
+    // Staff-only broadcasts (see STAFF_ONLY_BROADCAST_TYPES above) never
+    // push to the owner — they're the one who triggered it.
+    if (STAFF_ONLY_BROADCAST_TYPES.includes(params.type)) {
+      recipientUserIds = recipientUserIds.filter((id) => id !== params.ownerId);
+    }
   }
 
   if (recipientUserIds.length === 0) return;
@@ -89,10 +107,20 @@ export async function getNotificationsForStaff() {
 
   const ownerScopeId = session.ownerId ?? session.id;
 
+  // The owner viewing their own bell (as opposed to a staff member scoped
+  // to them) must not see broadcasts they triggered themselves — see
+  // STAFF_ONLY_BROADCAST_TYPES above. Staff members still see everything.
+  const isOwnerViewer = session.id === ownerScopeId;
+
   const notifications = await prisma.notification.findMany({
     where: {
       ownerId: ownerScopeId,
-      OR: [{ recipientId: session.id }, { recipientId: null }],
+      OR: isOwnerViewer
+        ? [
+            { recipientId: session.id },
+            { recipientId: null, type: { notIn: STAFF_ONLY_BROADCAST_TYPES } },
+          ]
+        : [{ recipientId: session.id }, { recipientId: null }],
     },
     orderBy: { createdAt: "desc" },
     take: 20,
@@ -122,11 +150,17 @@ export async function markAllNotificationsRead() {
   if (!session) throw new Error("Unauthorized");
 
   const ownerScopeId = session.ownerId ?? session.id;
+  const isOwnerViewer = session.id === ownerScopeId;
 
   const visible = await prisma.notification.findMany({
     where: {
       ownerId: ownerScopeId,
-      OR: [{ recipientId: session.id }, { recipientId: null }],
+      OR: isOwnerViewer
+        ? [
+            { recipientId: session.id },
+            { recipientId: null, type: { notIn: STAFF_ONLY_BROADCAST_TYPES } },
+          ]
+        : [{ recipientId: session.id }, { recipientId: null }],
     },
     select: { id: true },
   });

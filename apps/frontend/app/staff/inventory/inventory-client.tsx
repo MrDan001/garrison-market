@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { processSaleAction } from "@/lib/business.actions";
+import CustomerFields from "@/components/CustomerFields";
 
 interface InventoryItem {
   id: number;
@@ -612,22 +613,12 @@ export default function InventoryClient({
             {/* Customer Details Fields */}
             <div className="mb-5 space-y-3">
               <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Customer Details (Optional)</p>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Customer Name"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-                <input
-                  type="tel"
-                  placeholder="Phone Number"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
+              <CustomerFields
+                name={customerName}
+                phone={customerPhone}
+                onNameChange={setCustomerName}
+                onPhoneChange={setCustomerPhone}
+              />
             </div>
 
             <div className="mb-4">

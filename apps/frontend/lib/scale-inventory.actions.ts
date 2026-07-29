@@ -6,6 +6,7 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "./auth.actions";
 import { createNotification } from "./notification.actions";
+import { resolveOrCreateCustomer } from "./customer.actions";
 import { getActiveStore } from "./store-context";
 import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
 import { convertToBaseUnit } from "./scale-units";
@@ -334,6 +335,13 @@ export async function processScaleSaleAction(
   const cleanPhone = buyerPhone?.trim();
   const saleStoreId = activeStore.id;
 
+  const customerId = await resolveOrCreateCustomer({
+    ownerId: saleOwnerId,
+    storeId: saleStoreId,
+    name: cleanName,
+    phone: cleanPhone,
+  });
+
   await prisma.order.create({
     data: {
       total,
@@ -343,6 +351,7 @@ export async function processScaleSaleAction(
       ownerId: saleOwnerId,
       staffId: session.id,
       storeId: saleStoreId,
+      customerId,
       scaleItems: {
         create: resolved.map(({ item, baseQty, inventory }) => ({
           scaleInventoryId: item.id,

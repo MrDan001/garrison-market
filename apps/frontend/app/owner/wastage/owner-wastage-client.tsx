@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Scale as ScaleIcon, Clock, CheckCircle2, XCircle, TrendingDown, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Scale as ScaleIcon, Clock, CheckCircle2, XCircle, TrendingDown, ChevronDown, ChevronUp, Printer } from "lucide-react";
 import { approveWastageAction, declineWastageAction } from "@/lib/scale-wastage.actions";
 import { WASTAGE_REASON_LABELS } from "@/lib/wastage-constants";
 
@@ -46,6 +46,64 @@ export default function OwnerWastageClient({ data }: { data: any }) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const handlePrint = (bucket: any) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Wastage Report - ${bucket.month}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #1e293b; }
+            h1 { font-size: 18px; margin-bottom: 4px; }
+            p { font-size: 12px; color: #64748b; margin-top: 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; font-size: 12px; }
+            th { background-color: #f1f5f9; font-weight: bold; }
+            .total { margin-top: 15px; font-weight: bold; font-size: 14px; text-align: right; }
+          </style>
+        </head>
+        <body>
+          <h1>Wastage Report: ${bucket.month}</h1>
+          <p>Generated on ${new Date().toLocaleDateString()}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Item Name</th>
+                <th>Reason</th>
+                <th>Quantity</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${bucket.entries
+                .map(
+                  (entry: any) => `
+                <tr>
+                  <td>${entry.scaleInventory.name}</td>
+                  <td>${WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason}</td>
+                  <td>${entry.quantity}${entry.unit}</td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
+          <div class="total">
+            Total Value Lost: ₦${bucket.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </div>
+          <script>
+            window.onload = function() { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   return (
@@ -165,13 +223,22 @@ export default function OwnerWastageClient({ data }: { data: any }) {
                   {openMonth === bucket.key ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
                 </button>
                 {openMonth === bucket.key && (
-                  <div className="border-t border-slate-200 dark:border-slate-800 p-3 space-y-1.5">
-                    {bucket.entries.map((entry: any) => (
-                      <div key={entry.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
-                        <span>{entry.scaleInventory.name} — {WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason}</span>
-                        <span>{entry.quantity}{entry.unit}</span>
-                      </div>
-                    ))}
+                  <div className="border-t border-slate-200 dark:border-slate-800 p-3 space-y-3">
+                    <div className="space-y-1.5">
+                      {bucket.entries.map((entry: any) => (
+                        <div key={entry.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                          <span>{entry.scaleInventory.name} — {WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason}</span>
+                          <span>{entry.quantity}{entry.unit}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => handlePrint(bucket)}
+                      className="w-full py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 hover:dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Printer size={13} /> Print {bucket.month} Report
+                    </button>
                   </div>
                 )}
               </div>

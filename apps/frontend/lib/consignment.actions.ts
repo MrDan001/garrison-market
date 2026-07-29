@@ -829,15 +829,32 @@ export async function sellFromScaleConsignmentAction(
     // staff's "active store" cookie currently says.
     const saleStoreId = resolved[0].row.consignment.storeId;
 
+    // Resolved via tx (not the resolveOrCreateCustomer helper, which uses
+    // the standalone prisma client) since saleStoreId is only known once
+    // we're inside the transaction and reading the consignment row above.
+    const cleanName = buyerName?.trim();
+    const cleanPhone = buyerPhone?.trim();
+    let customerId: number | null = null;
+    if (cleanPhone && saleStoreId) {
+      const customer = await tx.customer.upsert({
+        where: { storeId_phone: { storeId: saleStoreId, phone: cleanPhone } },
+        update: cleanName ? { name: cleanName } : {},
+        create: { ownerId, storeId: saleStoreId, phone: cleanPhone, name: cleanName || "Customer" },
+        select: { id: true },
+      });
+      customerId = customer.id;
+    }
+
     await tx.order.create({
       data: {
         total,
         paymentMethod,
-        buyerName: buyerName?.trim() || "Walk-in Customer",
-        buyerPhone: buyerPhone?.trim() || null,
+        buyerName: cleanName || "Walk-in Customer",
+        buyerPhone: cleanPhone || null,
         ownerId,
         staffId: session.id,
         storeId: saleStoreId,
+        customerId,
         scaleItems: {
           create: resolved.map(({ cart, baseQty, row }) => ({
             scaleInventoryId: row.scaleInventoryId,
@@ -1004,15 +1021,32 @@ export async function processMergedSaleAction(
     // should normally agree for a merged-mode staff member).
     const saleStoreId = activeStoreId ?? resolvedScale[0]?.row.consignment.storeId ?? null;
 
+    // Same inline pattern as sellFromScaleConsignmentAction — saleStoreId
+    // is only settled once we're inside the transaction, so this uses tx
+    // directly rather than the resolveOrCreateCustomer helper.
+    const cleanName = buyerName?.trim();
+    const cleanPhone = buyerPhone?.trim();
+    let customerId: number | null = null;
+    if (cleanPhone && saleStoreId) {
+      const customer = await tx.customer.upsert({
+        where: { storeId_phone: { storeId: saleStoreId, phone: cleanPhone } },
+        update: cleanName ? { name: cleanName } : {},
+        create: { ownerId, storeId: saleStoreId, phone: cleanPhone, name: cleanName || "Customer" },
+        select: { id: true },
+      });
+      customerId = customer.id;
+    }
+
     await tx.order.create({
       data: {
         total,
         paymentMethod,
-        buyerName: buyerName?.trim() || "Walk-in Customer",
-        buyerPhone: buyerPhone?.trim() || null,
+        buyerName: cleanName || "Walk-in Customer",
+        buyerPhone: cleanPhone || null,
         ownerId,
         staffId: session.id,
         storeId: saleStoreId,
+        customerId,
         items: {
           create: resolvedList.map(({ cart }) => ({
             inventoryId: cart.id,
