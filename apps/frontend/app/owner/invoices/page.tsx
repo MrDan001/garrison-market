@@ -1,3 +1,5 @@
+// FILE: app/owner/invoices/page.tsx (or your frontend invoices page)
+
 "use client"; 
 
 import { useState, useEffect, use } from "react";
@@ -16,13 +18,13 @@ interface OrderItemType {
   priceAtTime: any;
   inventory: {
     name: string;
-  };
+  } | null;
 }
 
 interface OrderType {
   id: number;
   total: any;
-  calculatedTotal: any; // ← NEW: Calculated from merged items
+  calculatedTotal: any; 
   date: string; 
   ownerId: number;
   staffId: number | null;
@@ -44,8 +46,6 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
   const [allOrders, setAllOrders] = useState<OrderType[]>([]);
   const [loading, setLoading] = useState(true);
   const [merchantName, setMerchantName] = useState("Store Owner");
-  
-  // 🌟 Added search query state tracker
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -54,7 +54,14 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
         const res = await fetch("/api/invoices"); 
         if (res.ok) {
           const payload = await res.json();
-          setAllOrders(payload.orders || []);
+          
+          // Map API response to inject calculatedTotal from order.total if missing
+          const formattedOrders = (payload.orders || []).map((o: any) => ({
+            ...o,
+            calculatedTotal: o.total, // Fixes missing calculatedTotal property
+          }));
+
+          setAllOrders(formattedOrders);
           if (payload.merchantName) setMerchantName(payload.merchantName);
         }
       } catch (err) {
@@ -66,7 +73,6 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
     fetchInvoiceHistory();
   }, []);
 
-  // 🌟 Filters past invoices by Reference ID number OR Staff Member Name
   const filteredOrders = allOrders.filter((order) => {
     const matchesId = `inv-#${order.id}`.toLowerCase().includes(searchQuery.toLowerCase()) || 
                       order.id.toString().includes(searchQuery);
@@ -76,7 +82,6 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
     return matchesId || matchesStaff || isOwnerSale;
   });
 
-  // Display the active selected invoice, or fall back to the first match in the filtered queue
   const selectedOrder = activeInvoiceId 
     ? allOrders.find((o: OrderType) => o.id === activeInvoiceId)
     : (filteredOrders.length > 0 ? filteredOrders[0] : null); 
@@ -90,7 +95,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
         (item) => `${item.inventory?.name || "Item"} x${item.quantity} — ₦${(Number(item.priceAtTime) * item.quantity).toLocaleString()}`
       ),
       "",
-      `*Total: ₦${Number(order.calculatedTotal).toLocaleString()}*`,
+      `*Total: ₦${Number(order.calculatedTotal || order.total).toLocaleString()}*`,
       "",
       `Thank you for shopping with us!`,
     ];
@@ -111,7 +116,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 p-4 sm:p-8 print:p-0">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 print:block">
         
-        {/* LEFT COLUMN: History Queue (Hidden on Print Mode) */}
+        {/* LEFT COLUMN: History Queue */}
         <div className="lg:col-span-1 space-y-4 print:hidden">
           <Link href="/owner/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-[var(--text-primary)] mb-4 w-fit transition-colors text-sm">
             <ArrowLeft size={16} /> Dashboard
@@ -128,7 +133,6 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
             <BarChart3 size={13} /> Daily / Monthly Sales Summary
           </Link>
 
-          {/* 🌟 Interactive Search Filter Input Box */}
           <div className="relative w-full mb-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
             <input
@@ -149,6 +153,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
             ) : (
               filteredOrders.map((order: OrderType) => {
                 const isActive = selectedOrder?.id === order.id;
+                const orderTotal = Number(order.calculatedTotal || order.total || 0);
                 return (
                   <Link
                     key={order.id}
@@ -170,7 +175,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                         <p className="text-[11px] text-slate-500 uppercase tracking-wide leading-none">Processed by</p>
                         <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">{order.staff?.fullName || "Owner"}</p>
                       </div>
-                      <p className="text-sm font-bold text-blue-400">₦{Number(order.calculatedTotal).toLocaleString()}</p>
+                      <p className="text-sm font-bold text-blue-400">₦{orderTotal.toLocaleString()}</p>
                     </div>
                   </Link>
                 );
@@ -179,8 +184,8 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
           </div>
         </div>
 
-              {/* RIGHT COLUMN: Print-Ready Sheet Canvas */}
-              <div className="lg:col-span-2 print:w-full">
+        {/* RIGHT COLUMN: Print-Ready Sheet Canvas */}
+        <div className="lg:col-span-2 print:w-full">
           {selectedOrder ? (
             <div className="space-y-4">
               <div className="flex justify-between items-center bg-slate-100/30 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/60 p-3 rounded-xl print:hidden">
@@ -249,12 +254,13 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                       </thead>
                       <tbody className="divide-y divide-slate-800/50 print:divide-slate-300">
                         {selectedOrder.items.map((item: OrderItemType) => { 
-                          const subValue = Number(item.priceAtTime) * item.quantity;
+                          const unitPrice = Number(item.priceAtTime || 0);
+                          const subValue = unitPrice * Number(item.quantity || 0);
                           return (
                             <tr key={item.id} className="hover:bg-slate-100/10 hover:dark:bg-slate-900/10 transition-colors">
                               <td className="p-3 font-medium text-[var(--text-primary)]">{item.inventory?.name || "Deleted Product"}</td>
                               <td className="p-3 text-center text-slate-600 dark:text-slate-400">{item.quantity}</td>
-                              <td className="p-3 text-right text-slate-600 dark:text-slate-400">₦{Number(item.priceAtTime).toLocaleString()}</td>
+                              <td className="p-3 text-right text-slate-600 dark:text-slate-400">₦{unitPrice.toLocaleString()}</td>
                               <td className="p-3 text-right font-semibold text-slate-800 dark:text-slate-200">₦{subValue.toLocaleString()}</td>
                             </tr>
                           );
@@ -264,12 +270,13 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                   </div>
                 </div>
 
-                {/* Mathematical Totals Panel block — NOW USES calculatedTotal */}
                 <div className="mt-6 flex justify-end">
                   <div className="w-full sm:w-72 space-y-2 border-t border-slate-200/80 dark:border-slate-800/80 pt-4 print:border-slate-700 print:dark:border-slate-300">
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Gross Subtotal</span>
-                      <span className="font-medium text-slate-700 dark:text-slate-300">₦{Number(selectedOrder.calculatedTotal).toLocaleString()}</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        ₦{Number(selectedOrder.calculatedTotal || selectedOrder.total || 0).toLocaleString()}
+                      </span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Applied Surcharges</span>
@@ -278,13 +285,12 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                     <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-800 border-dashed items-center print:border-slate-700 print:dark:border-slate-300">
                       <span className="font-bold text-[var(--text-primary)]">Amount Settled</span>
                       <span className="text-base font-black text-blue-400 print:text-black">
-                        ₦{Number(selectedOrder.calculatedTotal).toLocaleString()}
+                        ₦{Number(selectedOrder.calculatedTotal || selectedOrder.total || 0).toLocaleString()}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Professional Print Terms Declaration Notice footer */}
                 <div className="mt-12 pt-6 border-t border-slate-200/60 dark:border-slate-800/60 text-center text-[10px] text-slate-500 space-y-1 print:border-slate-700 print:dark:border-slate-300">
                   <p className="font-medium">Thank you for transacting with {selectedOrder.owner?.storeName || "us"}!</p>
                   <p>System-generated official accounting records. Certificate credentials verified.</p>

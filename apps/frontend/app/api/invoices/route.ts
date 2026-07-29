@@ -34,7 +34,7 @@ interface PrismaOrder {
   ownerId: number;
   staffId: number | null;
   buyerName: string | null;
-  buyerPhone: string | null; // FIXED: Added to interface types
+  buyerPhone: string | null;
   paymentMethod: string;
   staff: {
     fullName: string | null;
@@ -56,11 +56,6 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Serves BOTH invoice pages: /staff/invoice (staff — their own sales
-    // only) and /owner/invoices (owner — every order across the whole
-    // business). Previously this hard-blocked anyone who wasn't "staff",
-    // which meant the owner's own invoice page got a silent 403 on every
-    // load and never showed anything — that was the bug.
     if (session.role !== "owner" && session.role !== "staff") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -75,9 +70,6 @@ export async function GET() {
     const orders = (await prisma.order.findMany({
       where: {
         ownerId,
-        // Staff only ever see their own sales. Owners see everything —
-        // no staffId filter at all, so owner-made sales (staffId: null)
-        // and every staff member's sales all show up.
         ...(session.role === "staff" ? { staffId: session.id } : {}),
       },
       include: {
@@ -97,57 +89,58 @@ export async function GET() {
       orderBy: { date: "desc" },
     })) as unknown as PrismaOrder[];
 
-    const serializedOrders = orders.map((order: PrismaOrder) => ({
-      id: order.id,
-      total: Number(order.total.toString()),
-      date: order.date.toISOString(),
-      ownerId: order.ownerId,
-      staffId: order.staffId,
-      buyerName: order.buyerName,
-      buyerPhone: order.buyerPhone, // FIXED: Explicitly mapped and included in JSON response
-      paymentMethod: order.paymentMethod,
-      staff: order.staff,
-      owner: order.owner,
-      items: [
-        ...order.items.map((item: PrismaOrderItem) => ({
-          id: item.id,
-          orderId: item.orderId,
-          inventoryId: item.inventoryId,
-          quantity: item.quantity,
-          priceAtTime: Number(item.priceAtTime.toString()),
-          inventory: item.inventory,
-        })),
-        // Scale-sold items (from Scale Consignment sales) previously never
-        // appeared here at all — this route only ever selected `items`,
-        // never `scaleItems`, so any scale sale showed up as a blank
-        // invoice with zero line items even though the sale was real.
-        //
-        // IMPORTANT: ScaleOrderItem.priceAtTime is stored as the LINE
-        // TOTAL (price-per-base-unit × quantity sold — see
-        // sellFromScaleConsignmentAction/processMergedSaleAction), unlike
-        // regular OrderItem.priceAtTime which is a genuine per-unit price.
-        // The invoice UI (and the WhatsApp summary below) always does
-        // `priceAtTime * quantity` to get the subtotal, so passing the
-        // stored total straight through as "priceAtTime" double-counted
-        // it — 8kg of rice at ₦2,500/kg (₦20,000 total) rendered as a
-        // ₦20,000 *unit* price with a ₦160,000 subtotal. Converting back
-        // to a real per-unit figure here keeps both call sites correct
-        // without touching how sales are actually recorded.
-        ...order.scaleItems.map((item: PrismaScaleOrderItem) => {
-          const lineTotal = Number(item.priceAtTime.toString());
-          const quantity = Number(item.quantity.toString());
-          const unitPrice = quantity > 0 ? lineTotal / quantity : 0;
-          return {
+    const serializedOrders = orders.map((order: PrismaOrder) => {
+      // Robust decimal-to-number safe converter helper
+      const safeNum = (val: any) => {
+        if (val === null || val === undefined) return 0;
+        if (typeof val === "number") return val;
+        if (typeof val === "object" && val !== null) {
+          if (typeof val.toNumber === "function") return val.toNumber();
+          if (typeof val.toString === "function") {
+            const parsedStr = Number(val.toString());
+            if (!isNaN(parsedStr)) return parsedStr;
+          }
+        }
+        const parsed = Number(val);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
+      return {
+        id: order.id,
+        total: safeNum(order.total),
+        date: order.date.toISOString(),
+        ownerId: order.ownerId,
+        staffId: order.staffId,
+        buyerName: order.buyerName,
+        buyerPhone: order.buyerPhone,
+        paymentMethod: order.paymentMethod,
+        staff: order.staff,
+        owner: order.owner,
+        items: [
+          ...order.items.map((item: PrismaOrderItem) => ({
             id: item.id,
             orderId: item.orderId,
-            inventoryId: item.scaleInventoryId,
-            quantity,
-            priceAtTime: unitPrice,
-            inventory: item.scaleInventory ? { name: `${item.scaleInventory.name} (${item.unit})` } : null,
-          };
-        }),
-      ],
-    }));
+            inventoryId: item.inventoryId,
+            quantity: safeNum(item.quantity),
+            priceAtTime: safeNum(item.priceAtTime),
+            inventory: item.inventory,
+          })),
+          ...order.scaleItems.map((item: PrismaScaleOrderItem) => {
+            const lineTotal = safeNum(item.priceAtTime);
+            const quantity = safeNum(item.quantity);
+            const unitPrice = quantity > 0 ? lineTotal / quantity : 0;
+            return {
+              id: item.id,
+              orderId: item.orderId,
+              inventoryId: item.scaleInventoryId,
+              quantity,
+              priceAtTime: unitPrice,
+              inventory: item.scaleInventory ? { name: `${item.scaleInventory.name} (${item.unit})` } : null,
+            };
+          }),
+        ],
+      };
+    });
 
     return NextResponse.json({
       orders: serializedOrders,
