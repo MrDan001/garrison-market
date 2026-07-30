@@ -109,9 +109,16 @@ export async function getCustomersForOwner(params: { year?: number; month?: numb
   const year = params.year ?? now.getFullYear();
   const month = params.month && params.month >= 1 && params.month <= 12 ? params.month : null;
 
-  const dateFilter = month
-    ? { gte: new Date(year, month - 1, 1), lt: new Date(year, month, 1) }
-    : { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) };
+  // Use explicit UTC dates so server timezone offsets don't chop off boundary records
+  const startDate = month
+    ? new Date(Date.UTC(year, month - 1, 1, 0, 0, 0))
+    : new Date(Date.UTC(year, 0, 1, 0, 0, 0));
+
+  const endDate = month
+    ? new Date(Date.UTC(year, month, 1, 0, 0, 0))
+    : new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0));
+
+  const dateFilter = { gte: startDate, lt: endDate };
 
   const [customers, totals, earliest] = await Promise.all([
     prisma.customer.findMany({

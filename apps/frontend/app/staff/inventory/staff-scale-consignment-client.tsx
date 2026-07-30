@@ -7,7 +7,7 @@ import {
   AlertCircle, Trash2, Scale as ScaleIcon, Clock, CheckCircle2, Users,
 } from "lucide-react";
 import { sellFromScaleConsignmentAction } from "@/lib/consignment.actions";
-import { convertToBaseUnit, unitsForBase } from "@/lib/scale-units";
+import { convertToBaseUnit, unitsForBase, quantityFromAmount } from "@/lib/scale-units";
 import CustomerFields from "@/components/CustomerFields";
 
 interface ConsignmentLine {
@@ -62,6 +62,8 @@ export default function StaffScaleConsignmentClient({
   const [drawerItem, setDrawerItem] = useState<ConsignmentLine | null>(null);
   const [qtyInput, setQtyInput] = useState("");
   const [saleUnit, setSaleUnit] = useState<string>("");
+  const [entryMode, setEntryMode] = useState<"qty" | "amount">("qty");
+  const [amountInput, setAmountInput] = useState("");
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountInput, setDiscountInput] = useState("");
   const [discountType, setDiscountType] = useState<"percent" | "flat">("percent");
@@ -116,6 +118,8 @@ export default function StaffScaleConsignmentClient({
     setDrawerItem(item);
     setQtyInput(existing ? String(existing.enteredQty) : "");
     setSaleUnit(existing ? existing.enteredUnit : item.baseUnit);
+    setEntryMode("qty");
+    setAmountInput("");
     setShowDiscount(!!existing?.discountValue);
     setDiscountInput(existing?.discountValue ? String(existing.discountValue) : "");
     setDiscountType(existing?.discountType ?? "percent");
@@ -126,6 +130,8 @@ export default function StaffScaleConsignmentClient({
   const closeDrawer = () => {
     setDrawerItem(null);
     setQtyInput("");
+    setAmountInput("");
+    setEntryMode("qty");
     setShowDiscount(false);
     setDiscountInput("");
     setDrawerError(null);
@@ -134,10 +140,20 @@ export default function StaffScaleConsignmentClient({
   const unitPair = drawerItem ? unitsForBase(drawerItem.baseUnit) : null;
   const drawerCartItem = drawerItem ? cart.find((c) => c.consignmentItemId === drawerItem.consignmentItemId) : undefined;
 
+  const qtyFromAmount = (): number | null => {
+    if (!drawerItem) return null;
+    const val = parseFloat(amountInput);
+    if (isNaN(val) || val <= 0) return null;
+    const qty = quantityFromAmount(val, drawerItem.price, saleUnit, drawerItem.baseUnit);
+    return qty > 0 ? qty : null;
+  };
+
+  const effectiveQtyInput = entryMode === "amount" ? qtyFromAmount() : parseFloat(qtyInput);
+
   const computeBaseQty = (): number | null => {
     if (!drawerItem) return null;
-    const val = parseFloat(qtyInput);
-    if (isNaN(val) || val <= 0) return null;
+    const val = effectiveQtyInput;
+    if (val == null || isNaN(val) || val <= 0) return null;
     try {
       return convertToBaseUnit(val, saleUnit, drawerItem.baseUnit);
     } catch {
@@ -178,7 +194,7 @@ export default function StaffScaleConsignmentClient({
 
     const line: CartLine = {
       ...drawerItem,
-      enteredQty: parseFloat(qtyInput),
+      enteredQty: entryMode === "amount" ? (qtyFromAmount() as number) : parseFloat(qtyInput),
       enteredUnit: saleUnit,
       baseQty,
       linePrice: hasDiscount ? previewUnitPrice : drawerItem.price,
@@ -476,16 +492,34 @@ export default function StaffScaleConsignmentClient({
 
               {/* Quantity + unit toggle, side by side in the same bar */}
               <div>
-                <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Quantity</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-semibold text-slate-500 block">
+                    {entryMode === "amount" ? "Amount customer wants to spend" : "Quantity"}
+                  </label>
+                  <div className="flex rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0">
+                    {(["qty", "amount"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setEntryMode(m)}
+                        className={`px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                          entryMode === m ? "bg-blue-600 text-white" : "bg-slate-50 dark:bg-slate-950 text-slate-500"
+                        }`}
+                      >
+                        {m === "qty" ? `By ${drawerItem.baseUnit}` : "By ₦"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="number"
-                    step="0.001"
+                    step={entryMode === "amount" ? "1" : "0.001"}
                     min={0}
                     inputMode="decimal"
                     placeholder="0"
-                    value={qtyInput}
-                    onChange={(e) => setQtyInput(e.target.value)}
+                    value={entryMode === "amount" ? amountInput : qtyInput}
+                    onChange={(e) => (entryMode === "amount" ? setAmountInput(e.target.value) : setQtyInput(e.target.value))}
                     className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 px-3 text-sm text-[var(--text-primary)] outline-none focus:border-blue-600"
                   />
                   {unitPair && (
@@ -505,6 +539,11 @@ export default function StaffScaleConsignmentClient({
                     </div>
                   )}
                 </div>
+                {entryMode === "amount" && effectiveQtyInput != null && (
+                  <p className="text-[11px] text-emerald-400 font-semibold mt-1.5">
+                    ≈ Weigh out {effectiveQtyInput}{saleUnit}
+                  </p>
+                )}
               </div>
 
               {discountEnabled && (

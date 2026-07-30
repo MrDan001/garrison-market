@@ -8,7 +8,7 @@ import Link from "next/link";
 import { ArrowLeft, Truck, Calendar, User, Store, RotateCcw } from "lucide-react";
 import { ownerReconcileScaleConsignmentAction } from "@/lib/consignment.actions";
 
-export default function OwnerConsignmentsClient({ consignments }: { consignments: any[] }) {
+export default function OwnerConsignmentsClient({ consignments = [] }: { consignments: any[] }) {
   const [filter, setFilter] = useState<"all" | "out" | "settled">("all");
   const [storeFilter, setStoreFilter] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
@@ -28,14 +28,24 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
   };
 
   const stores = Array.from(
-    new Map(consignments.filter((c) => c.store).map((c) => [c.store.id, c.store])).values()
+    new Map((consignments || []).filter((c) => c?.store).map((c) => [c.store.id, c.store])).values()
   );
 
-  const filtered = consignments.filter((c) => {
-    const statusMatch = filter === "all" || c.status === filter;
-    const storeMatch = storeFilter === "all" || c.storeId === Number(storeFilter);
-    return statusMatch && storeMatch;
-  });
+  const getTotalValue = (c: any) =>
+    (c?.items || []).reduce((sum: number, i: any) => sum + Number(i.priceAtTime || 0) * (i.quantitySold || 0), 0);
+
+  const filtered = (consignments || [])
+    .filter((c) => {
+      const statusMatch = filter === "all" || c.status === filter;
+      const storeMatch = storeFilter === "all" || c.storeId === Number(storeFilter);
+      const hasItems = Array.isArray(c.items) && c.items.length > 0; // Excludes empty items arrays
+      return statusMatch && storeMatch && hasItems;
+    })
+    .sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA; // Newest first
+    });
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
@@ -93,26 +103,20 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
             <p className="text-sm text-slate-500">No consignments found.</p>
           </div>
         ) : (
-          filtered.map((c) => {
-            const totalOut = c.items.reduce((sum: number, i: any) => sum + i.quantityOut, 0);
-            const totalSold = c.items.reduce((sum: number, i: any) => sum + i.quantitySold, 0);
-            const totalReturned = c.items.reduce((sum: number, i: any) => sum + i.quantityReturned, 0);
-            const totalValue = c.items.reduce(
-              (sum: number, i: any) => sum + Number(i.priceAtTime) * i.quantitySold,
+          filtered.map((c, index) => {
+            const items = c.items || [];
+            const totalOutValue = items.reduce(
+              (sum: number, i: any) => sum + Number(i.priceAtTime || 0) * (i.quantityOut || 0),
               0
             );
-            // Value of stock still out with the recipient, at price-at-sign-out.
-            const totalOutValue = c.items.reduce(
-              (sum: number, i: any) => sum + Number(i.priceAtTime) * i.quantityOut,
-              0
-            );
+            const totalValue = getTotalValue(c);
 
             return (
-              <div key={c.id} className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+              <div key={`${c.id}-${index}`} className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">{c.recipientName}</p>
-                    <p className="text-xs text-slate-500">{c.recipientPhone}</p>
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">{c.recipientName || "Unknown Recipient"}</p>
+                    <p className="text-xs text-slate-500">{c.recipientPhone || "No phone number"}</p>
                     <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
                       <User size={11} /> Signed out by {c.staff?.fullName || "Staff"}
                     </p>
@@ -122,7 +126,7 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
                       </p>
                     )}
                     <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                      <Calendar size={11} /> {new Date(c.createdAt).toLocaleDateString()}
+                      <Calendar size={11} /> {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "Date N/A"}
                     </p>
                   </div>
                   <span
@@ -137,12 +141,12 @@ export default function OwnerConsignmentsClient({ consignments }: { consignments
                 </div>
 
                 <div className="border-t border-slate-200 dark:border-slate-800 pt-3 space-y-1.5">
-                  {c.items.map((item: any) => (
-                    <div key={item.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
-                      <span>{item.inventory?.name}</span>
+                  {items.map((item: any, itemIndex: number) => (
+                    <div key={`${item.id}-${itemIndex}`} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                      <span>{item.inventory?.name || "Item"}</span>
                       <span>
                         {item.quantityOut}{item.unit || ""} out
-                        {c.status === "settled" && ` · ${item.quantitySold}${item.unit || ""} sold · ${item.quantityReturned}${item.unit || ""} returned`}
+                        {c.status === "settled" && ` · ${item.quantitySold || 0}${item.unit || ""} sold · ${item.quantityReturned || 0}${item.unit || ""} returned`}
                       </span>
                     </div>
                   ))}

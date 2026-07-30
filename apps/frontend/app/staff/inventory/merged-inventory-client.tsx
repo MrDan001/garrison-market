@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { processMergedSaleAction } from "@/lib/consignment.actions";
-import { convertToBaseUnit, unitsForBase } from "@/lib/scale-units";
+import { convertToBaseUnit, unitsForBase, quantityFromAmount } from "@/lib/scale-units";
 import CustomerFields from "@/components/CustomerFields";
 
 interface ListItem {
@@ -104,6 +104,8 @@ export default function MergedInventoryClient({
   const [drawerScaleItem, setDrawerScaleItem] = useState<ScaleLine | null>(null);
   const [qtyInput, setQtyInput] = useState("");
   const [saleUnit, setSaleUnit] = useState<string>("");
+  const [entryMode, setEntryMode] = useState<"qty" | "amount">("qty");
+  const [amountInput, setAmountInput] = useState("");
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountInput, setDiscountInput] = useState("");
   const [discountType, setDiscountType] = useState<"percent" | "flat">("percent");
@@ -181,6 +183,8 @@ export default function MergedInventoryClient({
     setDrawerListItem(null);
     setQtyInput(existing ? String(existing.enteredQty) : "");
     setSaleUnit(existing ? existing.enteredUnit : item.baseUnit);
+    setEntryMode("qty");
+    setAmountInput("");
     setShowDiscount(!!existing?.discountValue);
     setDiscountInput(existing?.discountValue ? String(existing.discountValue) : "");
     setDiscountType(existing?.discountType ?? "percent");
@@ -192,15 +196,27 @@ export default function MergedInventoryClient({
     setDrawerListItem(null);
     setDrawerScaleItem(null);
     setQtyInput("");
+    setAmountInput("");
+    setEntryMode("qty");
     setShowDiscount(false);
     setDiscountInput("");
     setDrawerError(null);
   };
 
+  const qtyFromAmount = (): number | null => {
+    if (!drawerScaleItem) return null;
+    const val = parseFloat(amountInput);
+    if (isNaN(val) || val <= 0) return null;
+    const qty = quantityFromAmount(val, drawerScaleItem.price, saleUnit, drawerScaleItem.baseUnit);
+    return qty > 0 ? qty : null;
+  };
+
+  const effectiveQtyInput = entryMode === "amount" ? qtyFromAmount() : parseFloat(qtyInput);
+
   const computeBaseQty = (): number | null => {
     if (!drawerScaleItem) return null;
-    const val = parseFloat(qtyInput);
-    if (isNaN(val) || val <= 0) return null;
+    const val = effectiveQtyInput;
+    if (val == null || isNaN(val) || val <= 0) return null;
     try {
       return convertToBaseUnit(val, saleUnit, drawerScaleItem.baseUnit);
     } catch {
@@ -243,7 +259,7 @@ export default function MergedInventoryClient({
       name: drawerScaleItem.name,
       image: drawerScaleItem.image,
       baseUnit: drawerScaleItem.baseUnit,
-      enteredQty: parseFloat(qtyInput),
+      enteredQty: entryMode === "amount" ? (qtyFromAmount() as number) : parseFloat(qtyInput),
       enteredUnit: saleUnit,
       baseQty,
       linePrice: hasDiscount ? previewUnitPrice : drawerScaleItem.price,
@@ -412,13 +428,28 @@ export default function MergedInventoryClient({
               {drawerScaleItem.remaining}{drawerScaleItem.baseUnit} left · ₦{drawerScaleItem.price.toLocaleString()}/{drawerScaleItem.baseUnit}
             </p>
 
+            <div className="flex rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden w-fit mb-2">
+              {(["qty", "amount"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setEntryMode(m)}
+                  className={`px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                    entryMode === m ? "bg-blue-600 text-white" : "bg-slate-50 dark:bg-slate-950 text-slate-500"
+                  }`}
+                >
+                  {m === "qty" ? `By ${drawerScaleItem.baseUnit}` : "By ₦"}
+                </button>
+              ))}
+            </div>
+
             <div className="flex gap-2 mb-3">
               <input
                 type="number"
                 inputMode="decimal"
-                placeholder="Amount"
-                value={qtyInput}
-                onChange={(e) => setQtyInput(e.target.value)}
+                placeholder={entryMode === "amount" ? "₦ amount" : "Amount"}
+                value={entryMode === "amount" ? amountInput : qtyInput}
+                onChange={(e) => (entryMode === "amount" ? setAmountInput(e.target.value) : setQtyInput(e.target.value))}
                 className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
               />
               {unitPair && (
@@ -432,6 +463,12 @@ export default function MergedInventoryClient({
                 </select>
               )}
             </div>
+
+            {entryMode === "amount" && effectiveQtyInput != null && (
+              <p className="text-[11px] text-emerald-400 font-semibold -mt-2 mb-3">
+                ≈ Weigh out {effectiveQtyInput}{saleUnit}
+              </p>
+            )}
 
             {drawerError && (
               <div className="flex items-center gap-2 text-rose-400 text-xs bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2 mb-3">

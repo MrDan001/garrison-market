@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { processScaleSaleAction } from "@/lib/scale-inventory.actions";
-import { convertToBaseUnit, unitsForBase } from "@/lib/scale-units";
+import { convertToBaseUnit, unitsForBase, quantityFromAmount } from "@/lib/scale-units";
 import CustomerFields from "@/components/CustomerFields";
 
 interface ScaleItem {
@@ -66,6 +66,8 @@ export default function ScaleInventoryClient({
   const [drawerItem, setDrawerItem] = useState<ScaleItem | null>(null);
   const [qtyInput, setQtyInput] = useState("");
   const [saleUnit, setSaleUnit] = useState<string>("");
+  const [entryMode, setEntryMode] = useState<"qty" | "amount">("qty");
+  const [amountInput, setAmountInput] = useState("");
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountInput, setDiscountInput] = useState("");
   const [discountType, setDiscountType] = useState<"percent" | "flat">("percent");
@@ -115,6 +117,8 @@ export default function ScaleInventoryClient({
     setDrawerItem(item);
     setQtyInput(existing ? String(existing.enteredQty) : "");
     setSaleUnit(existing ? existing.enteredUnit : item.unit);
+    setEntryMode("qty");
+    setAmountInput("");
     setShowDiscount(!!existing?.discountValue);
     setDiscountInput(existing?.discountValue ? String(existing.discountValue) : "");
     setDiscountType(existing?.discountType ?? "percent");
@@ -125,6 +129,8 @@ export default function ScaleInventoryClient({
   const closeDrawer = () => {
     setDrawerItem(null);
     setQtyInput("");
+    setAmountInput("");
+    setEntryMode("qty");
     setShowDiscount(false);
     setDiscountInput("");
     setDrawerError(null);
@@ -132,10 +138,22 @@ export default function ScaleInventoryClient({
 
   const unitPair = drawerItem ? unitsForBase(drawerItem.unit) : null;
 
+  // In "amount" mode, the naira figure drives the quantity — work out how
+  // much (in saleUnit) that buys first, then convert to base unit as normal.
+  const qtyFromAmount = (): number | null => {
+    if (!drawerItem) return null;
+    const val = parseFloat(amountInput);
+    if (isNaN(val) || val <= 0) return null;
+    const qty = quantityFromAmount(val, drawerItem.price, saleUnit, drawerItem.unit);
+    return qty > 0 ? qty : null;
+  };
+
+  const effectiveQtyInput = entryMode === "amount" ? qtyFromAmount() : parseFloat(qtyInput);
+
   const computeBaseQty = (): number | null => {
     if (!drawerItem) return null;
-    const val = parseFloat(qtyInput);
-    if (isNaN(val) || val <= 0) return null;
+    const val = effectiveQtyInput;
+    if (val == null || isNaN(val) || val <= 0) return null;
     try {
       return convertToBaseUnit(val, saleUnit, drawerItem.unit);
     } catch {
@@ -181,7 +199,7 @@ export default function ScaleInventoryClient({
       name: drawerItem.name,
       image: drawerItem.image,
       baseUnit: drawerItem.unit,
-      enteredQty: parseFloat(qtyInput),
+      enteredQty: entryMode === "amount" ? (qtyFromAmount() as number) : parseFloat(qtyInput),
       enteredUnit: saleUnit,
       baseQty,
       price: hasDiscount ? previewUnitPrice : drawerItem.price,
@@ -427,33 +445,88 @@ export default function ScaleInventoryClient({
 
               {/* Quantity entry */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Amount to sell *</p>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    autoFocus
-                    placeholder={`e.g. 1.5`}
-                    value={qtyInput}
-                    onChange={(e) => setQtyInput(e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-500 transition-colors"
-                  />
-                  <div className="flex rounded-xl border border-slate-300 dark:border-slate-700 overflow-hidden shrink-0">
-                    {[unitPair.base, unitPair.sub].map((u) => (
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    {entryMode === "amount" ? "Amount customer wants to spend *" : "Amount to sell *"}
+                  </p>
+                  <div className="flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden shrink-0">
+                    {(["qty", "amount"] as const).map((m) => (
                       <button
-                        key={u}
+                        key={m}
                         type="button"
-                        onClick={() => setSaleUnit(u)}
-                        className={`px-3 text-sm font-bold transition-colors ${
-                          saleUnit === u ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-500"
+                        onClick={() => setEntryMode(m)}
+                        className={`px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                          entryMode === m ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-500"
                         }`}
                       >
-                        {u}
+                        {m === "qty" ? `By ${drawerItem.unit}` : "By ₦"}
                       </button>
                     ))}
                   </div>
                 </div>
+
+                {entryMode === "qty" ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      autoFocus
+                      placeholder={`e.g. 1.5`}
+                      value={qtyInput}
+                      onChange={(e) => setQtyInput(e.target.value)}
+                      className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                    <div className="flex rounded-xl border border-slate-300 dark:border-slate-700 overflow-hidden shrink-0">
+                      {[unitPair.base, unitPair.sub].map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setSaleUnit(u)}
+                          className={`px-3 text-sm font-bold transition-colors ${
+                            saleUnit === u ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-500"
+                          }`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      autoFocus
+                      inputMode="decimal"
+                      placeholder="e.g. 4000"
+                      value={amountInput}
+                      onChange={(e) => setAmountInput(e.target.value)}
+                      className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl py-2.5 px-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                    <div className="flex rounded-xl border border-slate-300 dark:border-slate-700 overflow-hidden shrink-0">
+                      {[unitPair.base, unitPair.sub].map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setSaleUnit(u)}
+                          className={`px-3 text-sm font-bold transition-colors ${
+                            saleUnit === u ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-500"
+                          }`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {entryMode === "amount" && effectiveQtyInput != null && (
+                  <p className="text-[11px] text-emerald-400 font-semibold mt-1.5">
+                    ≈ Weigh out {effectiveQtyInput}{saleUnit}
+                  </p>
+                )}
                 {baseQtyPreview != null && saleUnit !== drawerItem.unit && (
                   <p className="text-[11px] text-slate-500 mt-1.5">
                     = {baseQtyPreview}{drawerItem.unit} · Line total ₦{previewLineTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}

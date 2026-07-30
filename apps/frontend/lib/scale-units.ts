@@ -24,3 +24,20 @@ export function convertToBaseUnit(amount: number, enteredUnit: string, baseUnit:
   }
   return amount / CONVERSION_FACTOR[baseUnit as BaseUnit];
 }
+
+// Reverse direction: given a naira amount the customer wants to spend, work
+// out how much of the product (in `wantUnit`) that buys, so staff can weigh
+// out that much. `pricePerBaseUnit` is always price-per-kg or price-per-L
+// (how ScaleInventory.price is stored); if wantUnit is the sub-unit (g/ml),
+// the per-unit price is scaled down accordingly first.
+// Rounded to a scale-realistic precision — 3dp for the base unit (kg/L),
+// whole units for the sub-unit (g/ml), since fractional grams/ml aren't
+// something a staff member can actually measure out.
+export function quantityFromAmount(nairaAmount: number, pricePerBaseUnit: number, wantUnit: string, baseUnit: string): number {
+  if (!(nairaAmount > 0) || !(pricePerBaseUnit > 0)) return 0;
+  const pair = unitsForBase(baseUnit);
+  const isSubUnit = !!pair && wantUnit === pair.sub;
+  const pricePerWantUnit = isSubUnit ? pricePerBaseUnit / CONVERSION_FACTOR[baseUnit as BaseUnit] : pricePerBaseUnit;
+  const raw = nairaAmount / pricePerWantUnit;
+  return isSubUnit ? Math.round(raw) : Math.round(raw * 1000) / 1000;
+}
