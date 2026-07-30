@@ -278,7 +278,7 @@ export default function StaffSupportBubble({ currentUserId }: { currentUserId: n
                   </div>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <AskMePanel role="staff" />
+                  <AskMePanel role="staff" onNavigate={() => setView("closed")} />
                 </div>
               </>
             )}

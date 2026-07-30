@@ -18,16 +18,42 @@ import { OWNER_IDENTITY, STAFF_IDENTITY, OWNER_KNOWLEDGE, STAFF_KNOWLEDGE } from
  * (Sign up at console.groq.com → API Keys → Create Key. No credit card.)
  * Until that's set, askStoreAssistant() returns a friendly "not configured
  * yet" message instead of erroring, so the UI never crashes for lack of it.
+ *
+ * MODEL: qwen/qwen3.6-27b — Groq's current text+vision (multimodal) model,
+ * so one model handles both plain questions and photos the user attaches.
+ * Two things worth knowing:
+ *   1. This replaces llama-3.3-70b-versatile, which Groq has deprecated
+ *      (shutdown 08/16/26) — that model would have started failing on its
+ *      own regardless of this change.
+ *   2. Groq currently lists qwen/qwen3.6-27b as a PREVIEW model ("intended
+ *      for evaluation, not production" — may be discontinued at short
+ *      notice). It's still the right choice given the no-card-on-file
+ *      constraint, but check console.groq.com/docs/vision occasionally in
+ *      case a production-tier vision model becomes available to move to.
+ *
+ * IMAGE GENERATION: uses Pollinations.ai (https://pollinations.ai), also
+ * free with no signup/API key. Every generated image goes through the
+ * `safe=true` param (Pollinations' own NSFW filter) plus a local keyword
+ * blocklist below — belt-and-suspenders, not a guarantee, since neither
+ * filter is exhaustive.
  */
 
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+const GROQ_MODEL = "qwen/qwen3.6-27b";
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const POLLINATIONS_ENDPOINT = "https://image.pollinations.ai/prompt";
 
 // Keep the request small and bounded — this is a help widget, not an open
 // chat: cap how much history we forward and how long any single message
 // can be, so one long-winded exchange can't balloon token usage per call.
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_MESSAGE_CHARS = 2000;
+
+// A photo the user attaches (vision) — data URL only, validated server-side
+// regardless of what the client already checked. ~6M chars covers a ~4.5MB
+// raw file after base64 inflation, well under Groq's 20MB-per-image limit,
+// while staying fast over a typical mobile connection.
+const MAX_IMAGE_DATA_URL_CHARS = 6_000_000;
+const IMAGE_DATA_URL_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
 // ── Rate limiting ──────────────────────────────────────────────────────
 // Basic per-user sliding window so one person (or a script) can't hammer
@@ -69,6 +95,14 @@ export type AskMeProduct = {
   unitsSold: number;
 };
 
+// A mockup image generated on request (Pollinations.ai) — unlike
+// AskMeProduct.image above (a real photo already stored in Inventory),
+// this is freshly generated per-message and never persisted anywhere.
+export type AskMeGeneratedImage = {
+  url: string;
+  prompt: string;
+};
+
 const NAIRA = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
 
 // ── Best-selling products ──────────────────────────────────────────────
@@ -87,6 +121,98 @@ const PRODUCT_QUERY_KEYWORDS = [
 function isProductQuery(text: string): boolean {
   const lower = text.toLowerCase();
   return PRODUCT_QUERY_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// ── Image generation (product/marketing mockups) ──────────────────────
+// Deliberately keyword-triggered rather than model-triggered (tool
+// calling) — same pattern as isProductQuery above: deterministic, cheap
+// to check, and doesn't depend on a preview-tier model reliably deciding
+// to call a tool.
+const IMAGE_GENERATION_KEYWORDS = [
+  "generate an image", "generate a picture", "generate a photo", "generate a graphic",
+  "generate a banner", "generate a poster", "generate a flyer", "generate a mockup",
+  "create an image", "create a picture", "create a photo", "create a graphic",
+  "create a banner", "create a poster", "create a flyer", "create a mockup",
+  "make an image", "make a picture", "make a graphic", "make a banner",
+  "make a poster", "make a flyer", "make a mockup",
+  "design an image", "design a graphic", "design a banner", "design a poster",
+  "design a flyer", "draw me an image", "draw me a picture", "draw an image",
+  "draw a picture",
+];
+
+function isImageGenerationRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return IMAGE_GENERATION_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// Not exhaustive — this is a lightweight extra layer on top of
+// Pollinations' own `safe=true` NSFW filter (see generateStoreImage
+// below), not a substitute for it.
+const BLOCKED_IMAGE_TERMS = [
+  "nude", "naked", "nsfw", "porn", "sex ", "sexy", "explicit",
+  "gore", "gory", "dead body", "corpse", "decapitat", "mutilat", "torture",
+  "self-harm", "suicide", "swastika", "nazi", "hitler",
+  "celebrity", "real photo of",
+];
+
+function containsBlockedImageTerm(text: string): boolean {
+  const lower = text.toLowerCase();
+  return BLOCKED_IMAGE_TERMS.some((t) => lower.includes(t));
+}
+
+// Strips a leading trigger phrase ("generate an image of ...") down to
+// just the descriptive part, so the image model isn't literally asked to
+// draw the word "generate".
+function buildImagePrompt(rawText: string): string {
+  const stripped = rawText
+    .trim()
+    .replace(
+      /^(please\s+)?(generate|create|make|design|draw)(\s+me)?\s+(an?\s+)?(image|picture|photo|graphic|banner|poster|flyer|mockup)(\s+(of|for|showing|about))?\s*/i,
+      ""
+    )
+    .trim();
+  return stripped.length >= 3 ? stripped : rawText.trim();
+}
+
+async function generateStoreImage(
+  rawPrompt: string
+): Promise<{ ok: true; url: string; prompt: string } | { ok: false; reason: "blocked" | "error" }> {
+  const prompt = buildImagePrompt(rawPrompt).slice(0, 300);
+
+  if (!prompt || containsBlockedImageTerm(prompt)) {
+    return { ok: false, reason: "blocked" };
+  }
+
+  // Bias every generation toward a safe, on-brand product/marketing mockup
+  // rather than an open-ended image request — this is a store app, not a
+  // general-purpose image generator.
+  const styledPrompt = `${prompt}, professional product photography, clean studio background, marketing style, no text, no watermark`;
+  const seed = Math.floor(Math.random() * 1_000_000_000);
+  const url =
+    `${POLLINATIONS_ENDPOINT}/${encodeURIComponent(styledPrompt)}` +
+    `?width=768&height=768&nologo=true&safe=true&model=flux&seed=${seed}`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      // Covers both a generic failure and Pollinations' safe=true filter
+      // rejecting the prompt server-side.
+      return { ok: false, reason: "error" };
+    }
+    // Drain the body so the render actually completes — we hand back the
+    // same URL for the client to display, which Pollinations then serves
+    // quickly since this exact prompt+seed was just rendered and cached.
+    await res.arrayBuffer().catch(() => null);
+
+    return { ok: true, url, prompt };
+  } catch (error) {
+    console.error("generateStoreImage error:", error);
+    return { ok: false, reason: "error" };
+  }
 }
 
 async function getBestSellingProducts(ownerId: number, storeId: number | null): Promise<AskMeProduct[]> {
@@ -211,7 +337,7 @@ ${staffLines}
 These are the ONLY figures you have access to — this week's totals per staff plus the store-wide week-over-week trend. You do not have monthly, yearly, or per-item breakdowns, staff wages/salaries, or profit margins; if asked for those, say you don't have that figure here and point to Reports (/owner/report) or History (/owner/history).`;
 }
 
-export async function askStoreAssistant(history: AskMeChatMessage[]) {
+export async function askStoreAssistant(history: AskMeChatMessage[], imageDataUrl?: string) {
   const session = await getSessionUser();
   if (!session || (session.role !== "owner" && session.role !== "staff")) {
     return { success: false as const, error: "Unauthorized" };
@@ -234,6 +360,19 @@ export async function askStoreAssistant(history: AskMeChatMessage[]) {
 
   if (!Array.isArray(history) || history.length === 0) {
     return { success: false as const, error: "No question provided." };
+  }
+
+  // Never trust client-side validation alone — re-check size and format
+  // here regardless of what AskMePanel already enforced before upload.
+  let validatedImageDataUrl: string | null = null;
+  if (imageDataUrl) {
+    if (imageDataUrl.length > MAX_IMAGE_DATA_URL_CHARS) {
+      return { success: false as const, error: "That image is too large — please attach something under about 4MB." };
+    }
+    if (!IMAGE_DATA_URL_PATTERN.test(imageDataUrl)) {
+      return { success: false as const, error: "That doesn't look like a supported image — please attach a JPEG, PNG, or WebP." };
+    }
+    validatedImageDataUrl = imageDataUrl;
   }
 
   const identity = session.role === "owner" ? OWNER_IDENTITY : STAFF_IDENTITY;
@@ -285,11 +424,46 @@ export async function askStoreAssistant(history: AskMeChatMessage[]) {
     }
   }
 
+  // Image generation (product/marketing mockup) — available to BOTH roles,
+  // only triggered when the question actually looks like an image request.
+  let generatedImage: AskMeGeneratedImage | null = null;
+
+  if (isImageGenerationRequest(latestUserMessage)) {
+    const result = await generateStoreImage(latestUserMessage);
+    if (result.ok) {
+      generatedImage = { url: result.url, prompt: result.prompt };
+      systemPrompt += `\n\n## Image request\nAn image has already been generated for this message from the description: "${result.prompt}". It will be shown to the person automatically below your reply — do not include a markdown image or a link to it yourself, just briefly describe what you asked for and remind them plainly that this is an AI-generated mockup for inspiration, not a real photo of their actual product.`;
+    } else if (result.reason === "blocked") {
+      systemPrompt += `\n\n## Image request\nThe person asked for an image, but the description isn't something this tool can generate (it may involve real people, explicit, or unsafe content). Say plainly that you can't generate that particular image, and offer to generate something else instead — e.g. a plain product/marketing shot.`;
+    } else {
+      systemPrompt += `\n\n## Image request\nThe person asked for an image, but the image generator is temporarily unavailable. Say so plainly and suggest trying again shortly.`;
+    }
+  }
+
   // Trim to the last N messages and clamp each message's length — keeps
   // the request bounded regardless of how long the chat has run.
   const trimmedHistory = history
     .slice(-MAX_HISTORY_MESSAGES)
     .map((m) => ({ role: m.role, content: String(m.content).slice(0, MAX_MESSAGE_CHARS) }));
+
+  // If a photo was attached, it's for the CURRENT turn only — attach it to
+  // the last message (the one the person just sent) as a multimodal
+  // content array. Older turns stay plain text; we never re-send a
+  // previous turn's image, since the client doesn't keep it around either.
+  const requestMessages: Array<{ role: string; content: unknown }> = [
+    { role: "system", content: systemPrompt },
+    ...trimmedHistory,
+  ];
+
+  if (validatedImageDataUrl) {
+    const last = requestMessages[requestMessages.length - 1];
+    if (last && last.role === "user") {
+      last.content = [
+        { type: "text", text: (last.content as string) || "What's in this image?" },
+        { type: "image_url", image_url: { url: validatedImageDataUrl } },
+      ];
+    }
+  }
 
   try {
     const controller = new AbortController();
@@ -303,7 +477,7 @@ export async function askStoreAssistant(history: AskMeChatMessage[]) {
       },
       body: JSON.stringify({
         model: GROQ_MODEL,
-        messages: [{ role: "system", content: systemPrompt }, ...trimmedHistory],
+        messages: requestMessages,
         temperature: 0.3,
         max_tokens: 600,
       }),
@@ -331,7 +505,7 @@ export async function askStoreAssistant(history: AskMeChatMessage[]) {
       };
     }
 
-    return { success: true as const, reply: reply.trim(), products };
+    return { success: true as const, reply: reply.trim(), products, generatedImage };
   } catch (error) {
     console.error("askStoreAssistant error:", error);
     return {

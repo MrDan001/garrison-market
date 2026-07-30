@@ -230,7 +230,7 @@ export default function OwnerSupportBubble({ currentUserId }: { currentUserId: n
                   </div>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <AskMePanel role="owner" />
+                  <AskMePanel role="owner" onNavigate={() => setView("closed")} />
                 </div>
               </>
             )}
