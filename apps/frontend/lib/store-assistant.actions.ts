@@ -128,21 +128,19 @@ function isProductQuery(text: string): boolean {
 // calling) — same pattern as isProductQuery above: deterministic, cheap
 // to check, and doesn't depend on a preview-tier model reliably deciding
 // to call a tool.
-const IMAGE_GENERATION_KEYWORDS = [
-  "generate an image", "generate a picture", "generate a photo", "generate a graphic",
-  "generate a banner", "generate a poster", "generate a flyer", "generate a mockup",
-  "create an image", "create a picture", "create a photo", "create a graphic",
-  "create a banner", "create a poster", "create a flyer", "create a mockup",
-  "make an image", "make a picture", "make a graphic", "make a banner",
-  "make a poster", "make a flyer", "make a mockup",
-  "design an image", "design a graphic", "design a banner", "design a poster",
-  "design a flyer", "draw me an image", "draw me a picture", "draw an image",
-  "draw a picture",
-];
+// Verb + noun anywhere in the text, rather than requiring an exact
+// contiguous phrase — "generate an image" matches, but so does "generate
+// a quick product image mockup" (an exact phrase list missed this one:
+// the words "quick product" sit between "generate a" and "mockup", so no
+// listed phrase matched even though the intent is obvious).
+const IMAGE_GENERATION_VERBS = ["generate", "create", "make", "design", "draw", "mockup", "mock up", "mock-up"];
+const IMAGE_GENERATION_NOUNS = ["image", "picture", "photo", "graphic", "banner", "poster", "flyer", "mockup", "mock up", "mock-up"];
 
 function isImageGenerationRequest(text: string): boolean {
   const lower = text.toLowerCase();
-  return IMAGE_GENERATION_KEYWORDS.some((kw) => lower.includes(kw));
+  const hasVerb = IMAGE_GENERATION_VERBS.some((v) => lower.includes(v));
+  const hasNoun = IMAGE_GENERATION_NOUNS.some((n) => lower.includes(n));
+  return hasVerb && hasNoun;
 }
 
 // Not exhaustive — this is a lightweight extra layer on top of
@@ -480,6 +478,13 @@ export async function askStoreAssistant(history: AskMeChatMessage[], imageDataUr
         messages: requestMessages,
         temperature: 0.3,
         max_tokens: 600,
+        // qwen/qwen3.6-27b has a "thinking mode" (multi-step reasoning
+        // before answering) meant for math/coding, not a quick help-widget
+        // reply — reasoning_effort: "none" turns it off, and
+        // reasoning_format: "hidden" is a second layer so that if any
+        // reasoning is still produced, it's kept out of the answer text.
+        reasoning_effort: "none",
+        reasoning_format: "hidden",
       }),
       signal: controller.signal,
     });
@@ -496,7 +501,7 @@ export async function askStoreAssistant(history: AskMeChatMessage[], imageDataUr
     }
 
     const data = await res.json();
-    const reply: string | undefined = data?.choices?.[0]?.message?.content;
+    let reply: string | undefined = data?.choices?.[0]?.message?.content;
 
     if (!reply) {
       return {
@@ -505,7 +510,19 @@ export async function askStoreAssistant(history: AskMeChatMessage[], imageDataUr
       };
     }
 
-    return { success: true as const, reply: reply.trim(), products, generatedImage };
+    // Belt-and-suspenders: strip a <think>...</think> block if one still
+    // ends up in the text content rather than the separate reasoning
+    // field the API params above are meant to route it to.
+    reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+    if (!reply) {
+      return {
+        success: false as const,
+        error: "Ask Me didn't return an answer — please try rephrasing your question.",
+      };
+    }
+
+    return { success: true as const, reply, products, generatedImage };
   } catch (error) {
     console.error("askStoreAssistant error:", error);
     return {
