@@ -89,21 +89,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // 2. Safely fetch email content from Resend SDK
+    // 2. Get email content directly from the webhook payload (no extra API call needed —
+    // Resend includes the parsed text/html right on event.data for "email.received" events)
     const emailId = event.data?.email_id;
-    let fullEmail: any = null;
 
-    try {
-      // Direct call on resend.emails.get works across standard SDK versions
-      const res = await resend.emails.get(emailId);
-      fullEmail = res.data;
-    } catch (sdkErr) {
-      console.error(`[resend-inbound] Failed to fetch email #${emailId} via SDK:`, sdkErr);
-      return NextResponse.json({ received: true });
-    }
+    // Temporary diagnostic log — remove once confirmed working
+    console.log("[resend-inbound] event.data keys:", Object.keys(event.data || {}));
 
     const rawText: string =
-      fullEmail?.text || (fullEmail?.html ? fullEmail.html.replace(/<[^>]+>/g, " ") : "") || "";
+      event.data?.text || (event.data?.html ? event.data.html.replace(/<[^>]+>/g, " ") : "") || "";
     const body = stripQuotedReply(rawText);
 
     if (!body) {
