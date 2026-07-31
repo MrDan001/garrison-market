@@ -695,3 +695,25 @@ model TypingStatus {
 
   @@unique([threadKey, senderRole])
 }
+
+// ADD THIS TO THE END OF: apps/frontend/prisma/schema/base.prisma
+// Then run: npx prisma migrate dev --name add_admin_thread_status
+// (or your equivalent migrate/generate command)
+
+// Tracks the open/closed state of one admin<->owner thread. Threads
+// themselves aren't a real model (they're just AdminMessage + replies
+// grouped by ownerId), so this is the single source of truth for
+// "closed" status per (messageId, ownerId) pair. Created lazily —
+// a thread with no row here is treated as "open".
+model AdminMessageThreadStatus {
+  id        Int       @id @default(autoincrement())
+  messageId Int
+  ownerId   Int
+  status    String    @default("open") // "open" | "closed"
+  closedAt  DateTime?
+  closedBy  String?   // admin identifier who closed it
+
+  @@unique([messageId, ownerId])
+  @@index([messageId])
+  @@index([ownerId])
+}

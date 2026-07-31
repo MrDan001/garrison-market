@@ -89,6 +89,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
+    // 1b. Reject replies on a closed thread — the ticket has been closed
+    // by an admin, so no new replies should be recorded.
+    const threadStatus = await prisma.adminMessageThreadStatus.findUnique({
+      where: { messageId_ownerId: { messageId, ownerId } },
+      select: { status: true },
+    });
+    if (threadStatus?.status === "closed") {
+      console.log(`[resend-inbound] Ignored reply on closed thread — Message #${messageId}, Owner #${ownerId}.`);
+      return NextResponse.json({ received: true });
+    }
+
     // 2. Fetch full email content via the Receiving API (webhook payload only has metadata —
     // body content must be fetched separately using resend.emails.receiving.get, NOT resend.emails.get,
     // which is for sent emails)
@@ -98,9 +109,6 @@ export async function POST(request: NextRequest) {
     try {
       const res = await resend.emails.receiving.get(emailId);
       fullEmail = res.data;
-      // Temporary diagnostic — dump the full raw response so we can see its real shape.
-      // Remove this line once the body extraction is confirmed working.
-      console.log("[resend-inbound] full receiving.get() response:", JSON.stringify(res, null, 2));
     } catch (sdkErr) {
       console.error(`[resend-inbound] Failed to fetch email #${emailId} via Receiving API:`, sdkErr);
       return NextResponse.json({ received: true });
