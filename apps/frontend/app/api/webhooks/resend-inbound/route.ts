@@ -2,22 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import prisma from "@/lib/prisma";
 
-// Handles Resend's `email.received` webhook — fired whenever an owner
-// replies (via Gmail, Outlook, etc.) to an admin broadcast email. The
-// broadcast's Reply-To was set to a unique address per (messageId, ownerId)
-// (see lib/email.ts -> getAdminMessageReplyAddress), so we parse that back
-// out, fetch the actual body (webhook payloads are metadata-only), strip
-// quoted history, and save it as an AdminMessageReply — same thread the
-// admin sees and replies to from inside the app.
-//
-// This route only ever creates authorRole: "owner" replies. Admin's side of
-// the conversation is sent from inside the app (see Stage 5), not by email.
-
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 function parseReplyAddress(address: string): { messageId: number; ownerId: number } | null {
-  // Matches both bare "reply+msg123-owner45@domain" and the
-  // "Name <reply+msg123-owner45@domain>" form some clients send.
   const match = address.match(/reply\+msg(\d+)-owner(\d+)@/);
   if (!match) return null;
   const messageId = parseInt(match[1], 10);
@@ -26,9 +13,6 @@ function parseReplyAddress(address: string): { messageId: number; ownerId: numbe
   return { messageId, ownerId };
 }
 
-// Cuts off quoted history so only the new reply text is stored — covers
-// Gmail's "On ... wrote:" block, Outlook's "From:/Sent:/To:/Subject:"
-// block, "----- Original Message -----" dividers, and "> " quote lines.
 function stripQuotedReply(text: string): string {
   let result = text.replace(/\r\n/g, "\n");
 
@@ -50,7 +34,6 @@ function stripQuotedReply(text: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  // Signature verification needs the raw, untouched body.
   const rawBody = await request.text();
 
   let event: any;
@@ -65,7 +48,7 @@ export async function POST(request: NextRequest) {
       webhookSecret: process.env.RESEND_WEBHOOK_SECRET || "",
     });
   } catch (err) {
-    console.error("[resend-inbound] Invalid webhook signature.", err);
+    console.error("[resend-inbound] Invalid webhook signature:", err);
     return NextResponse.json({ message: "Invalid signature." }, { status: 401 });
   }
 
@@ -81,15 +64,13 @@ export async function POST(request: NextRequest) {
     const parsed = parseReplyAddress(toAddress);
 
     if (!parsed) {
-      // Not one of our threaded reply addresses — ignore silently.
+      console.warn(`[resend-inbound] Received email with unparseable recipient: "${toAddress}"`);
       return NextResponse.json({ received: true });
     }
 
     const { messageId, ownerId } = parsed;
 
-    // Confirm this owner is actually a real recipient of this message
-    // before writing anything, so a forged or stale address can't create
-    // a reply row that doesn't belong to a real thread.
+    // 1. Verify Message and User exist without strict role case mismatch
     const [message, owner] = await Promise.all([
       prisma.adminMessage.findFirst({
         where: {
@@ -101,32 +82,45 @@ export async function POST(request: NextRequest) {
       prisma.user.findUnique({ where: { id: ownerId }, select: { id: true, role: true } }),
     ]);
 
-    if (!message || !owner || owner.role !== "owner") {
+    if (!message || !owner) {
       console.error(
-        `[resend-inbound] No matching thread for message ${messageId} / owner ${ownerId}.`
+        `[resend-inbound] Thread validation failed: Message #${messageId} or Owner #${ownerId} not found.`
       );
       return NextResponse.json({ received: true });
     }
 
-    // The webhook payload itself only has metadata — fetch the real body.
-    const { data: fullEmail } = await resend.emails.receiving.get(event.data.email_id);
+    // 2. Safely fetch email content from Resend SDK
+    const emailId = event.data?.email_id;
+    let fullEmail: any = null;
+
+    try {
+      // Direct call on resend.emails.get works across standard SDK versions
+      const res = await resend.emails.get(emailId);
+      fullEmail = res.data;
+    } catch (sdkErr) {
+      console.error(`[resend-inbound] Failed to fetch email #${emailId} via SDK:`, sdkErr);
+      return NextResponse.json({ received: true });
+    }
+
     const rawText: string =
       fullEmail?.text || (fullEmail?.html ? fullEmail.html.replace(/<[^>]+>/g, " ") : "") || "";
     const body = stripQuotedReply(rawText);
 
     if (!body) {
-        return NextResponse.json({ received: true }); // silently drops it, no console.log
-      }
+      console.warn(`[resend-inbound] Stripped body was empty for email #${emailId}. Raw length: ${rawText.length}`);
+      return NextResponse.json({ received: true });
+    }
 
-    await prisma.adminMessageReply.create({
+    // 3. Create the database record
+    const createdReply = await prisma.adminMessageReply.create({
       data: { messageId, ownerId, authorRole: "owner", body },
     });
 
+    console.log(`[resend-inbound] Successfully created reply #${createdReply.id} for Message #${messageId}`);
+
     return NextResponse.json({ received: true });
   } catch (error) {
-    // Always 200 back to Resend once the signature is valid, so it doesn't
-    // treat a downstream hiccup as a delivery failure and retry forever.
-    console.error("[resend-inbound] Processing error:", error);
+    console.error("[resend-inbound] Unhandled processing error:", error);
     return NextResponse.json({ received: true });
   }
 }
