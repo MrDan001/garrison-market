@@ -89,15 +89,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // 2. Get email content directly from the webhook payload (no extra API call needed —
-    // Resend includes the parsed text/html right on event.data for "email.received" events)
+    // 2. Fetch full email content via the Receiving API (webhook payload only has metadata —
+    // body content must be fetched separately using resend.emails.receiving.get, NOT resend.emails.get,
+    // which is for sent emails)
     const emailId = event.data?.email_id;
+    let fullEmail: any = null;
 
-    // Temporary diagnostic log — remove once confirmed working
-    console.log("[resend-inbound] event.data keys:", Object.keys(event.data || {}));
+    try {
+      const res = await resend.emails.receiving.get(emailId);
+      fullEmail = res.data;
+    } catch (sdkErr) {
+      console.error(`[resend-inbound] Failed to fetch email #${emailId} via Receiving API:`, sdkErr);
+      return NextResponse.json({ received: true });
+    }
 
     const rawText: string =
-      event.data?.text || (event.data?.html ? event.data.html.replace(/<[^>]+>/g, " ") : "") || "";
+      fullEmail?.text || (fullEmail?.html ? fullEmail.html.replace(/<[^>]+>/g, " ") : "") || "";
     const body = stripQuotedReply(rawText);
 
     if (!body) {
