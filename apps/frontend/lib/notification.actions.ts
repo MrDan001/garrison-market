@@ -5,7 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { sendPushToUsers } from "@/lib/push";
 
-type NotificationType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock" | "wastage_submitted" | "wastage_status" | "admin_message";
+type NotificationType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock" | "wastage_submitted" | "wastage_status" | "admin_message" | "debt_logged";
 
 // Mirrors the labels in NotificationBell's typeConfig — kept as plain
 // text here (no icons/JSX) since this file runs on the server and
@@ -21,6 +21,7 @@ const PUSH_TITLES: Record<NotificationType, string> = {
   wastage_submitted: "Wastage Logged",
   wastage_status: "Wastage Update",
   admin_message: "Message from Garrison Market",
+  debt_logged: "Part Payment Logged",
 };
 
 // These types are always broadcast (recipientId: null) from an action the

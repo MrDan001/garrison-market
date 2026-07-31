@@ -17,6 +17,7 @@ import Link from "next/link";
 import { processMergedSaleAction } from "@/lib/consignment.actions";
 import { convertToBaseUnit, unitsForBase, quantityFromAmount } from "@/lib/scale-units";
 import CustomerFields from "@/components/CustomerFields";
+import PartPaymentFields, { validatePartPayment } from "@/components/PartPaymentFields";
 
 interface ListItem {
   id: number;
@@ -96,6 +97,8 @@ export default function MergedInventoryClient({
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"full" | "partial">("full");
+  const [amountPaidInput, setAmountPaidInput] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
 
@@ -290,6 +293,13 @@ export default function MergedInventoryClient({
       setCheckoutError("Please select cash or transfer before confirming.");
       return;
     }
+    const validationError = validatePartPayment(paymentStatus, amountPaidInput, total, buyerName, buyerPhone);
+    if (validationError) {
+      setCheckoutError(validationError);
+      return;
+    }
+    const parsedAmountPaid = paymentStatus === "partial" ? parseFloat(amountPaidInput) : undefined;
+
     setLoading(true);
     setCheckoutError(null);
     try {
@@ -309,14 +319,16 @@ export default function MergedInventoryClient({
           discountReason: l.discountReason,
         }));
 
-      await processMergedSaleAction(listPayload, scalePayload, paymentMethod, buyerName, buyerPhone);
+      await processMergedSaleAction(listPayload, scalePayload, paymentMethod, buyerName, buyerPhone, paymentStatus, parsedAmountPaid);
 
       setCart([]);
       setShowCart(false);
       setPaymentMethod(null);
+      setPaymentStatus("full");
+      setAmountPaidInput("");
       setBuyerName("");
       setBuyerPhone("");
-      alert("Sale completed successfully!");
+      alert(paymentStatus === "partial" ? "Sale completed — part payment logged as a debt." : "Sale completed successfully!");
     } catch (error: any) {
       setCheckoutError(error.message || "Failed to process sale.");
     } finally {
@@ -602,7 +614,9 @@ export default function MergedInventoryClient({
             </div>
 
             <div className="mb-5 space-y-3">
-              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Customer Details (Optional)</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Customer Details {paymentStatus === "partial" ? "(Required for part payment)" : "(Optional)"}
+              </p>
               <CustomerFields
                 name={buyerName}
                 phone={buyerPhone}
@@ -610,6 +624,14 @@ export default function MergedInventoryClient({
                 onPhoneChange={setBuyerPhone}
               />
             </div>
+
+            <PartPaymentFields
+              paymentStatus={paymentStatus}
+              onPaymentStatusChange={setPaymentStatus}
+              amountPaid={amountPaidInput}
+              onAmountPaidChange={setAmountPaidInput}
+              total={total}
+            />
 
             <div className="mb-4">
               <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Payment Method</p>
@@ -636,11 +658,22 @@ export default function MergedInventoryClient({
             )}
 
             <button
-              disabled={loading || !paymentMethod || cart.length === 0}
+              disabled={
+                loading ||
+                !paymentMethod ||
+                cart.length === 0 ||
+                !!validatePartPayment(paymentStatus, amountPaidInput, total, buyerName, buyerPhone)
+              }
               onClick={handleProcessSale}
               className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
             >
-              {loading ? "Processing..." : !paymentMethod ? "Select payment method" : "Confirm Sale"}
+              {loading
+                ? "Processing..."
+                : !paymentMethod
+                ? "Select payment method"
+                : paymentStatus === "partial"
+                ? "Confirm Sale (Part Payment)"
+                : "Confirm Sale"}
             </button>
           </div>
         </div>

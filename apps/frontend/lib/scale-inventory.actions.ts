@@ -278,7 +278,9 @@ export async function processScaleSaleAction(
   cartItems: ScaleCartItem[],
   paymentMethod: "cash" | "transfer",
   buyerName?: string,
-  buyerPhone?: string
+  buyerPhone?: string,
+  paymentStatus: "full" | "partial" = "full",
+  amountPaid?: number
 ) {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
@@ -335,6 +337,22 @@ export async function processScaleSaleAction(
   const cleanPhone = buyerPhone?.trim();
   const saleStoreId = activeStore.id;
 
+  // Same requirement as processSaleAction — a part payment needs a real
+  // debtor the owner can chase, so name+phone are required here even
+  // though they're optional for a normal walk-in sale.
+  const isPartial = paymentStatus === "partial";
+  if (isPartial) {
+    if (!cleanName || !cleanPhone) {
+      throw new Error("Customer name and phone number are required for a part payment.");
+    }
+    if (amountPaid == null || isNaN(amountPaid) || amountPaid < 0) {
+      throw new Error("Enter a valid amount paid.");
+    }
+    if (amountPaid >= total) {
+      throw new Error("Amount paid covers the full total — select \"Paid in full\" instead.");
+    }
+  }
+
   const customerId = await resolveOrCreateCustomer({
     ownerId: saleOwnerId,
     storeId: saleStoreId,
@@ -342,38 +360,72 @@ export async function processScaleSaleAction(
     phone: cleanPhone,
   });
 
-  await prisma.order.create({
-    data: {
-      total,
-      paymentMethod,
-      buyerName: cleanName || "Walk-in Customer",
-      buyerPhone: cleanPhone || null,
-      ownerId: saleOwnerId,
-      staffId: session.id,
-      storeId: saleStoreId,
-      customerId,
-      scaleItems: {
-        create: resolved.map(({ item, baseQty, inventory }) => ({
-          scaleInventoryId: item.id,
-          quantity: item.enteredQty,
-          unit: item.enteredUnit,
-          quantityInBaseUnit: baseQty,
-          // ✅ FIXED: priceAtTime now strictly stores the unit price per base unit, 
-          // matching standard inventory behavior. Total calculation happens in memory 
-          // or via dedicated fields where needed.
-          priceAtTime: item.price,
-          ...(item.discountValue
-            ? {
-                originalPrice: item.originalPrice ?? item.price,
-                discountValue: item.discountValue,
-                discountType: item.discountType ?? null,
-                discountReason: item.discountReason ?? null,
-              }
-            : {}),
-        })),
+  if (isPartial && !customerId) {
+    throw new Error("Couldn't link a customer for this part payment. Please try again.");
+  }
+
+  const createdOrder = await prisma.$transaction(async (tx) => {
+    const order = await tx.order.create({
+      data: {
+        total,
+        paymentMethod,
+        buyerName: cleanName || "Walk-in Customer",
+        buyerPhone: cleanPhone || null,
+        ownerId: saleOwnerId,
+        staffId: session.id,
+        storeId: saleStoreId,
+        customerId,
+        scaleItems: {
+          create: resolved.map(({ item, baseQty, inventory }) => ({
+            scaleInventoryId: item.id,
+            quantity: item.enteredQty,
+            unit: item.enteredUnit,
+            quantityInBaseUnit: baseQty,
+            // ✅ FIXED: priceAtTime now strictly stores the unit price per base unit, 
+            // matching standard inventory behavior. Total calculation happens in memory 
+            // or via dedicated fields where needed.
+            priceAtTime: item.price,
+            ...(item.discountValue
+              ? {
+                  originalPrice: item.originalPrice ?? item.price,
+                  discountValue: item.discountValue,
+                  discountType: item.discountType ?? null,
+                  discountReason: item.discountReason ?? null,
+                }
+              : {}),
+          })),
+        },
       },
-    },
-  });
+    });
+
+    if (isPartial) {
+      const debt = await tx.debt.create({
+        data: {
+          orderId: order.id,
+          customerId: customerId!,
+          ownerId: saleOwnerId,
+          storeId: saleStoreId,
+          totalAmount: total,
+          amountPaid: amountPaid!,
+          status: "owing",
+        },
+      });
+
+      if (amountPaid! > 0) {
+        await tx.debtPayment.create({
+          data: {
+            debtId: debt.id,
+            amount: amountPaid!,
+            paymentMethod,
+            isInitialPayment: true,
+            staffId: session.id,
+          },
+        });
+      }
+    }
+
+    return order;
+  }, { maxWait: 10000, timeout: 20000 });
 
   const soldByStaff =
     session.role !== "owner"
@@ -390,6 +442,20 @@ export async function processScaleSaleAction(
     message: soldByStaff?.fullName ? `${soldByStaff.fullName} made a sale of ${naira}.` : `A sale of ${naira} was made.`,
     link: "/owner/dashboard",
   });
+
+  if (isPartial) {
+    const owedNaira = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(total - amountPaid!);
+    await createNotification({
+      ownerId: saleOwnerId,
+      recipientId: null,
+      storeId: saleStoreId,
+      type: "debt_logged",
+      message: soldByStaff?.fullName
+        ? `${soldByStaff.fullName} logged a part payment — ${cleanName} still owes ${owedNaira}.`
+        : `A part payment was logged — ${cleanName} still owes ${owedNaira}.`,
+      link: "/owner/customers",
+    });
+  }
 
   for (const { item, baseQty, inventory } of resolved) {
     const updated = await prisma.scaleInventory.update({
@@ -419,5 +485,6 @@ export async function processScaleSaleAction(
   revalidatePath("/staff/inventory");
   revalidatePath("/owner/inventory");
   revalidatePath("/owner/orders");
-  return { success: true };
+  revalidatePath("/owner/customers");
+  return { success: true, orderId: createdOrder.id };
 }

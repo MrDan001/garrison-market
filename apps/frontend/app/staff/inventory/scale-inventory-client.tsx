@@ -10,6 +10,7 @@ import Link from "next/link";
 import { processScaleSaleAction } from "@/lib/scale-inventory.actions";
 import { convertToBaseUnit, unitsForBase, quantityFromAmount } from "@/lib/scale-units";
 import CustomerFields from "@/components/CustomerFields";
+import PartPaymentFields, { validatePartPayment } from "@/components/PartPaymentFields";
 
 interface ScaleItem {
   id: number;
@@ -75,6 +76,8 @@ export default function ScaleInventoryClient({
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"full" | "partial">("full");
+  const [amountPaidInput, setAmountPaidInput] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -230,6 +233,13 @@ export default function ScaleInventoryClient({
       setCheckoutError("Please select cash or transfer before confirming.");
       return;
     }
+    const validationError = validatePartPayment(paymentStatus, amountPaidInput, total, customerName, customerPhone);
+    if (validationError) {
+      setCheckoutError(validationError);
+      return;
+    }
+    const parsedAmountPaid = paymentStatus === "partial" ? parseFloat(amountPaidInput) : undefined;
+
     setLoading(true);
     setCheckoutError(null);
     try {
@@ -244,14 +254,16 @@ export default function ScaleInventoryClient({
         discountReason: line.discountReason,
       }));
 
-      await processScaleSaleAction(payload, paymentMethod, customerName, customerPhone);
+      await processScaleSaleAction(payload, paymentMethod, customerName, customerPhone, paymentStatus, parsedAmountPaid);
 
       setCart([]);
       setShowCart(false);
       setPaymentMethod(null);
+      setPaymentStatus("full");
+      setAmountPaidInput("");
       setCustomerName("");
       setCustomerPhone("");
-      alert("Sale completed successfully!");
+      alert(paymentStatus === "partial" ? "Sale completed — part payment logged as a debt." : "Sale completed successfully!");
     } catch (error: any) {
       setCheckoutError(error.message || "Failed to process sale.");
     } finally {
@@ -698,7 +710,9 @@ export default function ScaleInventoryClient({
             </div>
 
             <div className="mb-5 space-y-3">
-              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Customer Details (Optional)</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Customer Details {paymentStatus === "partial" ? "(Required for part payment)" : "(Optional)"}
+              </p>
               <CustomerFields
                 name={customerName}
                 phone={customerPhone}
@@ -706,6 +720,14 @@ export default function ScaleInventoryClient({
                 onPhoneChange={setCustomerPhone}
               />
             </div>
+
+            <PartPaymentFields
+              paymentStatus={paymentStatus}
+              onPaymentStatusChange={setPaymentStatus}
+              amountPaid={amountPaidInput}
+              onAmountPaidChange={setAmountPaidInput}
+              total={total}
+            />
 
             <div className="mb-4">
               <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Payment Method</p>
@@ -736,11 +758,17 @@ export default function ScaleInventoryClient({
             )}
 
             <button
-              disabled={loading || !paymentMethod}
+              disabled={loading || !paymentMethod || !!validatePartPayment(paymentStatus, amountPaidInput, total, customerName, customerPhone)}
               onClick={handleProcessSale}
               className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
             >
-              {loading ? "Processing..." : !paymentMethod ? "Select payment method" : "Confirm Sale"}
+              {loading
+                ? "Processing..."
+                : !paymentMethod
+                ? "Select payment method"
+                : paymentStatus === "partial"
+                ? "Confirm Sale (Part Payment)"
+                : "Confirm Sale"}
             </button>
           </div>
         </div>

@@ -25,6 +25,69 @@ function serializeData<T>(data: T): T {
   );
 }
 
+// Reconciles a report's cash/transfer figures against money actually
+// COLLECTED, not sale price. A part-payment sale only puts its amountPaid
+// in the till at checkout time — the rest arrives later (possibly a
+// different day, possibly logged by a different staff member) as a
+// follow-up DebtPayment. Without this, a ₦97,000 sale where only ₦80,200
+// was collected would report the full ₦97,000 as cash received, making
+// the drawer look ₦16,800 short when nothing is actually missing — it's
+// just still owed. totalSales / item breakdowns are untouched by any of
+// this: goods sold is goods sold regardless of debt.
+async function reconcileCashAndTransfer(
+  recentSales: { total: any; paymentMethod: string; debt: { payments: { amount: any }[] } | null }[],
+  authorId: number,
+  salesStartTime: Date
+) {
+  let cashTotal = 0;
+  let transferTotal = 0;
+  let newDebtThisPeriod = 0;
+
+  for (const sale of recentSales) {
+    const saleTotal = Number(sale.total);
+    // sale.debt.payments here is pre-filtered to isInitialPayment: true —
+    // at most one row, the amount handed over at checkout itself.
+    const collected = sale.debt
+      ? (sale.debt.payments[0] ? Number(sale.debt.payments[0].amount) : 0)
+      : saleTotal;
+
+    if (sale.debt) newDebtThisPeriod += saleTotal - collected;
+
+    if (sale.paymentMethod === "cash") cashTotal += collected;
+    else if (sale.paymentMethod === "transfer") transferTotal += collected;
+  }
+
+  // Follow-up debt repayments this staff member logged in the same
+  // window — these are real money landing in the till today even though
+  // they belong to a sale from a previous report period.
+  const followUpPayments = await prisma.debtPayment.findMany({
+    where: { staffId: authorId, isInitialPayment: false, createdAt: { gte: salesStartTime } },
+  });
+  let followUpTotal = 0;
+  for (const p of followUpPayments) {
+    const amt = Number(p.amount);
+    followUpTotal += amt;
+    if (p.paymentMethod === "cash") cashTotal += amt;
+    else if (p.paymentMethod === "transfer") transferTotal += amt;
+  }
+
+  return { cashTotal, transferTotal, newDebtThisPeriod, followUpTotal };
+}
+
+// Builds the debt-related lines appended to a report's notes so the owner
+// isn't left wondering why cash/transfer totals don't match the sum of
+// sale prices — purely informational, doesn't affect any stored total.
+function buildDebtNotes(newDebtThisPeriod: number, followUpTotal: number): string[] {
+  const notes: string[] = [];
+  if (newDebtThisPeriod > 0) {
+    notes.push(`₦${newDebtThisPeriod.toLocaleString()} of today's sales is still owed by customers (part payments) — see Debtors.`);
+  }
+  if (followUpTotal > 0) {
+    notes.push(`₦${followUpTotal.toLocaleString()} collected today from previous debtors.`);
+  }
+  return notes;
+}
+
 export async function submitDailyReport(authorId: number, content: string) {
   const session = await getSessionUser();
   if (!session || session.id !== authorId) throw new Error("Unauthorized");
@@ -58,17 +121,16 @@ export async function submitDailyReport(authorId: number, content: string) {
   if (store?.storeType === "scale") {
     const recentSales = await prisma.order.findMany({
       where: { staffId: authorId, date: { gte: salesStartTime } },
-      include: { scaleItems: { include: { scaleInventory: true } } },
+      include: {
+        scaleItems: { include: { scaleInventory: true } },
+        debt: { include: { payments: { where: { isInitialPayment: true } } } },
+      },
     });
 
     const allSoldScaleItems = recentSales.flatMap((s) => s.scaleItems);
     const totalValue = recentSales.reduce((sum, s) => sum + Number(s.total), 0);
-    const cashTotal = recentSales
-      .filter((s) => s.paymentMethod === "cash")
-      .reduce((sum, s) => sum + Number(s.total), 0);
-    const transferTotal = recentSales
-      .filter((s) => s.paymentMethod === "transfer")
-      .reduce((sum, s) => sum + Number(s.total), 0);
+    const { cashTotal, transferTotal, newDebtThisPeriod, followUpTotal } =
+      await reconcileCashAndTransfer(recentSales, authorId, salesStartTime);
 
     const grouped = new Map<number, { name: string; unit: string; qty: number; total: number }>();
     for (const item of allSoldScaleItems) {
@@ -89,12 +151,15 @@ export async function submitDailyReport(authorId: number, content: string) {
       }
     }
 
+    const baseNote = content && content.trim() !== "" ? content.trim() : null;
+    const debtNotes = buildDebtNotes(newDebtThisPeriod, followUpTotal);
+
     const newReport = await prisma.report.create({
       data: {
         totalSales: totalValue,
         cashTotal,
         transferTotal,
-        notes: content && content.trim() !== "" ? content.trim() : "None",
+        notes: [baseNote, ...debtNotes].filter(Boolean).join("\n") || "None",
         status: "pending",
         authorId,
         ownerId: session.ownerId!,
@@ -151,18 +216,15 @@ export async function submitDailyReport(authorId: number, content: string) {
     include: {
       items: { include: { inventory: true } },
       scaleItems: { include: { scaleInventory: true } },
+      debt: { include: { payments: { where: { isInitialPayment: true } } } },
     }
   });
 
   const allSoldItems = recentSales.flatMap((s: any) => s.items);
   const allSoldScaleItems = recentSales.flatMap((s: any) => s.scaleItems);
   const totalValue = recentSales.reduce((sum: number, s: any) => sum + Number(s.total), 0);
-  const cashTotal = recentSales
-    .filter((s: any) => s.paymentMethod === "cash")
-    .reduce((sum: number, s: any) => sum + Number(s.total), 0);
-  const transferTotal = recentSales
-    .filter((s: any) => s.paymentMethod === "transfer")
-    .reduce((sum: number, s: any) => sum + Number(s.total), 0);
+  const { cashTotal, transferTotal, newDebtThisPeriod, followUpTotal } =
+    await reconcileCashAndTransfer(recentSales as any, authorId, salesStartTime);
 
   const groupedScale = new Map<number, { name: string; unit: string; qty: number; total: number }>();
   for (const item of allSoldScaleItems) {
@@ -183,12 +245,15 @@ export async function submitDailyReport(authorId: number, content: string) {
     }
   }
 
+  const baseNote = content && content.trim() !== "" ? content.trim() : null;
+  const debtNotes = buildDebtNotes(newDebtThisPeriod, followUpTotal);
+
   const newReport = await prisma.report.create({
     data: {
       totalSales: totalValue,
       cashTotal,
       transferTotal,
-      notes: content && content.trim() !== "" ? content.trim() : "None",
+      notes: [baseNote, ...debtNotes].filter(Boolean).join("\n") || "None",
       status: "pending",
       authorId: authorId,
       ownerId: session.ownerId!,
@@ -489,7 +554,9 @@ export async function processSaleAction(
   cartItems: any[],
   paymentMethod: "cash" | "transfer",
   buyerName?: string,
-  buyerPhone?: string
+  buyerPhone?: string,
+  paymentStatus: "full" | "partial" = "full",
+  amountPaid?: number
 ) {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
@@ -522,6 +589,24 @@ export async function processSaleAction(
   const cleanPhone = buyerPhone?.trim();
   const saleStoreId = await getActiveStoreId();
 
+  // A part payment always needs a real debtor to chase later — the owner
+  // has to know WHO owes and how to reach them, unlike a normal walk-in
+  // sale where name/phone are just a nicety. This is enforced here, not
+  // only in the staff UI, for the same reason the discountEnabled check
+  // above is re-done server-side.
+  const isPartial = paymentStatus === "partial";
+  if (isPartial) {
+    if (!cleanName || !cleanPhone) {
+      throw new Error("Customer name and phone number are required for a part payment.");
+    }
+    if (amountPaid == null || isNaN(amountPaid) || amountPaid < 0) {
+      throw new Error("Enter a valid amount paid.");
+    }
+    if (amountPaid >= total) {
+      throw new Error("Amount paid covers the full total — select \"Paid in full\" instead.");
+    }
+  }
+
   // Resolved outside the stock transaction below — it's an identity
   // lookup/write, not an inventory mutation, so it doesn't need the same
   // optimistic-lock protection the stock decrements do.
@@ -532,10 +617,17 @@ export async function processSaleAction(
     phone: cleanPhone,
   });
 
+  if (isPartial && !customerId) {
+    // Shouldn't happen given the check above (name+phone guarantees a
+    // customer row), but guards against resolveOrCreateCustomer's
+    // storeId-missing fallback silently returning null.
+    throw new Error("Couldn't link a customer for this part payment. Please try again.");
+  }
+
   // Wrapped in a transaction with an optimistic-lock guard on each
   // decrement, so two near-simultaneous sales can't both read the same
   // stock level and jointly oversell past what's actually available.
-  await prisma.$transaction(async (tx) => {
+  const createdOrder = await prisma.$transaction(async (tx) => {
     const inventoryRows = await tx.inventory.findMany({ where: { id: { in: cartItems.map((i) => i.id) } } });
 
     for (const item of cartItems) {
@@ -546,7 +638,7 @@ export async function processSaleAction(
       }
     }
 
-    await tx.order.create({
+    const order = await tx.order.create({
       data: {
         total: total,
         paymentMethod,
@@ -574,6 +666,32 @@ export async function processSaleAction(
       }
     });
 
+    if (isPartial) {
+      const debt = await tx.debt.create({
+        data: {
+          orderId: order.id,
+          customerId: customerId!,
+          ownerId: saleOwnerId,
+          storeId: saleStoreId,
+          totalAmount: total,
+          amountPaid: amountPaid!,
+          status: "owing",
+        },
+      });
+
+      if (amountPaid! > 0) {
+        await tx.debtPayment.create({
+          data: {
+            debtId: debt.id,
+            amount: amountPaid!,
+            paymentMethod,
+            isInitialPayment: true,
+            staffId: session.id,
+          },
+        });
+      }
+    }
+
     for (const item of cartItems) {
       const row = inventoryRows.find((r) => r.id === item.id)!;
       const updateResult = await tx.inventory.updateMany({
@@ -584,7 +702,9 @@ export async function processSaleAction(
         throw new Error(`${row.name} was just sold by another request — please try again.`);
       }
     }
-  });
+
+    return order;
+  }, { maxWait: 10000, timeout: 20000 });
 
   const soldByStaff = session.role !== 'owner'
     ? await prisma.user.findUnique({ where: { id: session.id }, select: { fullName: true } })
@@ -602,6 +722,20 @@ export async function processSaleAction(
       : `A sale of ${naira} was made.`,
     link: "/owner/dashboard",
   });
+
+  if (isPartial) {
+    const owedNaira = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(total - amountPaid!);
+    await createNotification({
+      ownerId: saleOwnerId,
+      recipientId: null,
+      storeId: saleStoreId,
+      type: "debt_logged",
+      message: soldByStaff?.fullName
+        ? `${soldByStaff.fullName} logged a part payment — ${cleanName} still owes ${owedNaira}.`
+        : `A part payment was logged — ${cleanName} still owes ${owedNaira}.`,
+      link: "/owner/customers",
+    });
+  }
 
   for (const item of cartItems) {
     const updated = await prisma.inventory.findUnique({ where: { id: item.id } });
@@ -623,7 +757,8 @@ export async function processSaleAction(
 
   revalidatePath("/staff/inventory");
   revalidatePath("/owner/dashboard");
-  return { success: true };
+  revalidatePath("/owner/customers");
+  return { success: true, orderId: createdOrder.id };
 }
 
 export async function getStaffReports() {

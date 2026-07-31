@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { processSaleAction } from "@/lib/business.actions";
+import PartPaymentFields, { validatePartPayment } from "@/components/PartPaymentFields";
 
 interface InventoryItem {
   id: number;
@@ -60,6 +61,8 @@ export default function InventoryClient({
   const [discountType, setDiscountType] = useState<"percent" | "flat">("percent");
   const [discountReason, setDiscountReason] = useState(DISCOUNT_REASONS[0]);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer" | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"full" | "partial">("full");
+  const [amountPaidInput, setAmountPaidInput] = useState("");
 
   // New state tracking for customer records
   const [customerName, setCustomerName] = useState("");
@@ -129,6 +132,14 @@ export default function InventoryClient({
       alert("Please select cash or transfer before confirming.");
       return;
     }
+
+    const validationError = validatePartPayment(paymentStatus, amountPaidInput, total, customerName, customerPhone);
+    if (validationError) {
+      alert(validationError);
+      return;
+    }
+    const parsedAmountPaid = paymentStatus === "partial" ? parseFloat(amountPaidInput) : undefined;
+
     setLoading(true);
     try {
       const payload = cart.map((item) => ({
@@ -136,16 +147,28 @@ export default function InventoryClient({
         originalPrice: item.price,
         price: item.finalPrice,
       }));
-      
-      // FIX: Pass customerName and customerPhone as individual arguments instead of an object
-      await processSaleAction(payload, paymentMethod, customerName, customerPhone);
-      
+
+      await processSaleAction(
+        payload,
+        paymentMethod,
+        customerName,
+        customerPhone,
+        paymentStatus,
+        parsedAmountPaid
+      );
+
       setCart([]);
       setShowCart(false);
       setPaymentMethod(null);
+      setPaymentStatus("full");
+      setAmountPaidInput("");
       setCustomerName("");
       setCustomerPhone("");
-      alert("Sale completed successfully!");
+      alert(
+        paymentStatus === "partial"
+          ? "Sale completed — part payment logged as a debt."
+          : "Sale completed successfully!"
+      );
     } catch (error: any) {
       alert(error.message || "Failed to process sale.");
     } finally {
@@ -611,24 +634,38 @@ export default function InventoryClient({
 
             {/* Customer Details Fields */}
             <div className="mb-5 space-y-3">
-              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Customer Details (Optional)</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Customer Details {paymentStatus === "partial" ? "(Required for part payment)" : "(Optional)"}
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="text"
                   placeholder="Customer Name"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                  className={`w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors ${
+                    paymentStatus === "partial" && !customerName.trim() ? "border-amber-500/60" : "border-slate-200 dark:border-slate-800"
+                  }`}
                 />
                 <input
                   type="tel"
                   placeholder="Phone Number"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                  className={`w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors ${
+                    paymentStatus === "partial" && !customerPhone.trim() ? "border-amber-500/60" : "border-slate-200 dark:border-slate-800"
+                  }`}
                 />
               </div>
             </div>
+
+            <PartPaymentFields
+              paymentStatus={paymentStatus}
+              onPaymentStatusChange={setPaymentStatus}
+              amountPaid={amountPaidInput}
+              onAmountPaidChange={setAmountPaidInput}
+              total={total}
+            />
 
             <div className="mb-4">
               <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Payment Method</p>
@@ -652,13 +689,29 @@ export default function InventoryClient({
               </div>
             </div>
 
-            <button
-              disabled={loading || !paymentMethod}
-              onClick={handleProcessSale}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
-            >
-              {loading ? "Processing..." : !paymentMethod ? "Select payment method" : "Confirm Sale"}
-            </button>
+            {(() => {
+              const partialError = validatePartPayment(paymentStatus, amountPaidInput, total, customerName, customerPhone);
+              const disabled = loading || !paymentMethod || !!partialError;
+              const label = loading
+                ? "Processing..."
+                : !paymentMethod
+                ? "Select payment method"
+                : partialError
+                ? "Complete part payment details"
+                : paymentStatus === "partial"
+                ? "Confirm Sale (Part Payment)"
+                : "Confirm Sale";
+
+              return (
+                <button
+                  disabled={disabled}
+                  onClick={handleProcessSale}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 disabled:opacity-60 py-4 rounded-2xl font-bold text-white transition-colors shadow-lg shadow-emerald-900/10"
+                >
+                  {label}
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}

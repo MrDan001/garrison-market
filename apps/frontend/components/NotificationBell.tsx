@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bell, ClipboardCheck, PackageX,
-  Sparkles, Megaphone, Inbox, CheckCheck, Banknote, FileText, PackageCheck, Mail,
+  Sparkles, Megaphone, Inbox, CheckCheck, Banknote, FileText, PackageCheck, Mail, HandCoins,
 } from "lucide-react";
 import { getNotificationsForStaff, markAllNotificationsRead } from "@/lib/notification.actions";
 
-type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock" | "wastage_submitted" | "wastage_status" | "admin_message";
+type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock" | "wastage_submitted" | "wastage_status" | "admin_message" | "debt_logged";
 
 const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label: string }> = {
   report_status: { icon: ClipboardCheck, bg: "bg-blue-500/10", text: "text-blue-400", label: "Report" },
@@ -20,6 +20,7 @@ const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label
   wastage_submitted: { icon: PackageX, bg: "bg-rose-500/10", text: "text-rose-400", label: "Wastage Logged" },
   wastage_status: { icon: ClipboardCheck, bg: "bg-amber-500/10", text: "text-amber-400", label: "Wastage" },
   admin_message: { icon: Mail, bg: "bg-indigo-500/10", text: "text-indigo-400", label: "Message" },
+  debt_logged: { icon: HandCoins, bg: "bg-orange-500/10", text: "text-orange-400", label: "Part Payment" },
 };
 
 function timeAgo(dateStr: string) {
@@ -59,6 +60,7 @@ const ROUTE_EQUIVALENTS: Record<string, Partial<Record<UserRole, string>>> = {
   "/staff/report": { owner: "/owner/report", staff: "/staff/report" },
   "/owner/dashboard": { owner: "/owner/dashboard", staff: "/staff/dashboard" },
   "/staff/dashboard": { owner: "/owner/dashboard", staff: "/staff/dashboard" },
+  "/owner/customers": { owner: "/owner/customers", staff: "/staff/debts" },
 };
 
 function resolveNotificationLink(link: string | undefined | null, userRole: UserRole): string | null {

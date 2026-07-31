@@ -146,6 +146,10 @@ model User {
 
   customers      Customer[] @relation("OwnerCustomers")
 
+  // --- Debtors (part-payment at checkout) ---
+  debtsOwned        Debt[]        @relation("OwnerDebts")
+  debtPaymentsMade  DebtPayment[] @relation("StaffDebtPayments")
+
   // --- Scale (weight/volume) inventory relations ---
   scaleInventory        ScaleInventory[]
   scaleWastageOwned     ScaleWastage[]   @relation("ScaleWastageOwner")
@@ -289,6 +293,12 @@ model Order {
   customerId    Int?
   customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
+  // Set only when this sale was NOT paid in full at checkout (staff chose
+  // "Part payment"). One-to-one: an order either has no debt at all (paid
+  // in full) or exactly one Debt row tracking what's left owing on it —
+  // see Debt below.
+  debt          Debt?
+
   @@index([ownerId, date])
   @@index([storeId, date])
   @@index([staffId, date])
@@ -344,6 +354,7 @@ model Customer {
   owner     User     @relation("OwnerCustomers", fields: [ownerId], references: [id], onDelete: Cascade)
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   orders    Order[]
+  debts     Debt[]
 
   // Phone is the real identity key within a store — name is editable/
   // re-typeable and can vary sale to sale, phone is what checkout matches
@@ -464,6 +475,72 @@ model ConsignmentItem {
 
   @@index([consignmentId])
   @@index([inventoryId])
+}
+
+// A "debtor" — created only when a staff member marks a checkout as "Part
+// payment" instead of "Paid in full" (see processSaleAction in
+// business.actions.ts). One row per unpaid/partly-unpaid Order, always
+// linked to a Customer (part payment REQUIRES picking/creating a customer
+// at checkout, unlike a normal walk-in sale where name/phone are optional
+// — see resolveOrCreateCustomer) so the owner always has a name and phone
+// to chase.
+//
+// amountPaid is a running total, NOT the amount from any single payment —
+// it's the sum of every DebtPayment row logged against this debt (the
+// first one created at checkout time, plus any later top-ups staff log
+// when the customer comes back). totalAmount is duplicated from
+// order.total at creation time purely for convenience/indexing; the order
+// itself remains the source of truth for what was actually bought.
+model Debt {
+  id          Int       @id @default(autoincrement())
+  orderId     Int       @unique
+  customerId  Int
+  ownerId     Int
+  storeId     Int?
+  totalAmount Decimal
+  amountPaid  Decimal   @default(0)
+  status      String    @default("owing") // "owing" | "settled"
+  createdAt   DateTime  @default(now())
+  settledAt   DateTime?
+
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer    Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  owner       User          @relation("OwnerDebts", fields: [ownerId], references: [id], onDelete: Cascade)
+  payments    DebtPayment[]
+
+  @@index([ownerId])
+  @@index([customerId])
+  @@index([storeId])
+  @@index([status])
+}
+
+// One row per payment logged against a Debt — the first row is created
+// automatically at checkout (the part payment the customer handed over
+// there and then), and every later top-up the customer makes when they
+// come back to pay more gets its own row too, each stamped with whichever
+// staff member logged it and when. This is what lets the owner see a full
+// payment history per debtor, not just a single before/after balance.
+//
+// paymentMethod + isInitialPayment exist for one reason: submitDailyReport
+// needs to reconcile cash/transfer actually COLLECTED, not the sale price.
+// isInitialPayment marks the row created at checkout (already folded into
+// that order's own paymentMethod bucket via the Order itself) so it isn't
+// double-counted when a report separately sums up every OTHER DebtPayment
+// a staff member logged in their period.
+model DebtPayment {
+  id              Int      @id @default(autoincrement())
+  debtId          Int
+  amount          Decimal
+  paymentMethod   String   @default("cash") // "cash" | "transfer"
+  isInitialPayment Boolean @default(false)
+  staffId         Int?
+  createdAt       DateTime @default(now())
+
+  debt      Debt  @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  staff     User? @relation("StaffDebtPayments", fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([debtId])
+  @@index([staffId])
 }
 
 model SupportMessage {

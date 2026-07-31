@@ -991,7 +991,9 @@ export async function processMergedSaleAction(
   scaleCartItems: MergedScaleCartItem[],
   paymentMethod: "cash" | "transfer",
   buyerName?: string,
-  buyerPhone?: string
+  buyerPhone?: string,
+  paymentStatus: "full" | "partial" = "full",
+  amountPaid?: number
 ) {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
@@ -1028,6 +1030,18 @@ export async function processMergedSaleAction(
   }
 
   const activeStoreId = await getActiveStoreId();
+
+  const cleanNamePre = buyerName?.trim();
+  const cleanPhonePre = buyerPhone?.trim();
+  const isPartial = paymentStatus === "partial";
+  if (isPartial) {
+    if (!cleanNamePre || !cleanPhonePre) {
+      throw new Error("Customer name and phone number are required for a part payment.");
+    }
+    if (amountPaid == null || isNaN(amountPaid) || amountPaid < 0) {
+      throw new Error("Enter a valid amount paid.");
+    }
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     // --- Resolve + validate list items against Inventory ---
@@ -1073,6 +1087,10 @@ export async function processMergedSaleAction(
     const scaleTotal = resolvedScale.reduce((sum, r) => sum + r.cart.price * r.baseQty, 0);
     const total = listTotal + scaleTotal;
 
+    if (isPartial && amountPaid! >= total) {
+      throw new Error("Amount paid covers the full total — select \"Paid in full\" instead.");
+    }
+
     // Storefront for the sale: prefer the active store cookie, falling back
     // to wherever the scale consignment lines were signed out under (both
     // should normally agree for a merged-mode staff member).
@@ -1094,7 +1112,11 @@ export async function processMergedSaleAction(
       customerId = customer.id;
     }
 
-    await tx.order.create({
+    if (isPartial && !customerId) {
+      throw new Error("Couldn't link a customer for this part payment. Please try again.");
+    }
+
+    const order = await tx.order.create({
       data: {
         total,
         paymentMethod,
@@ -1139,6 +1161,32 @@ export async function processMergedSaleAction(
       },
     });
 
+    if (isPartial) {
+      const debt = await tx.debt.create({
+        data: {
+          orderId: order.id,
+          customerId: customerId!,
+          ownerId,
+          storeId: saleStoreId,
+          totalAmount: total,
+          amountPaid: amountPaid!,
+          status: "owing",
+        },
+      });
+
+      if (amountPaid! > 0) {
+        await tx.debtPayment.create({
+          data: {
+            debtId: debt.id,
+            amount: amountPaid!,
+            paymentMethod,
+            isInitialPayment: true,
+            staffId: session.id,
+          },
+        });
+      }
+    }
+
     // Decrement Inventory with an optimistic lock (guards the same race
     // processSaleAction has, now closed for the merged path).
     for (const { cart, row } of resolvedList) {
@@ -1164,7 +1212,7 @@ export async function processMergedSaleAction(
     }
 
     return { total, saleStoreId };
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 
   const naira = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(result.total);
   const staffName = await prisma.user.findUnique({ where: { id: session.id }, select: { fullName: true } });
@@ -1177,6 +1225,20 @@ export async function processMergedSaleAction(
     message: staffName?.fullName ? `${staffName.fullName} made a sale of ${naira}.` : `A sale of ${naira} was made.`,
     link: "/owner/dashboard",
   });
+
+  if (isPartial) {
+    const owedNaira = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(result.total - amountPaid!);
+    await createNotification({
+      ownerId,
+      recipientId: null,
+      storeId: result.saleStoreId,
+      type: "debt_logged",
+      message: staffName?.fullName
+        ? `${staffName.fullName} logged a part payment — ${cleanNamePre} still owes ${owedNaira}.`
+        : `A part payment was logged — ${cleanNamePre} still owes ${owedNaira}.`,
+      link: "/owner/customers",
+    });
+  }
 
   // Low-stock notifications for the list side (scale side already covered
   // by the same check inside sellFromScaleConsignmentAction's flow — here
@@ -1200,6 +1262,7 @@ export async function processMergedSaleAction(
   revalidatePath("/staff/inventory");
   revalidatePath("/owner/dashboard");
   revalidatePath("/owner/consignments");
+  revalidatePath("/owner/customers");
   return { success: true, total: result.total };
 }
 
