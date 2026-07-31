@@ -1,12 +1,13 @@
 "use client";
 // FILE: apps/frontend/app/admin/messages/messages-client.tsx
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
 import { withTimeout } from "@/lib/with-timeout";
 import { sendAdminMessageAction } from "@/lib/admin-message.actions";
-import { Send, Image as ImageIcon, Link as LinkIcon, X, Users, User, CheckCircle2 } from "lucide-react";
+import { Send, Image as ImageIcon, Link as LinkIcon, X, Users, User, CheckCircle2, MessageCircle } from "lucide-react";
 
 type Owner = { id: number; fullName: string | null; storeName: string | null; email: string };
 type SentMessage = {
@@ -17,6 +18,8 @@ type SentMessage = {
   createdAt: Date;
   readCount: number;
   recipientCount: number;
+  replyCount: number;
+  pendingReplyCount: number;
 };
 
 export default function MessagesClient({ owners, initialSent }: { owners: Owner[]; initialSent: SentMessage[] }) {
@@ -102,7 +105,7 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
       // reference log; a hard refresh will re-sync exact read counts.
       setSent((prev) => [
         {
-          id: Date.now(),
+          id: result.messageId,
           subject: subject.trim(),
           audience,
           targetOwnerName:
@@ -112,6 +115,8 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
           createdAt: new Date(),
           readCount: 0,
           recipientCount: result.recipientCount,
+          replyCount: 0,
+          pendingReplyCount: 0,
         },
         ...prev,
       ]);
@@ -252,9 +257,10 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
         ) : (
           <div className="space-y-2">
             {sent.map((m) => (
-              <div
+              <Link
                 key={m.id}
-                className="bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                href={`/admin/messages/${m.id}`}
+                className="bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-xl px-4 py-3 flex items-center justify-between gap-3 hover:border-blue-400/50 transition-colors"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{m.subject}</p>
@@ -264,8 +270,15 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
                     {new Date(m.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
                   </p>
                 </div>
-                <span className="text-xs font-bold text-slate-400 shrink-0">{m.readCount}/{m.recipientCount} read</span>
-              </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {m.pendingReplyCount > 0 && (
+                    <span className="flex items-center gap-1 text-xs font-bold bg-indigo-500 text-white rounded-full px-2 py-1">
+                      <MessageCircle size={11} /> {m.pendingReplyCount}
+                    </span>
+                  )}
+                  <span className="text-xs font-bold text-slate-400">{m.readCount}/{m.recipientCount} read</span>
+                </div>
+              </Link>
             ))}
           </div>
         )}

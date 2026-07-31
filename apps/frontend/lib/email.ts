@@ -28,19 +28,45 @@ function getResendClient(): Resend {
 
 type SendResult = { success: boolean; error?: string };
 
-async function send(to: string, subject: string, html: string): Promise<SendResult> {
+async function send(to: string, subject: string, html: string, replyTo?: string): Promise<SendResult> {
   if (!process.env.RESEND_API_KEY) {
     console.error(`RESEND_API_KEY is not set — skipping email "${subject}" to ${to}.`);
     return { success: false, error: "Email service not configured." };
   }
 
   try {
-    await getResendClient().emails.send({ from: FROM, to, subject, html });
+    await getResendClient().emails.send({
+      from: FROM,
+      to,
+      subject,
+      html,
+      ...(replyTo ? { replyTo } : {}),
+    });
     return { success: true };
   } catch (error) {
     console.error(`Failed to send email "${subject}" to ${to}:`, error);
     return { success: false, error: "Failed to send email." };
   }
+}
+
+// Domain used for generated inbound reply addresses, e.g.
+// reply+msg123-owner45@mail.yourdomain.com. Defaults to the domain half of
+// EMAIL_FROM so there's one less env var to configure, but you can override
+// with RESEND_REPLY_DOMAIN if replies should land on a different subdomain
+// than normal outbound mail is sent from.
+export function getReplyDomain(): string {
+  if (process.env.RESEND_REPLY_DOMAIN) return process.env.RESEND_REPLY_DOMAIN;
+  const match = FROM.match(/@([^ >]+)/);
+  return match ? match[1] : "yourdomain.com";
+}
+
+// Builds the unique per-thread Reply-To address for an admin message thread.
+// Encodes both the message and the owner so a reply can be routed straight
+// back to the correct (messageId, ownerId) thread with no lookup ambiguity —
+// this matters because a single "all_owners" AdminMessage fans out to many
+// owners, each of whom needs their own private reply address.
+export function getAdminMessageReplyAddress(messageId: number, ownerId: number): string {
+  return `reply+msg${messageId}-owner${ownerId}@${getReplyDomain()}`;
 }
 
 // --- Shared visual wrapper so every email feels like one brand ---
@@ -306,7 +332,14 @@ export async function sendConsignmentSettlementEmail(
 export async function sendAdminBroadcastEmail(
   to: string,
   ownerFullName: string,
-  params: { subject: string; body: string; link?: string | null; imageUrl?: string | null; messageUrl: string }
+  params: {
+    subject: string;
+    body: string;
+    link?: string | null;
+    imageUrl?: string | null;
+    messageUrl: string;
+    replyTo?: string;
+  }
 ) {
   const firstName = ownerFullName?.split(" ")[0] || "there";
 
@@ -330,7 +363,46 @@ export async function sendAdminBroadcastEmail(
       }
       ${params.link ? button(params.link, "Open Link") : ""}
       ${button(params.messageUrl, "View in Garrison Market", "#0f1117")}
+      ${params.replyTo ? fineprint("Just reply to this email to send a response — it'll show up right in the app.") : ""}
     `,
   });
-  return send(to, params.subject, html);
+  // replyTo set → any Gmail/Outlook/etc. reply lands on the unique per-owner
+  // thread address instead of going back to the shared FROM inbox.
+  return send(to, params.subject, html, params.replyTo);
+}
+
+// =====================================================================
+// 7. ADMIN MESSAGE THREAD REPLY  (either direction — admin <-> owner)
+// =====================================================================
+// Sent whenever either side replies from inside the app itself. Keeps the
+// same Reply-To as the original broadcast so the email thread stays intact
+// no matter how many times it goes back and forth.
+
+export async function sendAdminMessageReplyEmail(
+  to: string,
+  params: {
+    recipientFirstName: string;
+    authorLabel: string; // e.g. "Garrison Market Support" or the owner's name
+    subject: string;
+    body: string;
+    messageUrl: string;
+    replyTo?: string;
+  }
+) {
+  const escapeHtml = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const bodyHtml = escapeHtml(params.body).replace(/\n/g, "<br>");
+
+  const html = layout({
+    preheader: `${params.authorLabel} replied: ${params.body.slice(0, 80)}`,
+    badge: { label: "New Reply", color: "#4f46e5" },
+    body: `
+      ${heading(`${params.authorLabel} replied`)}
+      ${paragraph(`Hi ${params.recipientFirstName},`)}
+      ${paragraph(bodyHtml)}
+      ${button(params.messageUrl, "View & Reply in Garrison Market", "#0f1117")}
+      ${params.replyTo ? fineprint("You can also just reply to this email.") : ""}
+    `,
+  });
+  return send(to, `Re: ${params.subject}`, html, params.replyTo);
 }

@@ -3,8 +3,9 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getSessionUser } from "@/lib/auth.actions";
-import { getMessageForOwner } from "@/lib/admin-message.actions";
+import { getOwnerMessageThread } from "@/lib/admin-message.actions";
 import { ArrowLeft, Mail, ExternalLink } from "lucide-react";
+import OwnerThreadClient from "./owner-thread-client";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,13 @@ export default async function OwnerMessageDetailPage({ params }: { params: Promi
   const messageId = parseInt(id, 10);
   if (Number.isNaN(messageId)) notFound();
 
-  // getMessageForOwner both verifies this owner is actually a recipient
+  // getOwnerMessageThread both verifies this owner is actually a recipient
   // AND marks it read (upsert AdminMessageRead) — opening this page is
-  // the read action, same as opening a normal email.
-  const message = await getMessageForOwner(messageId);
-  if (!message) notFound();
+  // the read action, same as opening a normal email — plus loads any
+  // back-and-forth already on this owner's thread.
+  const data = await getOwnerMessageThread(messageId);
+  if (!data) notFound();
+  const { message, replies } = data;
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 p-4 sm:p-6 lg:p-8 pb-24">
@@ -40,7 +43,7 @@ export default async function OwnerMessageDetailPage({ params }: { params: Promi
             </p>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-4">
+          <div className="p-5 sm:p-6 space-y-4 border-b border-slate-200/60 dark:border-slate-800/60">
             <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">{message.body}</p>
 
             {message.imageUrl && (
@@ -59,6 +62,8 @@ export default async function OwnerMessageDetailPage({ params }: { params: Promi
               </a>
             )}
           </div>
+
+          <OwnerThreadClient messageId={message.id} initialReplies={replies} />
         </div>
       </div>
     </div>

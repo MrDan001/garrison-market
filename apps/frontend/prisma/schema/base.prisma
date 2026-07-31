@@ -75,9 +75,10 @@ model User {
 
   // Admin -> owner mailbox (see AdminMessage below). sentAdminMessages is
   // populated only for admin-role users; the other two only for owners.
-  sentAdminMessages      AdminMessage[]     @relation("AdminMessageSender")
-  targetedAdminMessages  AdminMessage[]     @relation("AdminMessageTarget")
+  sentAdminMessages      AdminMessage[]      @relation("AdminMessageSender")
+  targetedAdminMessages  AdminMessage[]      @relation("AdminMessageTarget")
   adminMessageReads      AdminMessageRead[]
+  adminMessageReplies    AdminMessageReply[] @relation("AdminMessageReplyOwner")
 
   shopAddress   String?
   shopCity      String?
@@ -619,9 +620,10 @@ model AdminMessage {
   sentById  Int
   createdAt DateTime @default(now())
 
-  sentBy      User               @relation("AdminMessageSender", fields: [sentById], references: [id], onDelete: Cascade)
-  targetOwner User?              @relation("AdminMessageTarget", fields: [targetOwnerId], references: [id], onDelete: Cascade)
+  sentBy      User                @relation("AdminMessageSender", fields: [sentById], references: [id], onDelete: Cascade)
+  targetOwner User?               @relation("AdminMessageTarget", fields: [targetOwnerId], references: [id], onDelete: Cascade)
   reads       AdminMessageRead[]
+  replies     AdminMessageReply[]
 
   @@index([audience, targetOwnerId])
   @@index([createdAt])
@@ -637,6 +639,24 @@ model AdminMessageRead {
   owner   User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, ownerId])
+  @@index([ownerId])
+}
+
+// One AdminMessage can go to many owners at once (audience: "all_owners"),
+// so a reply thread is scoped to (messageId, ownerId) — not just messageId —
+// so each owner's back-and-forth with admin stays private to that owner.
+model AdminMessageReply {
+  id         Int      @id @default(autoincrement())
+  messageId  Int
+  ownerId    Int
+  authorRole String   // "admin" | "owner"
+  body       String
+  createdAt  DateTime @default(now())
+
+  message AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  owner   User         @relation("AdminMessageReplyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, ownerId])
   @@index([ownerId])
 }
 
