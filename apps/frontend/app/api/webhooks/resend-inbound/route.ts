@@ -115,8 +115,8 @@ export async function POST(request: NextRequest) {
     const body = stripQuotedReply(rawText);
 
     if (!body) {
-      return NextResponse.json({ received: true });
-    }
+        return NextResponse.json({ received: true }); // silently drops it, no console.log
+      }
 
     await prisma.adminMessageReply.create({
       data: { messageId, ownerId, authorRole: "owner", body },
