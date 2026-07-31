@@ -98,6 +98,9 @@ export async function POST(request: NextRequest) {
     try {
       const res = await resend.emails.receiving.get(emailId);
       fullEmail = res.data;
+      // Temporary diagnostic — dump the full raw response so we can see its real shape.
+      // Remove this line once the body extraction is confirmed working.
+      console.log("[resend-inbound] full receiving.get() response:", JSON.stringify(res, null, 2));
     } catch (sdkErr) {
       console.error(`[resend-inbound] Failed to fetch email #${emailId} via Receiving API:`, sdkErr);
       return NextResponse.json({ received: true });
