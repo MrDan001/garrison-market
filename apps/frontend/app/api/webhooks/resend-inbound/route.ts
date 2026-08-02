@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import prisma from "@/lib/prisma";
+import { createAdminNotification } from "@/lib/admin-notification.actions";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -77,9 +78,9 @@ export async function POST(request: NextRequest) {
           id: messageId,
           OR: [{ audience: "all_owners" }, { targetOwnerId: ownerId }],
         },
-        select: { id: true },
+        select: { id: true, subject: true },
       }),
-      prisma.user.findUnique({ where: { id: ownerId }, select: { id: true, role: true } }),
+      prisma.user.findUnique({ where: { id: ownerId }, select: { id: true, role: true, fullName: true, storeName: true } }),
     ]);
 
     if (!message || !owner) {
@@ -129,6 +130,18 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`[resend-inbound] Successfully created reply #${createdReply.id} for Message #${messageId}`);
+
+    // Wrapped so a failure here can never turn a successfully-recorded
+    // reply into a webhook error (Resend would just retry delivery).
+    try {
+      await createAdminNotification({
+        type: "email_awaiting_reply",
+        message: `${owner?.fullName || owner?.storeName || "An owner"} replied by email to "${message?.subject}" and is awaiting a response.`,
+        link: `/admin/messages/${messageId}`,
+      });
+    } catch (notifyErr) {
+      console.error("[resend-inbound] admin notification failed", notifyErr);
+    }
 
     return NextResponse.json({ received: true });
   } catch (error) {

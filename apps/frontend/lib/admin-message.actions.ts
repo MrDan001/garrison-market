@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "./auth.actions";
 import { createNotification } from "./notification.actions";
+import { createAdminNotification } from "./admin-notification.actions";
 import { sendAdminBroadcastEmail, sendAdminMessageReplyEmail, getAdminMessageReplyAddress } from "./email";
 
 async function getBaseUrl(): Promise<string> {
@@ -430,7 +431,7 @@ export async function sendOwnerReplyAction(
       id: messageId,
       OR: [{ audience: "all_owners" }, { targetOwnerId: session.id }],
     },
-    select: { id: true },
+    select: { id: true, subject: true },
   });
   if (!message) return { success: false, error: "Message not found." };
 
@@ -438,9 +439,23 @@ export async function sendOwnerReplyAction(
     data: { messageId, ownerId: session.id, authorRole: "owner", body: trimmed },
   });
 
-  // No email/push to admin here — same as the existing owner_admin support
-  // chat, admin sees new replies by checking the thread list (badged via
-  // pendingReplyCount in getSentAdminMessages), not via a push notification.
+  // Surfaces the reply to admin (bell + push) instead of relying on them to
+  // notice pendingReplyCount next time they happen to open the thread list.
+  // Wrapped so a failure here can never fail the reply itself.
+  try {
+    const owner = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { fullName: true, storeName: true },
+    });
+    await createAdminNotification({
+      type: "email_awaiting_reply",
+      message: `${owner?.fullName || owner?.storeName || "An owner"} replied to "${message.subject}" and is awaiting a response.`,
+      link: `/admin/messages/${messageId}`,
+    });
+  } catch (err) {
+    console.error("[sendOwnerReplyAction] admin notification failed", err);
+  }
+
   revalidatePath(`/owner/messages/${messageId}`);
   revalidatePath(`/admin/messages/${messageId}`);
 

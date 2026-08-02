@@ -17,6 +17,7 @@ import {
   sendOwnerSuspendedEmail,
   sendStaffInviteEmail,
 } from "@/lib/email";
+import { createAdminNotification } from "@/lib/admin-notification.actions";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { assertSubscriptionActive, checkPlanLimit } from "@/lib/subscription-guard";
 import { creditReferralReward } from "@/lib/referral.actions"; // 👇 Safely imported
@@ -216,6 +217,22 @@ export async function registerOwnerAction(formData: FormData) {
     });
 
     revalidatePath('/admin/users');
+
+    // Admin never sees a new signup unless they happen to check /admin/users —
+    // this is what actually surfaces it (bell + push) the moment someone
+    // registers. Awaited (not fire-and-forget) for the same reason
+    // sendOwnerWelcomeEmail below is awaited: on Vercel, an un-awaited
+    // promise can get frozen/killed right after the response is sent.
+    // Wrapped so a failure here still can't block or fail registration.
+    try {
+      await createAdminNotification({
+        type: "pending_owner",
+        message: `${newUser.fullName || newUser.email} registered "${targetStoreName || "a new store"}" and is awaiting approval.`,
+        link: `/admin/users/${newUser.id}`,
+      });
+    } catch (err) {
+      console.error("[registerOwnerAction] admin notification failed", err);
+    }
 
     // sendOwnerWelcomeEmail never throws (it returns { success, error }
     // internally), so it can't block or fail registration — but we still

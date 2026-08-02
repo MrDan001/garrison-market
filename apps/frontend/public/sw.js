@@ -72,3 +72,62 @@ self.addEventListener('install', () => {
       })()
     );
   });
+
+  // --- Subscription rotation ----------------------------------------------
+  //
+  // The browser (Chrome/FCM especially) can invalidate or rotate a push
+  // subscription entirely on its own — not from anything the app or user
+  // did. When that happens this event fires, and if nothing here
+  // re-subscribes, the device just silently stops receiving pushes: the
+  // permission still shows "granted" in Settings, so nothing looks wrong
+  // until you notice notifications quietly stopped. This mirrors the
+  // subscribe flow in hooks/usePushNotifications.ts, since a service
+  // worker can't import that hook or call a server action directly.
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+  }
+
+  self.addEventListener('pushsubscriptionchange', (event) => {
+    event.waitUntil(
+      (async () => {
+        try {
+          const oldEndpoint = event.oldSubscription ? event.oldSubscription.endpoint : null;
+
+          let applicationServerKey = event.oldSubscription && event.oldSubscription.options
+            ? event.oldSubscription.options.applicationServerKey
+            : null;
+
+          if (!applicationServerKey) {
+            const res = await fetch('/api/push/vapid-key');
+            const { key } = await res.json();
+            if (!key) throw new Error('No VAPID public key available');
+            applicationServerKey = urlBase64ToUint8Array(key);
+          }
+
+          const newSubscription = await self.registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
+          });
+
+          await fetch('/api/push/resubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              oldEndpoint,
+              subscription: newSubscription.toJSON(),
+              userAgent: self.navigator ? self.navigator.userAgent : null,
+            }),
+          });
+        } catch (err) {
+          // Nothing more we can do from inside the service worker — the
+          // device stays unsubscribed until the user reopens the app,
+          // where usePushNotifications' own getSubscription() check will
+          // find nothing active and show "Enable Notifications" again.
+          console.error('[sw] pushsubscriptionchange handling failed', err);
+        }
+      })()
+    );
+  });

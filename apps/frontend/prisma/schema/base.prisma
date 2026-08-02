@@ -432,6 +432,34 @@ model PushSubscription {
   @@index([userId])
 }
 
+// Platform-level notifications for the Garrison Market team — deliberately
+// separate from Notification above, which is always scoped to a single
+// owner's tenant (Notification.ownerId is required and non-nullable, and
+// getNotificationsForStaff() resolves an owner/staff viewer's own tenant
+// from it). An admin isn't part of any tenant, so these two things are not
+// the same "notification" conceptually even though they render in the same
+// NotificationBell UI — see getAdminNotifications() in
+// lib/admin-notification.actions.ts.
+//
+// read is a single shared flag (not a per-viewer join table like
+// NotificationRead) because, unlike an owner's notifications which are
+// genuinely shared across several distinct staff logins, the admin side of
+// this app is operated by one small internal team — the same simple
+// tradeoff the legacy Notification.read boolean made before per-viewer
+// reads existed. Revisit with a proper read-per-admin join table if/when
+// multiple admin accounts need independent unread counts.
+model AdminNotification {
+  id        Int      @id @default(autoincrement())
+  type      String   // "pending_owner" | "email_awaiting_reply"
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([read])
+  @@index([createdAt])
+}
+
 model Consignment {
   id             Int       @id @default(autoincrement())
   ownerId        Int

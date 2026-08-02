@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard, Loader2, Crown, MessageCircle } from "lucide-react";
+import { ArrowLeft, Check, Clock, CreditCard, Loader2, Crown, MessageCircle, AlertCircle } from "lucide-react";
 import { getOwnerBillingInfo, startCheckoutAction } from "@/lib/billing.actions";
 import { PLANS, BILLING_CYCLES, getCyclePrice, getCycleDiscountPct, type PlanId, type BillingCycleId } from "@/lib/plans";
 
@@ -19,6 +19,48 @@ const nairaOrDash = (n: number | null) => (n === null ? "—" : naira(n));
 // Max Package's limits are Infinity (see PLANS.max in lib/plans.ts) — show
 // that as "Unlimited" instead of the literal word "Infinity".
 const displayLimit = (n: number) => (n === Infinity ? "Unlimited" : n);
+
+// Fixed dark theme, deliberately not wired to the app's --bg-app/--text-primary
+// light/dark tokens — this screen is meant to read like a paywall (App
+// Store, Duolingo, etc. all do the same thing), not blend into whichever
+// mode the rest of the app happens to be in.
+const CYCLE_ORDER: BillingCycleId[] = ["quarterly", "biannual", "annual"];
+const CYCLE_SHORT_LABEL: Record<BillingCycleId, string> = {
+  quarterly: "Quarterly",
+  biannual: "Bi-Annual",
+  annual: "Annual",
+};
+
+// Each plan's accent — the one bold, spend-it-in-one-place move on this
+// page. Basic stays quiet on purpose (it's not the plan we're trying to
+// sell), Premium and Max each carry a distinct gradient identity so
+// they're recognizable even before you read the price.
+const PLAN_ACCENT: Record<PlanId, { ring: string; glow: string; grad: string; text: string; badge: string; badgeLabel: string | null }> = {
+  basic: {
+    ring: "border-white/10",
+    glow: "",
+    grad: "from-white/10 to-white/5",
+    text: "text-white/70",
+    badge: "",
+    badgeLabel: null,
+  },
+  premium: {
+    ring: "border-fuchsia-400/60",
+    glow: "shadow-[0_0_40px_-8px_rgba(217,70,239,0.55)]",
+    grad: "from-fuchsia-500 to-pink-500",
+    text: "text-fuchsia-300",
+    badge: "bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-400/30",
+    badgeLabel: "Most Popular",
+  },
+  max: {
+    ring: "border-amber-300/60",
+    glow: "shadow-[0_0_40px_-8px_rgba(251,191,36,0.5)]",
+    grad: "from-amber-400 to-orange-500",
+    text: "text-amber-300",
+    badge: "bg-amber-400/15 text-amber-300 border border-amber-300/30",
+    badgeLabel: "Best Value",
+  },
+};
 
 export default function BillingPage() {
   const router = useRouter();
@@ -41,19 +83,15 @@ export default function BillingPage() {
   }, [router]);
 
   const customPriceBasicNaira: number | null = info?.customPriceBasicNaira ?? null;
-  const customPriceBasicNote: string | null = info?.customPriceBasicNote ?? null;
   const customPricePremiumNaira: number | null = info?.customPricePremiumNaira ?? null;
-  const customPricePremiumNote: string | null = info?.customPricePremiumNote ?? null;
   const customPriceMaxNaira: number | null = info?.customPriceMaxNaira ?? null;
-  const customPriceMaxNote: string | null = info?.customPriceMaxNote ?? null;
   const maxPackageEnabled: boolean = info?.maxPackageEnabled ?? false;
 
   const customPriceForPlan = (planId: PlanId) =>
     planId === "premium" ? customPricePremiumNaira : planId === "max" ? customPriceMaxNaira : customPriceBasicNaira;
-  const customNoteForPlan = (planId: PlanId) =>
-    planId === "premium" ? customPricePremiumNote : planId === "max" ? customPriceMaxNote : customPriceBasicNote;
 
   const selectedCustomPrice = customPriceForPlan(selectedPlan);
+  const accent = PLAN_ACCENT[selectedPlan];
 
   async function handleCheckout() {
     setCheckingOut(true);
@@ -61,7 +99,6 @@ export default function BillingPage() {
     try {
       const result = await startCheckoutAction(selectedPlan, selectedCycle);
       if ("error" in result) {
-        // FIXED: Added fallback string to avoid passing undefined into string | null state
         setError(result.error || "An error occurred during checkout setup.");
         setCheckingOut(false);
         return;
@@ -75,201 +112,250 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-app)]">
-        <Loader2 className="animate-spin text-slate-400" size={28} />
+      <div className="min-h-screen flex items-center justify-center bg-[#0B0A17]">
+        <Loader2 className="animate-spin text-white/40" size={26} />
       </div>
     );
   }
 
   const status = info?.status;
+  const cycleIndex = CYCLE_ORDER.indexOf(selectedCycle);
 
   return (
-    <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 pb-16">
-      <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-4 py-4 flex items-center gap-4">
-        <Link href="/owner/dashboard" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
-          <ArrowLeft size={24} />
-        </Link>
-        <h1 className="text-xl font-bold text-[var(--text-primary)]">Billing & Subscription</h1>
+    <div className="relative min-h-screen bg-[#0B0A17] text-white overflow-x-hidden">
+      {/* Reduced-motion escape hatch for every transition/animation on this page */}
+      <style>{`
+        @keyframes billingFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .billing-fade-up { animation: billingFadeUp 0.4s ease-out both; }
+        @media (prefers-reduced-motion: reduce) {
+          .billing-fade-up { animation: none; }
+          * { transition-duration: 0.01ms !important; }
+        }
+      `}</style>
+
+      {/* Ambient glow field — the ONE atmospheric flourish, fixed so it doesn't repaint on scroll */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-cyan-500/20 blur-[110px]" />
+        <div className="absolute top-1/3 -right-32 w-[460px] h-[460px] rounded-full bg-fuchsia-600/20 blur-[120px]" />
+        <div className="absolute bottom-0 left-1/4 w-[380px] h-[380px] rounded-full bg-amber-500/10 blur-[110px]" />
       </div>
 
-      <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
-        {/* Current status card */}
-        <div className={`rounded-2xl border p-5 ${status?.isLocked ? "bg-rose-500/5 border-rose-500/30" : "bg-emerald-500/5 border-emerald-500/30"}`}>
-          <div className="flex items-center gap-2 mb-2">
-            {status?.isLocked ? (
-              <XCircle className="text-rose-500" size={20} />
-            ) : (
-              <CheckCircle2 className="text-emerald-500" size={20} />
-            )}
-            <h2 className="font-bold text-[var(--text-primary)]">
-              {status?.isLocked
-                ? "Subscription inactive"
-                : status?.subscriptionStatus === "trialing"
-                ? "Free trial active"
-                : "Subscription active"}
-            </h2>
+      <div className="relative z-10 pb-40">
+        {/* Header */}
+        <div className="sticky top-0 z-20 bg-[#0B0A17]/70 backdrop-blur-xl border-b border-white/5">
+          <div className="max-w-md mx-auto px-5 py-4 flex items-center gap-4">
+            <Link href="/owner/dashboard" className="text-white/50 hover:text-white transition-colors">
+              <ArrowLeft size={20} />
+            </Link>
+            <h1 className="text-lg font-semibold">Billing &amp; Subscription</h1>
           </div>
-
-          {status?.subscriptionStatus === "trialing" && !status?.isLocked && (
-            <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-              <Clock size={14} /> {status.trialDaysLeft} day{status.trialDaysLeft === 1 ? "" : "s"} left in your free trial
-            </p>
-          )}
-          {status?.subscriptionStatus === "active" && !status?.isLocked && status?.currentPeriodEnd && (
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Current plan: <span className="font-semibold text-[var(--text-primary)]">{PLANS[status.plan as PlanId]?.name}</span> — renews{" "}
-              {new Date(status.currentPeriodEnd).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
-            </p>
-          )}
-          {maxPackageEnabled && (
-            <p className="text-sm text-amber-500 font-semibold flex items-center gap-1.5 mt-1">
-              <Crown size={14} /> Max Package active — unlimited stores, staff, and products
-            </p>
-          )}
-          {status?.isLocked && (
-            <p className="text-sm text-rose-500/90">
-              Your trial or subscription has ended. Choose a plan below to unlock your account again — all your data is safe and untouched.
-            </p>
-          )}
         </div>
 
-        {error && (
-          <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm font-semibold text-rose-500">
-            {error}
+        <div className="max-w-md mx-auto px-5 pt-6 space-y-6">
+          {/* Hero */}
+          <div className="text-center pt-2 pb-1 billing-fade-up">
+            <h2 className="text-[26px] font-extrabold tracking-tight">Unlock your plan</h2>
+            <p className="text-sm text-white/50 mt-1">Pick what fits how your shop runs</p>
           </div>
-        )}
 
-        {/* Plan picker */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {(Object.keys(PLANS) as PlanId[]).map((planId) => {
-            const plan = PLANS[planId];
-            const isSelected = selectedPlan === planId;
-            const displayMonthly = customPriceForPlan(planId);
-            return (
-              <button
-                key={planId}
-                onClick={() => setSelectedPlan(planId)}
-                className={`text-left rounded-2xl border-2 p-4 transition-all ${
-                  isSelected
-                    ? "border-blue-600 bg-blue-500/5"
-                    : "border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)] hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <p className="font-bold text-[var(--text-primary)] mb-1 flex items-center gap-1.5">
-                  {planId === "max" && <Crown size={14} className="text-amber-500" />}
-                  {plan.name}
-                </p>
-                <p className="text-2xl font-black text-[var(--text-primary)] mb-3">
-                  {nairaOrDash(displayMonthly)}
-                  {displayMonthly !== null && <span className="text-xs font-medium text-slate-500">/mo</span>}
-                </p>
-                <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                  <li>{displayLimit(plan.maxStores)} store{plan.maxStores > 1 ? "s" : ""}</li>
-                  <li>{displayLimit(plan.maxStaff)} staff accounts</li>
-                  <li>{displayLimit(plan.maxProducts)} products</li>
-                  <li className={plan.businessSummaryChart ? "text-emerald-500" : "text-slate-400 dark:text-slate-600"}>
-                    {plan.businessSummaryChart ? "✓" : "✕"} Business summary chart
-                  </li>
-                  <li className={plan.consignment ? "text-emerald-500" : "text-slate-400 dark:text-slate-600"}>
-                    {plan.consignment ? "✓" : "✕"} Consignment
-                  </li>
-                </ul>
-              </button>
-            );
-          })}
-        </div>
+          {/* Status pill */}
+          {status && (
+            <div
+              className={`billing-fade-up flex items-center gap-3 rounded-2xl border px-4 py-3 ${
+                status.isLocked
+                  ? "border-rose-400/30 bg-rose-500/10"
+                  : status.subscriptionStatus === "trialing"
+                  ? "border-cyan-400/30 bg-cyan-500/10"
+                  : "border-emerald-400/30 bg-emerald-500/10"
+              }`}
+            >
+              {status.isLocked ? (
+                <AlertCircle size={18} className="text-rose-300 shrink-0" />
+              ) : status.subscriptionStatus === "trialing" ? (
+                <Clock size={18} className="text-cyan-300 shrink-0" />
+              ) : (
+                <Check size={18} className="text-emerald-300 shrink-0" />
+              )}
+              <p className="text-[13px] text-white/80 leading-snug">
+                {status.isLocked && "Your access is paused — pick a plan below to restore it."}
+                {status.subscriptionStatus === "trialing" && !status.isLocked && (
+                  <>{status.trialDaysLeft} day{status.trialDaysLeft === 1 ? "" : "s"} left on your free trial</>
+                )}
+                {status.subscriptionStatus === "active" && !status.isLocked && status.currentPeriodEnd && (
+                  <>
+                    {PLANS[status.plan as PlanId]?.name} · renews{" "}
+                    {new Date(status.currentPeriodEnd).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
+                  </>
+                )}
+              </p>
+              {maxPackageEnabled && <Crown size={16} className="text-amber-300 ml-auto shrink-0" />}
+            </div>
+          )}
 
-        {/* Cycle picker */}
-        <div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Billing cycle</p>
-          <div className="space-y-2">
-            {(Object.keys(BILLING_CYCLES) as BillingCycleId[]).map((cycleId) => {
-              const cycle = BILLING_CYCLES[cycleId];
-              const price = getCyclePrice(selectedPlan, cycleId, selectedCustomPrice);
-              const discountPct = getCycleDiscountPct(selectedPlan, cycleId);
-              const isSelected = selectedCycle === cycleId;
-              return (
-                <button
-                  key={cycleId}
-                  onClick={() => setSelectedCycle(cycleId)}
-                  disabled={price === null}
-                  className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isSelected
-                      ? "border-blue-600 bg-blue-500/5"
-                      : "border-slate-200 dark:border-slate-800 bg-[var(--bg-surface)]"
-                  }`}
-                >
-                  <span className="text-sm font-medium text-[var(--text-primary)]">
-                    {cycle.label}
+          {error && (
+            <div className="billing-fade-up rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              {error}
+            </div>
+          )}
+
+          {/* Billing cycle — sliding 3-segment pill */}
+          <div className="billing-fade-up">
+            <div className="relative grid grid-cols-3 rounded-full border border-white/10 bg-white/5 p-1">
+              <div
+                className="absolute inset-y-1 left-1 w-[calc(33.333%-4px)] rounded-full bg-gradient-to-r from-fuchsia-500 to-cyan-400 transition-transform duration-300 ease-out"
+                style={{ transform: `translateX(${cycleIndex * 100}%)` }}
+              />
+              {CYCLE_ORDER.map((cycleId) => {
+                const discountPct = getCycleDiscountPct(selectedPlan, cycleId);
+                const isActive = selectedCycle === cycleId;
+                return (
+                  <button
+                    key={cycleId}
+                    onClick={() => setSelectedCycle(cycleId)}
+                    className="relative z-10 flex flex-col items-center justify-center py-2 rounded-full text-[13px] font-semibold transition-colors"
+                  >
+                    <span className={isActive ? "text-[#0B0A17]" : "text-white/70"}>{CYCLE_SHORT_LABEL[cycleId]}</span>
                     {discountPct > 0 && (
-                      <span className="ml-2 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                        SAVE {discountPct}%
+                      <span className={`text-[10px] font-bold ${isActive ? "text-[#0B0A17]/70" : "text-emerald-300/80"}`}>
+                        Save {discountPct}%
                       </span>
                     )}
-                  </span>
-                  <span className="text-sm font-bold text-[var(--text-primary)]">{nairaOrDash(price)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Plan cards */}
+          <div className="space-y-3">
+            {(Object.keys(PLANS) as PlanId[]).map((planId, i) => {
+              const plan = PLANS[planId];
+              const isSelected = selectedPlan === planId;
+              const planAccent = PLAN_ACCENT[planId];
+              const displayMonthly = customPriceForPlan(planId);
+              const cyclePrice = getCyclePrice(planId, selectedCycle, displayMonthly);
+
+              return (
+                <button
+                  key={planId}
+                  onClick={() => setSelectedPlan(planId)}
+                  style={{ animationDelay: `${i * 60}ms` }}
+                  className={`billing-fade-up w-full text-left rounded-3xl border-[1.5px] p-5 transition-all duration-300 ${
+                    isSelected
+                      ? `${planAccent.ring} bg-white/[0.06] ${planAccent.glow} scale-[1.02]`
+                      : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05] scale-100"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      {planId === "max" && <Crown size={15} className="text-amber-300" />}
+                      <span className="font-semibold text-[15px]">{plan.name}</span>
+                      {planAccent.badgeLabel && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${planAccent.badge}`}>
+                          {planAccent.badgeLabel}
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className={`w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 ${
+                        isSelected ? `border-transparent bg-gradient-to-br ${planAccent.grad || "from-white/40 to-white/40"}` : "border-white/25"
+                      }`}
+                    >
+                      {isSelected && <Check size={12} strokeWidth={3} className="text-[#0B0A17]" />}
+                    </div>
+                  </div>
+
+                  <p className="text-2xl font-extrabold tabular-nums mb-3">
+                    {nairaOrDash(cyclePrice)}
+                    {cyclePrice !== null && (
+                      <span className="text-xs font-medium text-white/40"> / {BILLING_CYCLES[selectedCycle].months}mo</span>
+                    )}
+                  </p>
+
+                  <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12.5px] text-white/60">
+                    <li className="flex items-center gap-1.5">
+                      <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> {displayLimit(plan.maxStores)} store{plan.maxStores > 1 ? "s" : ""}
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> {displayLimit(plan.maxStaff)} staff
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> {displayLimit(plan.maxProducts)} products
+                    </li>
+                    {plan.businessSummaryChart && (
+                      <li className="flex items-center gap-1.5">
+                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Summary chart
+                      </li>
+                    )}
+                    {plan.consignment && (
+                      <li className="flex items-center gap-1.5">
+                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Consignment
+                      </li>
+                    )}
+                  </ul>
                 </button>
               );
             })}
           </div>
-        </div>
 
-        {selectedCustomPrice === null ? (
-          <div className="space-y-2">
-            <Link
-              href="/owner/support"
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-colors"
-            >
-              <MessageCircle size={18} /> Contact admin about {PLANS[selectedPlan].name}
-            </Link>
-            <p className="text-center text-xs text-slate-500">
-              Or email{" "}
-              <a href="mailto:support@garrison.com" className="underline font-semibold text-slate-600 dark:text-slate-400">
-                support@garrison.com
-              </a>
-              . Once a rate is agreed, it'll show here and you can pay directly.
-            </p>
-          </div>
-        ) : (
-          <button
-            onClick={handleCheckout}
-            disabled={checkingOut}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-colors"
-          >
-            {checkingOut ? (
-              <>
-                <Loader2 className="animate-spin" size={18} /> Redirecting to Paystack...
-              </>
-            ) : (
-              <>
-                <CreditCard size={18} /> Pay {naira(getCyclePrice(selectedPlan, selectedCycle, selectedCustomPrice)!)} with Paystack
-              </>
-            )}
-          </button>
-        )}
-
-        {/* Payment history */}
-        {info?.payments?.length > 0 && (
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Payment history</p>
-            <div className="space-y-2">
-              {info.payments.map((p: any) => (
-                <div key={p.id} className="flex items-center justify-between bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm">
-                  <div>
-                    <p className="font-medium text-[var(--text-primary)] capitalize">{p.plan} plan</p>
-                    <p className="text-xs text-slate-500">{new Date(p.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</p>
+          {/* Payment history */}
+          {info?.payments?.length > 0 && (
+            <div className="billing-fade-up pt-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-white/35 mb-2">Payment history</p>
+              <div className="space-y-2">
+                {info.payments.map((p: any) => (
+                  <div key={p.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm">
+                    <div>
+                      <p className="font-medium capitalize">{p.plan} plan</p>
+                      <p className="text-xs text-white/40">{new Date(p.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold tabular-nums">{naira(Number(p.amount))}</p>
+                      <p className={`text-xs font-medium ${p.status === "success" ? "text-emerald-300" : p.status === "pending" ? "text-amber-300" : "text-rose-300"}`}>
+                        {p.status}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-[var(--text-primary)]">{naira(Number(p.amount))}</p>
-                    <p className={`text-xs font-medium ${p.status === "success" ? "text-emerald-500" : p.status === "pending" ? "text-amber-500" : "text-rose-500"}`}>
-                      {p.status}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </div>
+
+      {/* Sticky CTA */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-[#0B0A17] via-[#0B0A17]/95 to-transparent pt-10 pb-6">
+        <div className="max-w-md mx-auto px-5">
+          {selectedCustomPrice === null ? (
+            <div className="space-y-2">
+              <Link
+                href="/owner/support"
+                className="w-full flex items-center justify-center gap-2 rounded-full py-4 font-bold text-[#0B0A17] bg-gradient-to-r from-white to-white/90 active:scale-[0.99] transition-transform"
+              >
+                <MessageCircle size={17} /> Contact admin about {PLANS[selectedPlan].name}
+              </Link>
+              <p className="text-center text-[11px] text-white/40">
+                Or email <a href="mailto:support@garrison.com" className="underline text-white/60">support@garrison.com</a>
+              </p>
+            </div>
+          ) : (
+            <button
+              onClick={handleCheckout}
+              disabled={checkingOut}
+              className={`w-full flex items-center justify-center gap-2 rounded-full py-4 font-bold text-[#0B0A17] bg-gradient-to-r ${accent.grad || "from-white to-white/90"} disabled:opacity-60 active:scale-[0.99] transition-transform shadow-[0_10px_40px_-10px_rgba(217,70,239,0.5)]`}
+            >
+              {checkingOut ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} /> Redirecting to Paystack...
+                </>
+              ) : (
+                <>
+                  <CreditCard size={18} /> Continue — {naira(getCyclePrice(selectedPlan, selectedCycle, selectedCustomPrice)!)}
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

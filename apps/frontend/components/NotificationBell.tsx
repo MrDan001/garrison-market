@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   Bell, ClipboardCheck, PackageX,
   Sparkles, Megaphone, Inbox, CheckCheck, Banknote, FileText, PackageCheck, Mail, HandCoins,
+  UserCheck, Reply,
 } from "lucide-react";
 import { getNotificationsForStaff, markAllNotificationsRead } from "@/lib/notification.actions";
+import { getAdminNotifications, markAllAdminNotificationsRead } from "@/lib/admin-notification.actions";
 
-type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock" | "wastage_submitted" | "wastage_status" | "admin_message" | "debt_logged";
+type NotifType = "report_status" | "low_stock" | "new_item" | "announcement" | "sale_made" | "report_submitted" | "restock" | "wastage_submitted" | "wastage_status" | "admin_message" | "debt_logged" | "pending_owner" | "email_awaiting_reply";
 
 const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label: string }> = {
   report_status: { icon: ClipboardCheck, bg: "bg-blue-500/10", text: "text-blue-400", label: "Report" },
@@ -21,6 +23,8 @@ const typeConfig: Record<NotifType, { icon: any; bg: string; text: string; label
   wastage_status: { icon: ClipboardCheck, bg: "bg-amber-500/10", text: "text-amber-400", label: "Wastage" },
   admin_message: { icon: Mail, bg: "bg-indigo-500/10", text: "text-indigo-400", label: "Message" },
   debt_logged: { icon: HandCoins, bg: "bg-orange-500/10", text: "text-orange-400", label: "Part Payment" },
+  pending_owner: { icon: UserCheck, bg: "bg-blue-500/10", text: "text-blue-400", label: "Pending Review" },
+  email_awaiting_reply: { icon: Reply, bg: "bg-rose-500/10", text: "text-rose-400", label: "Awaiting Reply" },
 };
 
 function timeAgo(dateStr: string) {
@@ -159,7 +163,13 @@ export default function NotificationBell({
   };
 
   const fetchNotifications = async () => {
-    const { notifications, unreadCount } = await getNotificationsForStaff();
+    // Admin isn't part of any owner's tenant, so it reads from a separate
+    // platform-level inbox — see getAdminNotifications in
+    // lib/admin-notification.actions.ts. getNotificationsForStaff filters
+    // by ownerId, which an admin viewer never has, so it would silently
+    // return nothing for this role.
+    const { notifications, unreadCount } =
+      userRole === "admin" ? await getAdminNotifications() : await getNotificationsForStaff();
     if (unreadCount > prevUnreadRef.current) playAlarm();
     prevUnreadRef.current = unreadCount;
     setNotifications(notifications);
@@ -178,7 +188,11 @@ export default function NotificationBell({
     setOpen(nextOpenState);
     
     if (nextOpenState && unreadCount > 0) {
-      await markAllNotificationsRead();
+      if (userRole === "admin") {
+        await markAllAdminNotificationsRead();
+      } else {
+        await markAllNotificationsRead();
+      }
       prevUnreadRef.current = 0;
       setUnreadCount(0);
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
