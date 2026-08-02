@@ -5,6 +5,15 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "./auth.actions";
 import { getActiveStoreId } from "./store-context";
+import { hasFeatureAccess } from "./subscription-guard";
+
+// Deliberately NOT applied to resolveOrCreateCustomer below — that function
+// is checkout plumbing called from every sale path (standard, scale,
+// consignment) to link an Order/Debt to a customer identity, not the
+// "Customer Profiles" feature itself. Gating it would silently break sales
+// and debt-linking for Basic-plan owners, which is a much bigger regression
+// than "the ranked Customers page is a paid feature" should ever cause.
+const FEATURE_SELECT = { plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true, customerProfilesOverride: true } as const;
 
 // ============================================================================
 // Checkout autocomplete
@@ -17,6 +26,11 @@ import { getActiveStoreId } from "./store-context";
 export async function searchCustomersAction(query: string) {
   const session = await getSessionUser();
   if (!session) return [];
+
+  const ownerScopeId = session.role === "owner" ? session.id : session.ownerId;
+  if (!ownerScopeId) return [];
+  const owner = await prisma.user.findUnique({ where: { id: ownerScopeId }, select: FEATURE_SELECT });
+  if (!owner || !hasFeatureAccess(owner, "customerProfiles")) return [];
 
   const storeId = await getActiveStoreId();
   if (!storeId) return [];
@@ -97,6 +111,11 @@ export async function resolveOrCreateCustomer(params: {
 export async function getCustomersForOwner(params: { year?: number; month?: number | null } = {}) {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") {
+    return { customers: [], years: [new Date().getFullYear()], year: new Date().getFullYear(), month: null };
+  }
+
+  const owner = await prisma.user.findUnique({ where: { id: session.id }, select: FEATURE_SELECT });
+  if (!owner || !hasFeatureAccess(owner, "customerProfiles")) {
     return { customers: [], years: [new Date().getFullYear()], year: new Date().getFullYear(), month: null };
   }
 

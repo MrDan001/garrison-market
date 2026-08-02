@@ -17,7 +17,19 @@ export interface PlanConfig {
   maxStaff: number;
   maxProducts: number;
   businessSummaryChart: boolean;
-  consignment: boolean;
+  // Staff can sign consignment stock out to customers (Standard) and sell
+  // against scale stock signed out to them. Was just "consignment" before
+  // this was split in two — renamed so it reads as what it actually gates.
+  staffConsignment: boolean;
+  // Owner personally signs stock out (Standard, direct-to-customer) and
+  // signs scale stock out to staff/all-staff. New — previously ungated on
+  // every plan via signOutConsignment/signOutScaleConsignment having no
+  // plan check at all, only the owner's own consignmentEnabled toggle.
+  ownerConsignment: boolean;
+  // Debtors / part-payments. New — previously ungated on every plan.
+  debtors: boolean;
+  // Customer profiles ranked by spend. New — previously ungated on every plan.
+  customerProfiles: boolean;
   // Discount applied to (negotiated monthly rate x cycle months) for that cycle, 0-100.
   // Premium carries deeper discounts on longer cycles than Basic on purpose
   // — it narrows the price gap between plans as commitment length grows,
@@ -34,17 +46,27 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxStaff: 2,
     maxProducts: 10,
     businessSummaryChart: false,
-    consignment: false,
+    staffConsignment: false,
+    ownerConsignment: false,
+    debtors: false,
+    customerProfiles: false,
     discounts: { quarterly: 0, biannual: 5, annual: 10 },
   },
   premium: {
     id: "premium",
-    name: "Premium",
+    // Display name only — the internal id stays "premium" everywhere
+    // (Payment.plan, User relations, PlanId type, etc. all already store
+    // this string in the database, so changing the id itself would be a
+    // real data migration). This is purely what renders on screen.
+    name: "Pro",
     maxStores: 2,
     maxStaff: 4,
     maxProducts: 30,
     businessSummaryChart: true,
-    consignment: true,
+    staffConsignment: true,
+    ownerConsignment: false,
+    debtors: true,
+    customerProfiles: true,
     discounts: { quarterly: 0, biannual: 20, annual: 35 },
   },
   // Max Package: no self-service price — an owner requests it via Support
@@ -66,7 +88,10 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxStaff: Infinity,
     maxProducts: Infinity,
     businessSummaryChart: true,
-    consignment: true,
+    staffConsignment: true,
+    ownerConsignment: true,
+    debtors: true,
+    customerProfiles: true,
     discounts: { quarterly: 0, biannual: 25, annual: 40 },
   },
 };

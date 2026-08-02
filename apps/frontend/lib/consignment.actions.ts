@@ -8,8 +8,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createNotification } from "./notification.actions";
 import { getActiveStoreId, getActiveStore } from "./store-context";
-import { assertSubscriptionActive, resolveEffectivePlanId } from "./subscription-guard";
-import { getPlanConfig } from "./plans";
+import { assertSubscriptionActive, hasFeatureAccess } from "./subscription-guard";
 import { sendConsignmentSettlementEmail } from "./email";
 import { convertToBaseUnit } from "./scale-units";
 
@@ -25,14 +24,42 @@ export async function isConsignmentEnabledForStaff() {
 
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
-    select: { consignmentEnabled: true, plan: true, subscriptionStatus: true, trialEndsAt: true },
+    select: {
+      consignmentEnabled: true, plan: true, subscriptionStatus: true, trialEndsAt: true,
+      // maxPackageEnabled was missing here before — resolveEffectivePlanId()
+      // reads it to resolve Max regardless of what `plan` says, so without
+      // it a Max owner relying on the flag (rather than plan:"max" stored)
+      // could fail this check. staffConsignmentOverride is the new
+      // admin-override half of the check, via hasFeatureAccess() below.
+      maxPackageEnabled: true, staffConsignmentOverride: true,
+    },
   });
 
-  // Both the owner's manual toggle AND their (effective) plan must allow it
-  // — Basic plan owners never see consignment regardless of the toggle
-  // state, but an active trial counts as Premium.
-  const planAllows = owner ? getPlanConfig(resolveEffectivePlanId(owner)).consignment : false;
-  return (owner?.consignmentEnabled ?? false) && planAllows;
+  // Both the owner's manual toggle AND (plan OR admin override) must allow
+  // it — Basic plan owners without an override never see consignment
+  // regardless of the toggle state, but an active trial counts as Pro,
+  // and an override always wins regardless of plan.
+  return (owner?.consignmentEnabled ?? false) && (owner ? hasFeatureAccess(owner, "staffConsignment") : false);
+}
+
+// Owner-side twin of isConsignmentEnabledForStaff above — same toggle,
+// different plan feature (ownerConsignment, Max-only, instead of
+// staffConsignment). Used by the owner's own consignments page to decide
+// whether to render the sign-out form or an upgrade prompt, matching what
+// signOutConsignment itself now actually enforces server-side.
+export async function isConsignmentEnabledForOwner() {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") return false;
+
+  const owner = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: {
+      consignmentEnabled: true, plan: true, subscriptionStatus: true, trialEndsAt: true,
+      maxPackageEnabled: true, ownerConsignmentOverride: true,
+    },
+  });
+
+  return (owner?.consignmentEnabled ?? false) && (owner ? hasFeatureAccess(owner, "ownerConsignment") : false);
 }
 
 export async function signOutConsignment(params: {
@@ -51,9 +78,28 @@ export async function signOutConsignment(params: {
 
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
-    select: { consignmentEnabled: true },
+    select: {
+      consignmentEnabled: true, plan: true, subscriptionStatus: true, trialEndsAt: true,
+      maxPackageEnabled: true, staffConsignmentOverride: true, ownerConsignmentOverride: true,
+    },
   });
   if (!owner?.consignmentEnabled) throw new Error("Consignment is not enabled for this store");
+
+  // The toggle above just means the owner has turned consignment ON for
+  // their store at all — this is the separate question of whether THIS
+  // caller's role is entitled to use it. Staff need Pro+Max
+  // (staffConsignment); the owner personally doing this needs Max
+  // (ownerConsignment) — this is the actual enforcement of the
+  // Staff/Owner Consignment split, previously only reflected in which UI
+  // page had a form on it, never checked here.
+  const requiredFeature = session.role === "owner" ? "ownerConsignment" : "staffConsignment";
+  if (!hasFeatureAccess(owner, requiredFeature)) {
+    throw new Error(
+      session.role === "owner"
+        ? "UPGRADE_REQUIRED: Signing consignment stock out yourself requires the Max Package."
+        : "UPGRADE_REQUIRED: Consignment requires the Pro plan or higher."
+    );
+  }
 
   if (!params.recipientName.trim() || !params.recipientPhone.trim()) {
     throw new Error("Recipient name and phone are required");
@@ -334,9 +380,25 @@ export async function signOutScaleConsignment(params: {
 
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
-    select: { consignmentEnabled: true },
+    select: {
+      consignmentEnabled: true, scaleConsignmentEnabled: true, plan: true, subscriptionStatus: true,
+      trialEndsAt: true, maxPackageEnabled: true, staffConsignmentOverride: true, ownerConsignmentOverride: true,
+    },
   });
   if (!owner?.consignmentEnabled) throw new Error("Consignment is not enabled for this store");
+
+  // Same role-aware check as signOutConsignment above, and the same
+  // reasoning: the toggle is "does this store use consignment at all",
+  // this is "is this caller's role entitled to it". Applies here
+  // identically for the Scale/weight system.
+  const requiredFeature = session.role === "owner" ? "ownerConsignment" : "staffConsignment";
+  if (!hasFeatureAccess(owner, requiredFeature)) {
+    throw new Error(
+      session.role === "owner"
+        ? "UPGRADE_REQUIRED: Signing consignment stock out yourself requires the Max Package."
+        : "UPGRADE_REQUIRED: Consignment requires the Pro plan or higher."
+    );
+  }
 
   if (!params.recipientName.trim() || !params.recipientPhone.trim()) {
     throw new Error("Recipient name and phone are required");
@@ -351,15 +413,10 @@ export async function signOutScaleConsignment(params: {
   // A store qualifies for scale sign-out either because it's a native
   // "scale" store, OR because the admin has switched on the
   // scaleConsignmentEnabled override for this owner (unlocks a parallel
-  // Scale layer on top of an otherwise-untouched standard store).
-  if (activeStore.storeType !== "scale") {
-    const owner = await prisma.user.findUnique({
-      where: { id: ownerId },
-      select: { scaleConsignmentEnabled: true },
-    });
-    if (!owner?.scaleConsignmentEnabled) {
-      throw new Error("This action is only available for weight/volume stores");
-    }
+  // Scale layer on top of an otherwise-untouched standard store). Reuses
+  // the `owner` record fetched above instead of querying a second time.
+  if (activeStore.storeType !== "scale" && !owner.scaleConsignmentEnabled) {
+    throw new Error("This action is only available for weight/volume stores");
   }
 
   const inventoryRows = await prisma.scaleInventory.findMany({
@@ -676,10 +733,22 @@ export async function ownerSignOutScaleToStaffAction(params: {
 
   const owner = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { scaleConsignmentEnabled: true },
+    select: {
+      scaleConsignmentEnabled: true, plan: true, subscriptionStatus: true, trialEndsAt: true,
+      maxPackageEnabled: true, ownerConsignmentOverride: true,
+    },
   });
   if (!owner?.scaleConsignmentEnabled) {
     throw new Error("Scale Consignment is not enabled for this account.");
+  }
+
+  // scaleConsignmentEnabled above answers "does the Scale Consignment
+  // subsystem exist for this store" — this is the separate question of
+  // whether this owner's plan tier entitles them to use it themselves.
+  // This action is owner-only (checked above), so it's always the Max-tier
+  // ownerConsignment flag, never staffConsignment.
+  if (!hasFeatureAccess(owner, "ownerConsignment")) {
+    throw new Error("UPGRADE_REQUIRED: Signing scale stock out to staff requires the Max Package.");
   }
 
   if (params.items.length === 0) throw new Error("Add at least one item");
@@ -842,6 +911,18 @@ export async function sellFromScaleConsignmentAction(
   const ownerId = session.role === "owner" ? session.id : session.ownerId;
   if (!ownerId) throw new Error("No owner scope found for this account");
   await assertSubscriptionActive(ownerId);
+
+  // Selling against stock someone already signed out is the "Staff
+  // Consignment" capability in the plan table — Pro+Max — regardless of
+  // whether the session invoking it happens to be staff or the owner
+  // themselves filling in at the till.
+  const owner = await prisma.user.findUnique({
+    where: { id: ownerId },
+    select: { plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true, staffConsignmentOverride: true },
+  });
+  if (!owner || !hasFeatureAccess(owner, "staffConsignment")) {
+    throw new Error("UPGRADE_REQUIRED: Consignment requires the Pro plan or higher.");
+  }
 
   if (cartItems.length === 0) throw new Error("Cart is empty");
 

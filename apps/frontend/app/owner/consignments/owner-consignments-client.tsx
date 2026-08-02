@@ -5,15 +5,48 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Truck, Calendar, User, Store, RotateCcw } from "lucide-react";
-import { ownerReconcileScaleConsignmentAction } from "@/lib/consignment.actions";
+import { ArrowLeft, Truck, Calendar, User, Store, RotateCcw, Plus, Minus, X, Phone, FileText, PackagePlus } from "lucide-react";
+import { ownerReconcileScaleConsignmentAction, signOutConsignment } from "@/lib/consignment.actions";
 
-export default function OwnerConsignmentsClient({ consignments = [] }: { consignments: any[] }) {
+interface InventoryItem {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+interface CartLine {
+  inventoryId: number;
+  name: string;
+  quantityOut: number;
+  maxQuantity: number;
+}
+
+export default function OwnerConsignmentsClient({
+  consignments = [],
+  enabled = false,
+  inventory = [],
+}: {
+  consignments: any[];
+  enabled?: boolean;
+  inventory?: InventoryItem[];
+}) {
   const [filter, setFilter] = useState<"all" | "out" | "settled">("all");
   const [storeFilter, setStoreFilter] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
   const [reconcileMsg, setReconcileMsg] = useState<Record<number, string>>({});
   const router = useRouter();
+
+  // Sign-out form — collapsed by default so the page still opens straight
+  // to the record list, same as before this form existed.
+  const [showForm, setShowForm] = useState(false);
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
+  const [recipientNote, setRecipientNote] = useState("");
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   const handleReconcile = (id: number) => {
     startTransition(async () => {
@@ -25,6 +58,67 @@ export default function OwnerConsignmentsClient({ consignments = [] }: { consign
         setReconcileMsg((prev) => ({ ...prev, [id]: err?.message || "Failed to reconcile." }));
       }
     });
+  };
+
+  const addItemToCart = () => {
+    if (!selectedItemId) return;
+    const inv = inventory.find((i) => i.id === Number(selectedItemId));
+    if (!inv || inv.quantity <= 0) return;
+    if (cart.find((c) => c.inventoryId === inv.id)) return;
+
+    setCart((prev) => [
+      ...prev,
+      { inventoryId: inv.id, name: inv.name, quantityOut: 1, maxQuantity: inv.quantity },
+    ]);
+    setSelectedItemId("");
+  };
+
+  const updateQty = (inventoryId: number, delta: number) => {
+    setCart((prev) =>
+      prev.map((c) =>
+        c.inventoryId === inventoryId
+          ? { ...c, quantityOut: Math.max(1, Math.min(c.maxQuantity, c.quantityOut + delta)) }
+          : c
+      )
+    );
+  };
+
+  const removeFromCart = (inventoryId: number) => {
+    setCart((prev) => prev.filter((c) => c.inventoryId !== inventoryId));
+  };
+
+  const handleSignOut = async () => {
+    setSignOutError(null);
+    if (!recipientName.trim() || !recipientPhone.trim()) {
+      setSignOutError("Recipient name and phone are required.");
+      return;
+    }
+    if (cart.length === 0) {
+      setSignOutError("Add at least one item.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await signOutConsignment({
+        recipientName,
+        recipientPhone,
+        recipientNote,
+        items: cart.map((c) => ({ inventoryId: c.inventoryId, quantityOut: c.quantityOut })),
+      });
+      setRecipientName("");
+      setRecipientPhone("");
+      setRecipientNote("");
+      setCart([]);
+      setShowForm(false);
+      router.refresh();
+    } catch (err: any) {
+      // Same UPGRADE_REQUIRED: prefix pattern used elsewhere — strip it
+      // for display since the message itself is already plain-language.
+      setSignOutError((err?.message || "Failed to sign out consignment.").replace(/^UPGRADE_REQUIRED:\s*/, ""));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const stores = Array.from(
@@ -56,9 +150,126 @@ export default function OwnerConsignmentsClient({ consignments = [] }: { consign
         <h1 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
           <Truck size={17} className="text-blue-400" /> Consignments
         </h1>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            showForm ? "bg-slate-200 dark:bg-slate-800 text-[var(--text-primary)]" : "bg-blue-600 hover:bg-blue-500 text-white"
+          }`}
+        >
+          <PackagePlus size={14} /> Sign Out
+        </button>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 space-y-4">
+        {showForm && (
+          !enabled ? (
+            <div className="bg-[var(--bg-surface)] border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center">
+              <PackagePlus size={28} className="mx-auto mb-3 text-slate-300 dark:text-slate-700" />
+              <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Signing out yourself isn't available yet</p>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Owner sign-out needs Consignment turned on in Settings and the Max Package (or an admin override).
+                Your staff can already sign consignment stock out on the Pro plan and up, even while this is off for you.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recipient</label>
+                <div className="relative">
+                  <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    value={recipientName}
+                    onChange={(e) => setRecipientName(e.target.value)}
+                    placeholder="Recipient name"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-[var(--text-primary)] outline-none focus:border-blue-600 transition-colors"
+                  />
+                </div>
+                <div className="relative">
+                  <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    value={recipientPhone}
+                    onChange={(e) => setRecipientPhone(e.target.value)}
+                    placeholder="Phone number"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-[var(--text-primary)] outline-none focus:border-blue-600 transition-colors"
+                  />
+                </div>
+                <div className="relative">
+                  <FileText size={15} className="absolute left-3 top-3 text-slate-500" />
+                  <textarea
+                    value={recipientNote}
+                    onChange={(e) => setRecipientNote(e.target.value)}
+                    placeholder="Note (optional) — address, agreement details, etc."
+                    className="w-full h-16 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 pl-9 pr-3 text-sm text-[var(--text-primary)] outline-none focus:border-blue-600 transition-colors resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Items to Sign Out</label>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedItemId}
+                    onChange={(e) => setSelectedItemId(e.target.value)}
+                    className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 px-3 text-sm text-[var(--text-primary)] outline-none focus:border-blue-600 transition-colors"
+                  >
+                    <option value="">Select an item...</option>
+                    {inventory
+                      .filter((inv) => inv.quantity > 0 && !cart.find((c) => c.inventoryId === inv.id))
+                      .map((inv) => (
+                        <option key={inv.id} value={inv.id}>
+                          {inv.name} ({inv.quantity} in stock)
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    onClick={addItemToCart}
+                    disabled={!selectedItemId}
+                    className="px-4 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:dark:text-slate-600 text-white text-sm font-semibold transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {cart.length === 0 ? (
+                  <p className="text-xs text-slate-400 dark:text-slate-600 italic py-2">No items added yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {cart.map((line) => (
+                      <div key={line.inventoryId} className="flex items-center justify-between gap-2 bg-slate-50/60 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+                        <p className="text-sm text-slate-800 dark:text-slate-200 truncate flex-1">{line.name}</p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button onClick={() => updateQty(line.inventoryId, -1)} className="h-7 w-7 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-[var(--text-primary)]">
+                            <Minus size={13} />
+                          </button>
+                          <span className="w-6 text-center text-sm font-bold text-[var(--text-primary)]">{line.quantityOut}</span>
+                          <button onClick={() => updateQty(line.inventoryId, 1)} disabled={line.quantityOut >= line.maxQuantity} className="h-7 w-7 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-[var(--text-primary)] disabled:opacity-30">
+                            <Plus size={13} />
+                          </button>
+                          <button onClick={() => removeFromCart(line.inventoryId)} className="h-7 w-7 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center">
+                            <X size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {signOutError && (
+                <p className="text-xs text-rose-400 text-center">{signOutError}</p>
+              )}
+
+              <button
+                onClick={handleSignOut}
+                disabled={submitting}
+                className="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-200 disabled:dark:bg-slate-800 text-white font-bold transition-all active:scale-[0.98]"
+              >
+                {submitting ? "Signing out..." : "Sign Out Consignment"}
+              </button>
+            </div>
+          )
+        )}
+
         <div className="flex gap-2">
           {(["all", "out", "settled"] as const).map((f) => (
             <button

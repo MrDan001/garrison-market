@@ -4,8 +4,8 @@
 
 import { useState, useTransition, type TransitionStartFunction } from "react";
 import { useRouter } from "next/navigation";
-import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction, setScaleConsignmentOverrideAction, setMergedCartOverrideAction, setMaxPackageOverrideAction } from "@/lib/auth.actions";
-import { CalendarPlus, Tag, Scale, Crown, Combine } from "lucide-react";
+import { updateOwnerStatus, deleteUser, extendSubscriptionAction, setCustomPriceAction, setScaleConsignmentOverrideAction, setMergedCartOverrideAction, setMaxPackageOverrideAction, setDebtorsOverrideAction, setCustomerProfilesOverrideAction, setStaffConsignmentOverrideAction, setOwnerConsignmentOverrideAction } from "@/lib/auth.actions";
+import { CalendarPlus, Tag, Scale, Crown, Combine, HandCoins, Users, PackageCheck, UserCog } from "lucide-react";
 
 const naira = (n: number) =>
   new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n);
@@ -26,6 +26,10 @@ interface OwnerActionsProps {
   scaleConsignmentEnabled?: boolean;
   mergedCartEnabled?: boolean;
   maxPackageEnabled?: boolean;
+  debtorsOverride?: boolean;
+  customerProfilesOverride?: boolean;
+  staffConsignmentOverride?: boolean;
+  ownerConsignmentOverride?: boolean;
 }
 
 export function OwnerActions({
@@ -43,6 +47,10 @@ export function OwnerActions({
   scaleConsignmentEnabled,
   mergedCartEnabled,
   maxPackageEnabled,
+  debtorsOverride,
+  customerProfilesOverride,
+  staffConsignmentOverride,
+  ownerConsignmentOverride,
 }: OwnerActionsProps) {
   const [isPending, startTransition] = useTransition();
   const [days, setDays] = useState("7");
@@ -50,6 +58,10 @@ export function OwnerActions({
   const [scaleMsg, setScaleMsg] = useState<string | null>(null);
   const [mergedMsg, setMergedMsg] = useState<string | null>(null);
   const [maxMsg, setMaxMsg] = useState<string | null>(null);
+  const [debtorsMsg, setDebtorsMsg] = useState<string | null>(null);
+  const [customerProfilesMsg, setCustomerProfilesMsg] = useState<string | null>(null);
+  const [staffConsignmentMsg, setStaffConsignmentMsg] = useState<string | null>(null);
+  const [ownerConsignmentMsg, setOwnerConsignmentMsg] = useState<string | null>(null);
   const router = useRouter();
 
   const handleAction = (action: () => Promise<any>, navigateAfter?: string) => {
@@ -116,6 +128,70 @@ export function OwnerActions({
           ? next
             ? "Max Package turned ON for this owner — unlimited stores/staff/products, all features unlocked."
             : "Max Package turned OFF for this owner."
+          : result.error || "Failed to update."
+      );
+      router.refresh();
+    });
+  };
+
+  const handleDebtorsToggle = () => {
+    if (!ownerId) return;
+    const next = !debtorsOverride;
+    startTransition(async () => {
+      const result = await setDebtorsOverrideAction(ownerId, next);
+      setDebtorsMsg(
+        result.success
+          ? next
+            ? "Debtors override turned ON for this owner."
+            : "Debtors override turned OFF for this owner."
+          : result.error || "Failed to update."
+      );
+      router.refresh();
+    });
+  };
+
+  const handleCustomerProfilesToggle = () => {
+    if (!ownerId) return;
+    const next = !customerProfilesOverride;
+    startTransition(async () => {
+      const result = await setCustomerProfilesOverrideAction(ownerId, next);
+      setCustomerProfilesMsg(
+        result.success
+          ? next
+            ? "Customer Profiles override turned ON for this owner."
+            : "Customer Profiles override turned OFF for this owner."
+          : result.error || "Failed to update."
+      );
+      router.refresh();
+    });
+  };
+
+  const handleStaffConsignmentToggle = () => {
+    if (!ownerId) return;
+    const next = !staffConsignmentOverride;
+    startTransition(async () => {
+      const result = await setStaffConsignmentOverrideAction(ownerId, next);
+      setStaffConsignmentMsg(
+        result.success
+          ? next
+            ? "Staff Consignment override turned ON for this owner."
+            : "Staff Consignment override turned OFF for this owner."
+          : result.error || "Failed to update."
+      );
+      router.refresh();
+    });
+  };
+
+  const handleOwnerConsignmentToggle = () => {
+    if (!ownerId) return;
+    const next = !ownerConsignmentOverride;
+    startTransition(async () => {
+      const result = await setOwnerConsignmentOverrideAction(ownerId, next);
+      setOwnerConsignmentMsg(
+        result.success
+          ? next
+            ? "Owner Consignment override turned ON for this owner."
+            : "Owner Consignment override turned OFF for this owner."
           : result.error || "Failed to update."
       );
       router.refresh();
@@ -271,6 +347,74 @@ export function OwnerActions({
       {ownerId && (
         <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-2">
           <div className="flex items-center gap-2">
+            <PackageCheck size={14} className="text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-400">Staff Consignment override</span>
+            <span
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                staffConsignmentOverride
+                  ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+            >
+              {staffConsignmentOverride ? "On" : "Off"}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            Staff Consignment (staff signing stock out to customers, and selling against Scale stock signed out
+            to them) is a Pro+/Max plan feature. When ON, this owner's staff get it regardless of plan tier.
+            Independent of the owner's own consignmentEnabled toggle and of Scale Consignment above — both of
+            those still have to be satisfied too.
+          </p>
+          <button
+            disabled={isPending}
+            onClick={handleStaffConsignmentToggle}
+            className={`px-3 py-1.5 disabled:opacity-50 rounded-lg text-xs font-bold transition-colors ${
+              staffConsignmentOverride
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                : "bg-teal-600 hover:bg-teal-500 text-white"
+            }`}
+          >
+            {staffConsignmentOverride ? "Turn Off" : "Turn On"}
+          </button>
+          {staffConsignmentMsg && <span className="ml-2 text-[11px] text-slate-400">{staffConsignmentMsg}</span>}
+        </div>
+      )}
+      {ownerId && (
+        <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <UserCog size={14} className="text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-400">Owner Consignment override</span>
+            <span
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                ownerConsignmentOverride
+                  ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+            >
+              {ownerConsignmentOverride ? "On" : "Off"}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            Owner Consignment (the owner personally signing stock out to a customer, or signing Scale stock out
+            to staff) is a Max-only plan feature. When ON, this owner gets it regardless of plan tier.
+          </p>
+          <button
+            disabled={isPending}
+            onClick={handleOwnerConsignmentToggle}
+            className={`px-3 py-1.5 disabled:opacity-50 rounded-lg text-xs font-bold transition-colors ${
+              ownerConsignmentOverride
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                : "bg-teal-600 hover:bg-teal-500 text-white"
+            }`}
+          >
+            {ownerConsignmentOverride ? "Turn Off" : "Turn On"}
+          </button>
+          {ownerConsignmentMsg && <span className="ml-2 text-[11px] text-slate-400">{ownerConsignmentMsg}</span>}
+        </div>
+      )}
+      {ownerId && (
+        <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-2">
             <Combine size={14} className="text-slate-500 shrink-0" />
             <span className="text-xs font-semibold text-slate-400">Merged Cart override</span>
             <span
@@ -303,6 +447,74 @@ export function OwnerActions({
             <p className="text-[10px] text-amber-500">Turn on Scale Consignment first.</p>
           )}
           {mergedMsg && <span className="ml-2 text-[11px] text-slate-400">{mergedMsg}</span>}
+        </div>
+      )}
+      {ownerId && (
+        <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <HandCoins size={14} className="text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-400">Debtors override</span>
+            <span
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                debtorsOverride
+                  ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+            >
+              {debtorsOverride ? "On" : "Off"}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            Debtors (part-payments) is a Pro+/Max plan feature. When ON, this owner and their staff can log and
+            view debtors regardless of plan tier — use this to keep a Basic owner's existing records working, or
+            to grant it as a one-off courtesy.
+          </p>
+          <button
+            disabled={isPending}
+            onClick={handleDebtorsToggle}
+            className={`px-3 py-1.5 disabled:opacity-50 rounded-lg text-xs font-bold transition-colors ${
+              debtorsOverride
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                : "bg-teal-600 hover:bg-teal-500 text-white"
+            }`}
+          >
+            {debtorsOverride ? "Turn Off" : "Turn On"}
+          </button>
+          {debtorsMsg && <span className="ml-2 text-[11px] text-slate-400">{debtorsMsg}</span>}
+        </div>
+      )}
+      {ownerId && (
+        <div className="w-full mt-1 pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <Users size={14} className="text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-400">Customer Profiles override</span>
+            <span
+              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                customerProfilesOverride
+                  ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500"
+              }`}
+            >
+              {customerProfilesOverride ? "On" : "Off"}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            Customer Profiles (ranked-by-spend page + checkout autocomplete) is a Pro+/Max plan feature. When ON,
+            this owner gets it regardless of plan tier. Checkout itself still works normally either way — this
+            only affects the ranked Customers page and name/phone suggestions while typing.
+          </p>
+          <button
+            disabled={isPending}
+            onClick={handleCustomerProfilesToggle}
+            className={`px-3 py-1.5 disabled:opacity-50 rounded-lg text-xs font-bold transition-colors ${
+              customerProfilesOverride
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                : "bg-teal-600 hover:bg-teal-500 text-white"
+            }`}
+          >
+            {customerProfilesOverride ? "Turn Off" : "Turn On"}
+          </button>
+          {customerProfilesMsg && <span className="ml-2 text-[11px] text-slate-400">{customerProfilesMsg}</span>}
         </div>
       )}
       {ownerId && (

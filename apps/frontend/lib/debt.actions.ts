@@ -7,6 +7,12 @@ import { getSessionUser } from "./auth.actions";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "./notification.actions";
 import { getActiveStoreId } from "./store-context";
+import { assertFeatureAllowed, hasFeatureAccess } from "./subscription-guard";
+
+// Shared select for the plan/override fields hasFeatureAccess() needs —
+// used by both read functions below so a Basic owner without the
+// debtorsOverride simply sees an empty list, same shape as "no session".
+const FEATURE_SELECT = { plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true, debtorsOverride: true } as const;
 
 // ============================================================================
 // Staff — open debts list
@@ -23,6 +29,10 @@ export async function getOpenDebtsForStaff() {
   if (!session) return [];
 
   const ownerScopeId = session.role === "owner" ? session.id : session.ownerId!;
+
+  const owner = await prisma.user.findUnique({ where: { id: ownerScopeId }, select: FEATURE_SELECT });
+  if (!owner || !hasFeatureAccess(owner, "debtors")) return [];
+
   const storeId = await getActiveStoreId();
 
   return prisma.debt.findMany({
@@ -66,6 +76,9 @@ export async function getOpenDebtsForOwner() {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") return [];
 
+  const owner = await prisma.user.findUnique({ where: { id: session.id }, select: FEATURE_SELECT });
+  if (!owner || !hasFeatureAccess(owner, "debtors")) return [];
+
   const storeId = await getActiveStoreId();
 
   return prisma.debt.findMany({
@@ -105,6 +118,7 @@ export async function recordDebtPaymentAction(debtId: number, amount: number, pa
   if (!session) throw new Error("Unauthorized");
 
   const ownerScopeId = session.role === "owner" ? session.id : session.ownerId!;
+  await assertFeatureAllowed(ownerScopeId, "debtors");
 
   if (isNaN(amount) || amount <= 0) {
     throw new Error("Enter a valid payment amount.");

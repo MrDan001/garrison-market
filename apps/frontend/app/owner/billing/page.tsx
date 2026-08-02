@@ -287,9 +287,24 @@ export default function BillingPage() {
                         <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Summary chart
                       </li>
                     )}
-                    {plan.consignment && (
+                    {plan.debtors && (
                       <li className="flex items-center gap-1.5">
-                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Consignment
+                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Debtors
+                      </li>
+                    )}
+                    {plan.customerProfiles && (
+                      <li className="flex items-center gap-1.5">
+                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Customer profiles
+                      </li>
+                    )}
+                    {plan.staffConsignment && (
+                      <li className="flex items-center gap-1.5">
+                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Staff consignment
+                      </li>
+                    )}
+                    {plan.ownerConsignment && (
+                      <li className="flex items-center gap-1.5">
+                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Owner consignment
                       </li>
                     )}
                   </ul>

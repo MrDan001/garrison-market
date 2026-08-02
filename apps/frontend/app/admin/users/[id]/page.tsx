@@ -277,6 +277,10 @@ export default async function OwnerDetailsPage({
               scaleConsignmentEnabled={owner.scaleConsignmentEnabled}
               mergedCartEnabled={owner.mergedCartEnabled}
               maxPackageEnabled={owner.maxPackageEnabled}
+              debtorsOverride={owner.debtorsOverride}
+              customerProfilesOverride={owner.customerProfilesOverride}
+              staffConsignmentOverride={owner.staffConsignmentOverride}
+              ownerConsignmentOverride={owner.ownerConsignmentOverride}
             />
           </div>
         }

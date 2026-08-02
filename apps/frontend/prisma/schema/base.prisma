@@ -115,6 +115,30 @@ model User {
   // lib/consignment.actions.ts.
   mergedCartEnabled Boolean @default(false)
 
+  // Admin-only overrides (set from the admin panel, never by the owner
+  // themselves): grant Debtors / Customer Profiles to a specific owner
+  // regardless of their plan tier. These exist because both features
+  // became Pro+Max-gated (lib/plans.ts: PlanConfig.debtors /
+  // .customerProfiles) after having no plan gating at all — an admin
+  // needs a way to keep a Basic owner's already-existing access working,
+  // or grant either as a one-off courtesy. Every gate on these two
+  // features is `plan allows it OR this override is on`, never the
+  // override alone and never the plan alone — see hasFeatureAccess() in
+  // lib/subscription-guard.ts.
+  debtorsOverride Boolean @default(false)
+  customerProfilesOverride Boolean @default(false)
+
+  // Same pattern, added alongside the two above once staffConsignment/
+  // ownerConsignment became plan-gated (lib/plans.ts) — an admin can grant
+  // either to an owner regardless of plan tier. Deliberately separate from
+  // scaleConsignmentEnabled/mergedCartEnabled above: those two unlock the
+  // Scale Consignment *subsystem itself* on an otherwise-standard store,
+  // which is a different question from whether this owner's plan tier
+  // entitles them to use consignment at all. See hasFeatureAccess() in
+  // lib/subscription-guard.ts.
+  staffConsignmentOverride Boolean @default(false)
+  ownerConsignmentOverride Boolean @default(false)
+
   // --- Max Package (negotiated price, admin-gated) ---
   // Like Basic/Premium, Max has no static price — an owner requests it by
   // contacting admin via Support or email, admin negotiates and sets a rate

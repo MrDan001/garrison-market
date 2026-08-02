@@ -271,27 +271,83 @@ export async function checkPlanLimit(
 }
 
 /**
- * Throws if a plan-gated feature isn't included in the owner's current plan.
+ * The plan-gated features that also have an admin-only override — an
+ * admin flipping the matching *Override column on the User model grants
+ * the feature regardless of plan tier, permanently, until turned back
+ * off. This is the ONE place that formula lives: `plan allows it OR the
+ * override is on`, never plan alone and never override alone. Every gate
+ * on these four features — UI visibility and the server action itself —
+ * should call hasFeatureAccess()/assertFeatureAllowed() below rather than
+ * reading plan[feature] or the override column directly, so a future
+ * feature can't accidentally skip the override half of the check the way
+ * debtors/customerProfiles/consignment all did before this existed.
+ *
+ * businessSummaryChart has no override column — it never needed one, so
+ * it's intentionally left out of FEATURE_OVERRIDE_FIELD below rather than
+ * given a fake always-false one.
  */
-export async function assertFeatureAllowed(
-  idParam: number,
-  feature: "businessSummaryChart" | "consignment"
-): Promise<void> {
+export type GatedFeature = "businessSummaryChart" | "staffConsignment" | "ownerConsignment" | "debtors" | "customerProfiles";
+
+const FEATURE_OVERRIDE_FIELD: Partial<Record<GatedFeature, "staffConsignmentOverride" | "ownerConsignmentOverride" | "debtorsOverride" | "customerProfilesOverride">> = {
+  staffConsignment: "staffConsignmentOverride",
+  ownerConsignment: "ownerConsignmentOverride",
+  debtors: "debtorsOverride",
+  customerProfiles: "customerProfilesOverride",
+};
+
+export interface FeatureAccessAccount {
+  plan: string | null;
+  subscriptionStatus: string | null;
+  trialEndsAt: Date | null;
+  maxPackageEnabled?: boolean | null;
+  staffConsignmentOverride?: boolean | null;
+  ownerConsignmentOverride?: boolean | null;
+  debtorsOverride?: boolean | null;
+  customerProfilesOverride?: boolean | null;
+}
+
+/**
+ * The actual `plan OR override` check. Pure function, no DB access — pass
+ * in an account record that already has the plan/trial fields AND
+ * whichever *Override column this feature needs (assertFeatureAllowed
+ * below handles fetching that; call this directly if you already have the
+ * record loaded, e.g. inside an action that fetched `owner` for other
+ * reasons too, to avoid a redundant query).
+ */
+export function hasFeatureAccess(account: FeatureAccessAccount, feature: GatedFeature): boolean {
+  const plan = getPlanConfig(resolveEffectivePlanId(account));
+  if (plan[feature]) return true;
+
+  const overrideField = FEATURE_OVERRIDE_FIELD[feature];
+  return overrideField ? !!account[overrideField] : false;
+}
+
+/**
+ * Throws if a plan-gated feature isn't included in the owner's current
+ * plan AND no admin override is on for it. Fetches the account itself —
+ * use hasFeatureAccess() directly instead if the caller already has the
+ * owner record loaded (avoids a redundant query).
+ */
+export async function assertFeatureAllowed(idParam: number, feature: GatedFeature): Promise<void> {
   let resolvedOwnerId = idParam;
-  const user = await prisma.user.findUnique({ where: { id: idParam }, select: { role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true } });
-  
+  const selectFields = {
+    role: true, ownerId: true, plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true,
+    staffConsignmentOverride: true, ownerConsignmentOverride: true, debtorsOverride: true, customerProfilesOverride: true,
+  } as const;
+
+  const user = await prisma.user.findUnique({ where: { id: idParam }, select: selectFields });
+
   if (user && user.role === "staff" && user.ownerId) {
     resolvedOwnerId = user.ownerId;
   }
 
   const owner = resolvedOwnerId === idParam
     ? user
-    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: { plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true } });
-  const plan = getPlanConfig(owner ? resolveEffectivePlanId(owner) : undefined);
-  
-  if (!plan[feature]) {
+    : await prisma.user.findUnique({ where: { id: resolvedOwnerId }, select: selectFields });
+
+  if (!owner || !hasFeatureAccess(owner, feature)) {
     throw new Error(
-      `UPGRADE_REQUIRED: This feature is only available on the Premium and Max Package plans. Please upgrade to access it.`
+      `UPGRADE_REQUIRED: This feature isn't available on your current plan. Please upgrade to access it.`
     );
   }
 }

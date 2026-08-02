@@ -685,6 +685,114 @@ export async function setMergedCartOverrideAction(ownerId: number, enabled: bool
   }
 }
 
+// Same pattern again. Grants Staff Consignment regardless of plan tier —
+// see PlanConfig.staffConsignment in lib/plans.ts. Independent of
+// consignmentEnabled (the owner's own on/off toggle for their store) and
+// of scaleConsignmentEnabled (whether the Scale subsystem exists at all)
+// — this override only removes the PLAN restriction, both of those still
+// have to be satisfied separately.
+export async function setStaffConsignmentOverrideAction(ownerId: number, enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+
+  try {
+    const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+    if (!owner) return { success: false, error: "Owner not found." };
+
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { staffConsignmentOverride: enabled },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    revalidatePath("/staff/consignment");
+    revalidatePath("/staff/inventory");
+    return { success: true };
+  } catch (error) {
+    console.error("Set staff consignment override error:", error);
+    return { success: false, error: "Failed to update staff consignment override." };
+  }
+}
+
+// Same again, for the owner personally signing stock out (Standard
+// direct-to-customer, or Scale owner-to-staff) — see
+// PlanConfig.ownerConsignment in lib/plans.ts.
+export async function setOwnerConsignmentOverrideAction(ownerId: number, enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+
+  try {
+    const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+    if (!owner) return { success: false, error: "Owner not found." };
+
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { ownerConsignmentOverride: enabled },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    revalidatePath("/owner/consignments");
+    return { success: true };
+  } catch (error) {
+    console.error("Set owner consignment override error:", error);
+    return { success: false, error: "Failed to update owner consignment override." };
+  }
+}
+
+// Same pattern as setScaleConsignmentOverrideAction above. Grants Debtors
+// regardless of plan tier — see PlanConfig.debtors in lib/plans.ts and
+// hasFeatureAccess() in lib/subscription-guard.ts, which is what every
+// debt read/write in lib/debt.actions.ts actually checks.
+export async function setDebtorsOverrideAction(ownerId: number, enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+
+  try {
+    const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+    if (!owner) return { success: false, error: "Owner not found." };
+
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { debtorsOverride: enabled },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    revalidatePath("/staff/debts");
+    revalidatePath("/owner/customers");
+    return { success: true };
+  } catch (error) {
+    console.error("Set debtors override error:", error);
+    return { success: false, error: "Failed to update debtors override." };
+  }
+}
+
+// Same pattern again. Grants the ranked Customer Profiles page and
+// checkout autocomplete regardless of plan tier — does NOT affect
+// resolveOrCreateCustomer in lib/customer.actions.ts, which stays
+// unconditional checkout plumbing on every plan (see that function's own
+// comment for why).
+export async function setCustomerProfilesOverrideAction(ownerId: number, enabled: boolean) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
+
+  try {
+    const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } });
+    if (!owner) return { success: false, error: "Owner not found." };
+
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { customerProfilesOverride: enabled },
+    });
+
+    revalidatePath(`/admin/users/${ownerId}`);
+    revalidatePath("/owner/customers");
+    return { success: true };
+  } catch (error) {
+    console.error("Set customer profiles override error:", error);
+    return { success: false, error: "Failed to update customer profiles override." };
+  }
+}
+
 /**
  * Manual admin override for the Max Package unlock. This is the same flag
  * that flips on automatically when a Max Package payment succeeds (see
