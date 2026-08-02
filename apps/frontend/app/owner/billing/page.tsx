@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Clock, CreditCard, Loader2, Crown, MessageCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, Check, Clock, CreditCard, Loader2, Crown, MessageCircle, AlertCircle, ChevronDown } from "lucide-react";
 import { getOwnerBillingInfo, startCheckoutAction } from "@/lib/billing.actions";
 import { PLANS, BILLING_CYCLES, getCyclePrice, getCycleDiscountPct, type PlanId, type BillingCycleId } from "@/lib/plans";
 
@@ -61,6 +61,36 @@ const PLAN_ACCENT: Record<PlanId, { ring: string; glow: string; grad: string; te
     badgeLabel: "Best Value",
   },
 };
+
+// Full "what you get" copy per plan, generated from the same PLANS data
+// the rest of the page reads — so this can never drift out of sync with
+// what's actually gated. Basic gets a flat list; Pro and Max lead with a
+// "Everything in X, plus" line to reinforce that each tier is a strict
+// superset of the one below it (Basic ⊂ Pro ⊂ Max), not a separate bundle.
+function getGoodies(planId: PlanId): { supersetOf: string | null; items: string[] } {
+  const plan = PLANS[planId];
+  const items: string[] = [];
+
+  items.push(
+    `${displayLimit(plan.maxStores)} store${plan.maxStores !== 1 ? "s" : ""}, ${displayLimit(plan.maxStaff)} staff logins, ${displayLimit(plan.maxProducts)} products`
+  );
+
+  if (planId === "basic") {
+    items.push("Full inventory, checkout, expenses & invoices");
+    items.push("Daily reports, staff management & announcements");
+    items.push("Push notifications, admin chat & screenshot lock");
+  }
+  if (plan.businessSummaryChart) items.push("Sales & business summary chart");
+  if (plan.debtors) items.push("Debtors — part-payments with full history");
+  if (plan.customerProfiles) items.push("Customer profiles ranked by spend");
+  if (plan.staffConsignment) items.push("Staff consignment — sign stock out to customers");
+  if (plan.ownerConsignment) items.push("Owner consignment — sign stock out yourself too");
+
+  return {
+    supersetOf: planId === "premium" ? "Basic" : planId === "max" ? "Pro" : null,
+    items,
+  };
+}
 
 export default function BillingPage() {
   const router = useRouter();
@@ -234,81 +264,71 @@ export default function BillingPage() {
               const planAccent = PLAN_ACCENT[planId];
               const displayMonthly = customPriceForPlan(planId);
               const cyclePrice = getCyclePrice(planId, selectedCycle, displayMonthly);
+              const goodies = getGoodies(planId);
 
               return (
-                <button
+                <div
                   key={planId}
-                  onClick={() => setSelectedPlan(planId)}
                   style={{ animationDelay: `${i * 60}ms` }}
-                  className={`billing-fade-up w-full text-left rounded-3xl border-[1.5px] p-5 transition-all duration-300 ${
+                  className={`billing-fade-up rounded-3xl border-[1.5px] transition-all duration-300 overflow-hidden ${
                     isSelected
-                      ? `${planAccent.ring} bg-white/[0.06] ${planAccent.glow} scale-[1.02]`
-                      : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05] scale-100"
+                      ? `${planAccent.ring} bg-white/[0.06] ${planAccent.glow}`
+                      : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      {planId === "max" && <Crown size={15} className="text-amber-300" />}
-                      <span className="font-semibold text-[15px]">{plan.name}</span>
-                      {planAccent.badgeLabel && (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${planAccent.badge}`}>
-                          {planAccent.badgeLabel}
-                        </span>
-                      )}
+                  <button onClick={() => setSelectedPlan(planId)} className="w-full text-left p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {planId === "max" && <Crown size={15} className="text-amber-300" />}
+                        <span className="font-semibold text-[15px]">{plan.name}</span>
+                        {planAccent.badgeLabel && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${planAccent.badge}`}>
+                            {planAccent.badgeLabel}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <p className="text-lg font-extrabold tabular-nums">
+                          {nairaOrDash(cyclePrice)}
+                          {cyclePrice !== null && (
+                            <span className="text-[10px] font-medium text-white/40"> /{BILLING_CYCLES[selectedCycle].months}mo</span>
+                          )}
+                        </p>
+                        <ChevronDown
+                          size={16}
+                          className={`text-white/40 transition-transform duration-300 ${isSelected ? "rotate-180" : ""}`}
+                        />
+                      </div>
                     </div>
-                    <div
-                      className={`w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 ${
-                        isSelected ? `border-transparent bg-gradient-to-br ${planAccent.grad || "from-white/40 to-white/40"}` : "border-white/25"
-                      }`}
-                    >
-                      {isSelected && <Check size={12} strokeWidth={3} className="text-[#0B0A17]" />}
+                  </button>
+
+                  {/* Goodies — grid-rows 0fr→1fr is what makes this animate
+                      smoothly to an unknown content height, which a plain
+                      max-height transition can't do without guessing a
+                      number that's either too small or janky. */}
+                  <div
+                    className="grid transition-[grid-template-rows] duration-300 ease-out"
+                    style={{ gridTemplateRows: isSelected ? "1fr" : "0fr" }}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="px-5 pb-5 pt-1">
+                        {goodies.supersetOf && (
+                          <p className="text-[11px] font-semibold uppercase tracking-wide mb-2">
+                            <span className={planAccent.text}>Everything in {goodies.supersetOf}, plus:</span>
+                          </p>
+                        )}
+                        <ul className="space-y-2">
+                          {goodies.items.map((item, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-[13px] text-white/75">
+                              <Check size={14} className={`mt-[1px] shrink-0 ${planAccent.text || "text-white/40"}`} />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
-
-                  <p className="text-2xl font-extrabold tabular-nums mb-3">
-                    {nairaOrDash(cyclePrice)}
-                    {cyclePrice !== null && (
-                      <span className="text-xs font-medium text-white/40"> / {BILLING_CYCLES[selectedCycle].months}mo</span>
-                    )}
-                  </p>
-
-                  <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12.5px] text-white/60">
-                    <li className="flex items-center gap-1.5">
-                      <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> {displayLimit(plan.maxStores)} store{plan.maxStores > 1 ? "s" : ""}
-                    </li>
-                    <li className="flex items-center gap-1.5">
-                      <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> {displayLimit(plan.maxStaff)} staff
-                    </li>
-                    <li className="flex items-center gap-1.5">
-                      <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> {displayLimit(plan.maxProducts)} products
-                    </li>
-                    {plan.businessSummaryChart && (
-                      <li className="flex items-center gap-1.5">
-                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Summary chart
-                      </li>
-                    )}
-                    {plan.debtors && (
-                      <li className="flex items-center gap-1.5">
-                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Debtors
-                      </li>
-                    )}
-                    {plan.customerProfiles && (
-                      <li className="flex items-center gap-1.5">
-                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Customer profiles
-                      </li>
-                    )}
-                    {plan.staffConsignment && (
-                      <li className="flex items-center gap-1.5">
-                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Staff consignment
-                      </li>
-                    )}
-                    {plan.ownerConsignment && (
-                      <li className="flex items-center gap-1.5">
-                        <Check size={12} className={isSelected ? planAccent.text : "text-white/30"} /> Owner consignment
-                      </li>
-                    )}
-                  </ul>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -349,9 +369,9 @@ export default function BillingPage() {
               >
                 <MessageCircle size={17} /> Contact admin about {PLANS[selectedPlan].name}
               </Link>
-              <p className="text-center text-[11px] text-white/40">
+             {/* <p className="text-center text-[11px] text-white/40">
                 Or email <a href="mailto:support@garrison.com" className="underline text-white/60">support@garrison.com</a>
-              </p>
+              </p> */}
             </div>
           ) : (
             <button
