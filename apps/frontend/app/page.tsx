@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { Oswald, Inter, IBM_Plex_Mono } from "next/font/google";
+import { PLANS, type PlanId } from "@/lib/plans";
 import {
   Boxes,
   Users,
@@ -97,6 +98,38 @@ const steps = [
   { n: "03", title: "Watch it run itself", desc: "Sales, stock, and reports update live. You just check the dashboard." },
 ];
 
+const displayLimit = (n: number) => (n === Infinity ? "Unlimited" : n);
+
+// Same generator as /owner/billing's getGoodies — reads live from PLANS so
+// the marketing page can never advertise something the app doesn't
+// actually gate that way. No price math here (unlike the billing page's
+// version) since there's no public/static price to show — see the CTA
+// copy below instead.
+function getGoodies(planId: PlanId): { supersetOf: string | null; items: string[] } {
+  const plan = PLANS[planId];
+  const items: string[] = [];
+
+  items.push(
+    `${displayLimit(plan.maxStores)} store${plan.maxStores !== 1 ? "s" : ""}, ${displayLimit(plan.maxStaff)} staff logins, ${displayLimit(plan.maxProducts)} products`
+  );
+
+  if (planId === "basic") {
+    items.push("Full inventory, checkout, expenses & invoices");
+    items.push("Daily reports, staff management & announcements");
+    items.push("Push notifications, admin chat & screenshot lock");
+  }
+  if (plan.businessSummaryChart) items.push("Sales & business summary chart");
+  if (plan.debtors) items.push("Debtors — part-payments with full history");
+  if (plan.customerProfiles) items.push("Customer profiles ranked by spend");
+  if (plan.staffConsignment) items.push("Staff consignment — sign stock out to customers");
+  if (plan.ownerConsignment) items.push("Owner consignment — sign stock out yourself too");
+
+  return {
+    supersetOf: planId === "premium" ? "Basic" : planId === "max" ? "Pro" : null,
+    items,
+  };
+}
+
 const faqs = [
   {
     q: "Do I need to be technical to use this?",
@@ -184,6 +217,8 @@ function ScrollUnfurl({ children, className = "" }: { children: (active: boolean
 }
 
 export default function HomePage() {
+  const [openPlan, setOpenPlan] = useState<PlanId | null>("premium");
+
   return (
     <div
       className={`${display.variable} ${body.variable} ${mono.variable} min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)] overflow-x-hidden relative perspective-container`}
@@ -461,115 +496,104 @@ export default function HomePage() {
 
 {/* Section 5: Pricing */}
 <ScrollUnfurl>
-          {() => (
-            <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10">
-              <div className="border border-[var(--border-subtle)]/15 rounded-none p-8 md:p-16 bg-[var(--bg-surface)] shadow-2xl relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#E55345]/5 via-transparent to-transparent pointer-events-none" />
-                <h2
-                  className="text-4xl sm:text-5xl font-black text-[var(--text-primary)] mb-4 text-center tracking-tight uppercase"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
-                  Stop losing money guessing.
-                </h2>
-                <p className="text-center text-[var(--text-primary)]/50 mb-14 text-sm font-semibold uppercase tracking-wider">Cancel anytime. No card required to start.</p>
+  {() => (
+    <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10">
+      <div className="border border-[var(--border-subtle)]/15 rounded-none p-8 md:p-16 bg-[var(--bg-surface)] shadow-2xl relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#E55345]/5 via-transparent to-transparent pointer-events-none" />
+        <h2
+          className="text-4xl sm:text-5xl font-black text-[var(--text-primary)] mb-4 text-center tracking-tight uppercase"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          Stop losing money guessing.
+        </h2>
+        <p className="text-center text-[var(--text-primary)]/50 mb-14 text-sm font-semibold uppercase tracking-wider">
+          Cancel anytime. No card required to start.
+        </p>
 
-                <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-                  {[
-                    {
-                      title: "Basic",
-                      price: "₦---",
-                      features: [
-                        { text: "Up to 1 store", included: true },
-                        { text: "2 staff accounts", included: true },
-                        { text: "Up to 10 products", included: true },
-                        { text: "Business summary chart", included: false },
-                        { text: "Consignment management", included: false },
-                      ],
-                      plan: "basic",
-                    },
-                    {
-                      title: "Premium",
-                      price: "₦---",
-                      features: [
-                        { text: "Up to 2 stores", included: true },
-                        { text: "4 staff accounts", included: true },
-                        { text: "Up to 30 products", included: true },
-                        { text: "Business summary chart", included: true },
-                        { text: "Consignment management", included: true },
-                      ],
-                      plan: "premium",
-                      popular: true,
-                    },
-                    {
-                      title: "Max Package",
-                      price: "Contact us",
-                      features: [
-                        { text: "Unlimited stores", included: true },
-                        { text: "Unlimited staff accounts", included: true },
-                        { text: "Unlimited products", included: true },
-                        { text: "Business summary chart", included: true },
-                        { text: "Consignment management", included: true },
-                      ],
-                      plan: "max",
-                    },
-                  ].map((plan) => (
-                    <div key={plan.title} className={`bg-[var(--bg-app)] p-8 rounded-none border ${plan.popular ? 'border-[#E55345]' : plan.plan === 'max' ? 'border-amber-500/40' : 'border-[var(--border-subtle)]/10'} flex flex-col gap-8 relative`}>
-                      {plan.popular && (
-                        <span className="absolute -top-3.5 right-6 bg-[#E55345] text-[#F1EEE3] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md">
-                          POPULAR CHOICE
-                        </span>
-                      )}
-                      {plan.plan === "max" && (
-                        <span className="absolute -top-3.5 right-6 bg-amber-500 text-[#0D1527] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md flex items-center gap-1">
-                          <Crown size={11} /> UNLIMITED
-                        </span>
-                      )}
-                      <div>
-                        <div className="text-[var(--text-primary)]/50 text-xs font-bold uppercase tracking-widest mb-1.5">{plan.title}</div>
-                        <div className="text-5xl font-black text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
-                          {plan.price}
-                          {plan.plan !== "max" && <span className="text-sm font-normal text-[var(--text-primary)]/50">/mo</span>}
-                        </div>
-                        {plan.plan === "max" && (
-                          <p className="text-xs text-[var(--text-primary)]/50 mt-1.5">Pricing negotiated directly with our team</p>
-                        )}
-                      </div>
-                      <ul className="space-y-4 flex-1">
-                        {plan.features.map((f) => (
-                          <li key={f.text} className={`text-sm flex items-start gap-2.5 ${f.included ? 'text-[var(--text-primary)]/80' : 'text-[var(--text-primary)]/30 line-through'}`}>
-                            <span className={f.included ? 'text-[#E55345] mt-0.5 font-black' : 'text-[var(--text-primary)]/30 mt-0.5 font-black'}>
-                              {f.included ? '—' : '✕'}
-                            </span> 
-                            {f.text}
-                          </li>
-                        ))}
-                      </ul>
-                      {plan.plan === "max" ? (
-                        <a
-                          href="mailto:support@garrison.com"
-                          className="w-full text-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 bg-amber-500 text-[#0D1527] hover:bg-amber-400 flex items-center justify-center gap-2"
-                        >
-                          <Mail size={14} /> Contact Us
-                        </a>
-                      ) : (
-                        <Link
-                          href={`/register?plan=${plan.plan}`}
-                          className={`w-full text-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 ${
-                            plan.popular 
-                            ? 'bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] shadow-[0_4px_15px_rgba(229,83,69,0.3)]' 
-                            : 'bg-[#F1EEE3] text-[#0D1527] hover:bg-[#E2DDD0]'
-                          }`}
-                        >
-                          Choose {plan.title}
-                        </Link>
-                      )}
-                    </div>
-                  ))}
+        <div className="max-w-2xl mx-auto space-y-6">
+          {(["basic", "premium", "max"] as PlanId[]).map((planId) => {
+            const plan = PLANS[planId];
+            const goodies = getGoodies(planId);
+            const isMax = planId === "max";
+            const isPopular = planId === "premium";
+            const accentBorder = isPopular
+              ? "border-[#E55345]"
+              : isMax
+              ? "border-amber-500/40"
+              : "border-[var(--border-subtle)]/15";
+            const accentText = isPopular
+              ? "text-[#E55345]"
+              : isMax
+              ? "text-amber-400"
+              : "text-[var(--text-primary)]/70";
+
+            return (
+              <div
+                key={planId}
+                className={`bg-[var(--bg-app)] border ${accentBorder} rounded-none relative p-6 sm:p-8 transition-colors duration-300`}
+              >
+                {isPopular && (
+                  <span className="absolute -top-3 left-6 bg-[#E55345] text-[#F1EEE3] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md">
+                    Popular Choice
+                  </span>
+                )}
+                {isMax && (
+                  <span className="absolute -top-3 left-6 bg-amber-500 text-[#0D1527] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md flex items-center gap-1">
+                    <Crown size={11} /> Unlimited
+                  </span>
+                )}
+
+                <div className="mb-6">
+                  <div className="text-xl font-black uppercase tracking-widest text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
+                    {plan.name}
+                  </div>
                 </div>
+
+                {goodies.supersetOf && (
+                  <p
+                    className={`text-[11px] font-black uppercase tracking-widest mb-3 ${accentText}`}
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    Everything in {goodies.supersetOf}, plus:
+                  </p>
+                )}
+
+                <ul className="space-y-3 mb-6">
+                  {goodies.items.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-3 text-sm text-[var(--text-primary)]/75">
+                      <Check size={15} className={`mt-0.5 shrink-0 ${accentText}`} />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {isMax ? (
+                  <a
+                    href="mailto:support@garrison.com"
+                    className="w-full flex items-center justify-center gap-2 py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 bg-amber-500 text-[#0D1527] hover:bg-amber-400"
+                  >
+                    <Mail size={14} /> Contact Us
+                  </a>
+                ) : (
+                  <Link
+                    href={`/register?plan=${planId}`}
+                    className={`w-full flex items-center justify-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 ${
+                      isPopular
+                        ? "bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] shadow-[0_4px_15px_rgba(229,83,69,0.3)]"
+                        : "bg-[#F1EEE3] text-[#0D1527] hover:bg-[#E2DDD0]"
+                    }`}
+                  >
+                    Choose {plan.name}
+                  </Link>
+                )}
               </div>
-            </section>
-          )}
-        </ScrollUnfurl>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  )}
+</ScrollUnfurl>
 
         {/* Section 6: FAQ */}
         <ScrollUnfurl>
