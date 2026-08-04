@@ -73,12 +73,16 @@ model User {
   supportOwnerScope      SupportMessage[] @relation("SupportOwnerScope")
   supportSent            SupportMessage[] @relation("SupportSender")
 
-  // Admin -> owner mailbox (see AdminMessage below). sentAdminMessages is
-  // populated only for admin-role users; the other two only for owners.
-  sentAdminMessages      AdminMessage[]      @relation("AdminMessageSender")
-  targetedAdminMessages  AdminMessage[]      @relation("AdminMessageTarget")
-  adminMessageReads      AdminMessageRead[]
-  adminMessageReplies    AdminMessageReply[] @relation("AdminMessageReplyOwner")
+  // Admin -> owner/staff mailbox (see AdminMessage below). sentAdminMessages
+  // is populated only for admin-role users; targetedAdminMessages only for
+  // owners; targetedStaffAdminMessages only for staff. adminMessageAcks is
+  // shared by both owner and staff recipients.
+  sentAdminMessages          AdminMessage[]      @relation("AdminMessageSender")
+  targetedAdminMessages      AdminMessage[]      @relation("AdminMessageTarget")
+  targetedStaffAdminMessages AdminMessage[]      @relation("AdminMessageTargetStaff")
+  adminMessageReads          AdminMessageRead[]
+  adminMessageAcks           AdminMessageAck[]
+  adminMessageReplies        AdminMessageReply[] @relation("AdminMessageReplyOwner")
 
   shopAddress   String?
   shopCity      String?
@@ -664,20 +668,31 @@ model AdminMessage {
   link      String?
   imageUrl  String?
 
-  // "all_owners" -> every approved owner account at send time.
+  // "all_owners"  -> every approved owner account at send time.
   // "single_owner" -> just targetOwnerId.
+  // "all_staff"    -> every approved staff account at send time.
+  // "single_staff" -> just targetStaffId.
+  // Owner-audience values are delivered/read via targetOwner + the owner
+  // mailbox; staff-audience values via targetStaff + the staff mailbox.
+  // The two tracks stay separate on purpose — a staff account is not an
+  // owner account, so it never satisfies an owner-audience send and vice
+  // versa, even though both use the same underlying User table.
   audience      String
   targetOwnerId Int?
+  targetStaffId Int?
 
   sentById  Int
   createdAt DateTime @default(now())
 
   sentBy      User                @relation("AdminMessageSender", fields: [sentById], references: [id], onDelete: Cascade)
   targetOwner User?               @relation("AdminMessageTarget", fields: [targetOwnerId], references: [id], onDelete: Cascade)
+  targetStaff User?               @relation("AdminMessageTargetStaff", fields: [targetStaffId], references: [id], onDelete: Cascade)
   reads       AdminMessageRead[]
   replies     AdminMessageReply[]
+  acks        AdminMessageAck[]
 
   @@index([audience, targetOwnerId])
+  @@index([audience, targetStaffId])
   @@index([createdAt])
 }
 
@@ -692,6 +707,26 @@ model AdminMessageRead {
 
   @@unique([messageId, ownerId])
   @@index([ownerId])
+}
+
+// Explicit "Acknowledged" action from a recipient (owner OR staff) on the
+// pop-up announcement modal — distinct from AdminMessageRead above (which
+// only ever tracked an owner opening the mailbox detail page). Clicking
+// "Acknowledged" is what dismisses the pop-up and is what the recipient's
+// Messages list uses to show the message as acknowledged. Keyed generically
+// by userId (not ownerId) since both owner and staff accounts acknowledge
+// through the same flow.
+model AdminMessageAck {
+  id             Int      @id @default(autoincrement())
+  messageId      Int
+  userId         Int
+  acknowledgedAt DateTime @default(now())
+
+  message AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
 }
 
 // One AdminMessage can go to many owners at once (audience: "all_owners"),

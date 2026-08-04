@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth.actions";
 import { getOwnerMessageThread } from "@/lib/admin-message.actions";
 import { ArrowLeft, Mail, ExternalLink } from "lucide-react";
 import OwnerThreadClient from "./owner-thread-client";
+import OwnerAcknowledgeButton from "./owner-acknowledge-button";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +35,11 @@ export default async function OwnerMessageDetailPage({ params }: { params: Promi
 
         <div className="bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl overflow-hidden">
           <div className="p-5 sm:p-6 border-b border-slate-200/60 dark:border-slate-800/60">
-            <div className="flex items-center gap-2 text-indigo-500 text-xs font-bold uppercase tracking-wider mb-2">
-              <Mail size={13} /> Garrison Market
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 text-indigo-500 text-xs font-bold uppercase tracking-wider">
+                <Mail size={13} /> Garrison Market
+              </div>
+              <OwnerAcknowledgeButton messageId={message.id} isAcknowledged={message.isAcknowledged} />
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)]">{message.subject}</h1>
             <p className="text-xs text-slate-500 mt-1.5">

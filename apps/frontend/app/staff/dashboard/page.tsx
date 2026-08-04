@@ -5,6 +5,7 @@ import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Packa
 import Link from "next/link";
 import NotificationBell from "@/components/NotificationBell";
 import StaffSupportBubble from "@/components/StaffSupportBubble";
+import AdminAnnouncementGate from "@/components/AdminAnnouncementGate";
 // FIXED: Changed to a named import to resolve TS2613
 import { TrialBanner } from "@/components/TrialBanner"; 
 // FIXED: Use the single shared billing calculation (handles trialEndsAt vs
@@ -416,6 +417,7 @@ export default async function StaffDashboard() {
       </div>
 
       <StaffSupportBubble currentUserId={staff.id} />
+      <AdminAnnouncementGate />
     </div>
   );
 }

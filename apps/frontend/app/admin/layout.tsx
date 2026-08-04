@@ -36,6 +36,7 @@ export default function AdminLayout({
     if (path === "/admin/dashboard") return "System Overview";
     if (path === "/admin/support") return "Support Desk";
     if (path === "/admin/users") return "Account Configurations";
+    if (path === "/admin/messages/staff") return "Staff Messages";
     if (path === "/admin/messages") return "Owner Messages";
     return "Admin Console";
   };
@@ -55,7 +56,7 @@ export default function AdminLayout({
         <nav className="flex-1 space-y-1.5">
           {navigation.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || (item.href === "/admin/messages" && pathname.startsWith("/admin/messages"));
             return (
               <a
                 key={item.name}
@@ -107,7 +108,7 @@ export default function AdminLayout({
             <nav className="flex-1 space-y-1.5">
               {navigation.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href || (item.href === "/admin/messages" && pathname.startsWith("/admin/messages"));
                 return (
                   <a
                     key={item.name}

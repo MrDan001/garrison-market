@@ -21,44 +21,68 @@ async function getBaseUrl(): Promise<string> {
 // ADMIN — compose & send
 // ============================================================================
 // Fans a single message out three ways at once: the permanent AdminMessage
-// row (the mailbox content itself), a Notification per targeted owner
-// (bell icon + push, linking straight to /owner/messages/[id]), and an
-// email via Resend. Email failures are logged and swallowed per-recipient
-// — one bad address should never stop the rest of the send or roll back
-// the message itself, since the in-app mailbox copy is the source of truth.
-export async function sendAdminMessageAction(params: {
-  subject: string;
-  body: string;
-  link?: string;
-  imageUrl?: string;
-  audience: "all_owners" | "single_owner";
-  targetOwnerId?: number;
-}): Promise<
+// row (the mailbox content itself), a Notification per targeted recipient
+// (bell icon + push, linking straight to their mailbox), and an email via
+// Resend. Email failures are logged and swallowed per-recipient — one bad
+// address should never stop the rest of the send or roll back the message
+// itself, since the in-app mailbox copy is the source of truth.
+//
+// Two public entry points sit below this — sendAdminMessageToOwnersAction
+// and sendAdminMessageToStaffAction — one per admin compose route, per
+// product decision (a deliberate "Send to Owners" vs "Send to Staff" split
+// rather than one combined picker). Both funnel through this shared helper
+// so the AdminMessage row, notification, and email logic never drifts
+// between the two routes.
+type SendAudience = "all_owners" | "single_owner" | "all_staff" | "single_staff";
+
+async function sendAdminMessage(
+  session: { id: number },
+  params: {
+    subject: string;
+    body: string;
+    link?: string;
+    imageUrl?: string;
+    audience: SendAudience;
+    targetOwnerId?: number;
+    targetStaffId?: number;
+  }
+): Promise<
   | { success: true; messageId: number; recipientCount: number; emailFailures: number }
   | { success: false; error: string }
 > {
-  const session = await getSessionUser();
-  if (!session || session.role !== "admin") return { success: false, error: "Unauthorized" };
-
   const subject = params.subject.trim();
   const body = params.body.trim();
   if (!subject || !body) return { success: false, error: "Subject and message body are required." };
   if (params.audience === "single_owner" && !params.targetOwnerId) {
     return { success: false, error: "Pick an owner to send this to." };
   }
+  if (params.audience === "single_staff" && !params.targetStaffId) {
+    return { success: false, error: "Pick a staff member to send this to." };
+  }
+
+  const isStaffSend = params.audience === "all_staff" || params.audience === "single_staff";
 
   // Resolve recipients up front so we know the send actually has someone
-  // to go to before writing anything.
+  // to go to before writing anything. Staff recipients also need the
+  // business owner they belong to (ownerId) so their notification lands
+  // in the right owner-scope, per createNotification's requirements.
   const recipients = await prisma.user.findMany({
     where:
       params.audience === "single_owner"
         ? { id: params.targetOwnerId, role: "owner" }
+        : params.audience === "single_staff"
+        ? { id: params.targetStaffId, role: "staff" }
+        : isStaffSend
+        ? { role: "staff", status: "approved" }
         : { role: "owner", status: "approved" },
-    select: { id: true, email: true, fullName: true },
+    select: { id: true, email: true, fullName: true, ownerId: true },
   });
 
   if (recipients.length === 0) {
-    return { success: false, error: "No matching owner(s) found to send to." };
+    return {
+      success: false,
+      error: isStaffSend ? "No matching staff member(s) found to send to." : "No matching owner(s) found to send to.",
+    };
   }
 
   const message = await prisma.adminMessage.create({
@@ -69,23 +93,29 @@ export async function sendAdminMessageAction(params: {
       imageUrl: params.imageUrl || null,
       audience: params.audience,
       targetOwnerId: params.audience === "single_owner" ? params.targetOwnerId : null,
+      targetStaffId: params.audience === "single_staff" ? params.targetStaffId : null,
       sentById: session.id,
     },
   });
 
   const baseUrl = await getBaseUrl();
-  const messageUrl = `${baseUrl}/owner/messages/${message.id}`;
+  const mailboxSegment = isStaffSend ? "staff" : "owner";
+  const messageUrl = `${baseUrl}/${mailboxSegment}/messages/${message.id}`;
+  const messageLink = `/${mailboxSegment}/messages/${message.id}`;
 
   // Notification for every recipient (fast, in-process) — same pattern as
-  // every other notification type in the app.
+  // every other notification type in the app. For staff, ownerId scopes
+  // the notification to the business they belong to while recipientId
+  // keeps it targeted at that one staff member's bell — it never fans out
+  // to the rest of that owner's team.
   await Promise.all(
-    recipients.map((owner) =>
+    recipients.map((recipient) =>
       createNotification({
-        ownerId: owner.id,
-        recipientId: owner.id,
+        ownerId: isStaffSend ? recipient.ownerId ?? recipient.id : recipient.id,
+        recipientId: recipient.id,
         type: "admin_message",
         message: subject,
-        link: `/owner/messages/${message.id}`,
+        link: messageLink,
       })
     )
   );
@@ -94,15 +124,15 @@ export async function sendAdminMessageAction(params: {
   // anyone else's copy or the notification that already went out.
   const emailResults = await Promise.allSettled(
     recipients
-      .filter((owner) => owner.email)
-      .map((owner) =>
-        sendAdminBroadcastEmail(owner.email, owner.fullName || "there", {
+      .filter((recipient) => recipient.email)
+      .map((recipient) =>
+        sendAdminBroadcastEmail(recipient.email, recipient.fullName || "there", {
           subject,
           body,
           link: params.link?.trim() || null,
           imageUrl: params.imageUrl || null,
           messageUrl,
-          replyTo: getAdminMessageReplyAddress(message.id, owner.id),
+          replyTo: getAdminMessageReplyAddress(message.id, recipient.id),
         })
       )
   );
@@ -112,8 +142,39 @@ export async function sendAdminMessageAction(params: {
   }
 
   revalidatePath("/admin/messages");
+  revalidatePath("/admin/messages/staff");
 
   return { success: true, messageId: message.id, recipientCount: recipients.length, emailFailures };
+}
+
+// Route 1 — admin/messages (Send to Owners). Kept as its own named action
+// (rather than one shared action taking an audience of all four values)
+// so each compose route can only ever address the audience it's meant to.
+export async function sendAdminMessageToOwnersAction(params: {
+  subject: string;
+  body: string;
+  link?: string;
+  imageUrl?: string;
+  audience: "all_owners" | "single_owner";
+  targetOwnerId?: number;
+}) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false as const, error: "Unauthorized" };
+  return sendAdminMessage(session, params);
+}
+
+// Route 2 — admin/messages/staff (Send to Staff).
+export async function sendAdminMessageToStaffAction(params: {
+  subject: string;
+  body: string;
+  link?: string;
+  imageUrl?: string;
+  audience: "all_staff" | "single_staff";
+  targetStaffId?: number;
+}) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return { success: false as const, error: "Unauthorized" };
+  return sendAdminMessage(session, params);
 }
 
 // List of owners for the admin compose screen's "single owner" picker.
@@ -128,6 +189,27 @@ export async function getOwnersForAdminPicker() {
   });
 }
 
+// List of staff for the admin compose screen's "single staff" picker —
+// storeName comes from the owner they belong to, since staff accounts
+// don't carry their own storeName.
+export async function getStaffForAdminPicker() {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") return [];
+
+  const staff = await prisma.user.findMany({
+    where: { role: "staff" },
+    select: { id: true, fullName: true, email: true, owner: { select: { storeName: true } } },
+    orderBy: { fullName: "asc" },
+  });
+
+  return staff.map((s) => ({
+    id: s.id,
+    fullName: s.fullName,
+    email: s.email,
+    storeName: s.owner?.storeName ?? null,
+  }));
+}
+
 // Admin's own reference list of what's already been sent.
 export async function getSentAdminMessages() {
   const session = await getSessionUser();
@@ -138,16 +220,18 @@ export async function getSentAdminMessages() {
     take: 50,
     include: {
       targetOwner: { select: { fullName: true, storeName: true } },
-      _count: { select: { reads: true } },
+      targetStaff: { select: { fullName: true, email: true } },
+      _count: { select: { reads: true, acks: true } },
     },
   });
 
-  // Recipient count per message — computed the same way sendAdminMessageAction
-  // resolved it at send time (single_owner: 1, all_owners: however many
-  // approved owners existed then). We only need it for a rough "X/Y read"
-  // label, so a fresh count of currently-approved owners is close enough
+  // Recipient count per message — computed the same way sendAdminMessage
+  // resolved it at send time (single_*: 1, all_*: however many approved
+  // owners/staff existed then). We only need it for a rough "X/Y read"
+  // label, so a fresh count of currently-approved accounts is close enough
   // even though the exact original audience could've shrunk/grown since.
   const approvedOwnerCount = await prisma.user.count({ where: { role: "owner", status: "approved" } });
+  const approvedStaffCount = await prisma.user.count({ where: { role: "staff", status: "approved" } });
 
   // Pull every reply for these messages in one query, then reduce down to
   // "how many distinct owner-threads on this message are waiting on an
@@ -177,9 +261,16 @@ export async function getSentAdminMessages() {
     subject: m.subject,
     audience: m.audience,
     targetOwnerName: m.targetOwner?.fullName ?? m.targetOwner?.storeName ?? null,
+    targetStaffName: m.targetStaff?.fullName ?? m.targetStaff?.email ?? null,
     createdAt: m.createdAt,
     readCount: m._count.reads,
-    recipientCount: m.audience === "single_owner" ? 1 : approvedOwnerCount,
+    ackCount: m._count.acks,
+    recipientCount:
+      m.audience === "single_owner" || m.audience === "single_staff"
+        ? 1
+        : m.audience === "all_staff"
+        ? approvedStaffCount
+        : approvedOwnerCount,
     replyCount: replyCountByMessage.get(m.id) || 0,
     pendingReplyCount: pendingByMessage.get(m.id) || 0,
   }));
@@ -335,7 +426,7 @@ export async function getMessagesForOwner() {
   const session = await getSessionUser();
   if (!session || session.role !== "owner") return [];
 
-  const [messages, reads] = await Promise.all([
+  const [messages, reads, acks] = await Promise.all([
     prisma.adminMessage.findMany({
       where: { OR: [{ audience: "all_owners" }, { targetOwnerId: session.id }] },
       orderBy: { createdAt: "desc" },
@@ -345,14 +436,20 @@ export async function getMessagesForOwner() {
       where: { ownerId: session.id },
       select: { messageId: true },
     }),
+    prisma.adminMessageAck.findMany({
+      where: { userId: session.id },
+      select: { messageId: true },
+    }),
   ]);
 
   const readIds = new Set(reads.map((r) => r.messageId));
+  const ackedIds = new Set(acks.map((a) => a.messageId));
 
   return messages.map((m) => ({
     ...m,
     preview: m.body.slice(0, 120),
     isRead: readIds.has(m.id),
+    isAcknowledged: ackedIds.has(m.id),
   }));
 }
 
@@ -376,7 +473,11 @@ export async function getMessageForOwner(messageId: number) {
     create: { messageId: message.id, ownerId: session.id },
   });
 
-  return message;
+  const ack = await prisma.adminMessageAck.findUnique({
+    where: { messageId_userId: { messageId: message.id, userId: session.id } },
+  });
+
+  return { ...message, isAcknowledged: !!ack };
 }
 
 export async function getUnreadAdminMessageCount() {
@@ -460,4 +561,145 @@ export async function sendOwnerReplyAction(
   revalidatePath(`/admin/messages/${messageId}`);
 
   return { success: true };
+}
+
+// ============================================================================
+// STAFF — mailbox
+// ============================================================================
+// Mirrors the owner mailbox above, minus the reply-thread feature (not part
+// of the staff flow) and minus a separate "read" concept — staff only ever
+// have the one acknowledgment state, set exclusively via
+// acknowledgeAdminMessageAction (from the pop-up). Opening the detail page
+// does NOT auto-acknowledge, unlike the owner's auto-read-on-open — a staff
+// member can read the full message and still leave it pending until they
+// deliberately hit "Acknowledged".
+export async function getMessagesForStaff() {
+  const session = await getSessionUser();
+  if (!session || session.role !== "staff") return [];
+
+  const [messages, acks] = await Promise.all([
+    prisma.adminMessage.findMany({
+      where: { OR: [{ audience: "all_staff" }, { targetStaffId: session.id }] },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, subject: true, body: true, imageUrl: true, link: true, createdAt: true },
+    }),
+    prisma.adminMessageAck.findMany({
+      where: { userId: session.id },
+      select: { messageId: true },
+    }),
+  ]);
+
+  const ackedIds = new Set(acks.map((a) => a.messageId));
+
+  return messages.map((m) => ({
+    ...m,
+    preview: m.body.slice(0, 120),
+    isAcknowledged: ackedIds.has(m.id),
+  }));
+}
+
+export async function getMessageForStaff(messageId: number) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "staff") return null;
+
+  const message = await prisma.adminMessage.findFirst({
+    where: {
+      id: messageId,
+      OR: [{ audience: "all_staff" }, { targetStaffId: session.id }],
+    },
+  });
+  if (!message) return null;
+
+  const ack = await prisma.adminMessageAck.findUnique({
+    where: { messageId_userId: { messageId: message.id, userId: session.id } },
+  });
+
+  return { ...message, isAcknowledged: !!ack };
+}
+
+// ============================================================================
+// RECIPIENT — acknowledgment (owner OR staff)
+// ============================================================================
+// The explicit "Acknowledged" action fired from the pop-up modal. Idempotent
+// — clicking twice, or acknowledging a message already acknowledged, is a
+// harmless no-op. Writing this row is what closes the pop-up for good and
+// what the recipient's Messages list uses to show the message as
+// acknowledged, per the "acknowledge -> moves into Messages" flow.
+export async function acknowledgeAdminMessageAction(
+  messageId: number
+): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await getSessionUser();
+  if (!session || (session.role !== "owner" && session.role !== "staff")) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  const message = await prisma.adminMessage.findFirst({
+    where: {
+      id: messageId,
+      OR:
+        session.role === "owner"
+          ? [{ audience: "all_owners" }, { targetOwnerId: session.id }]
+          : [{ audience: "all_staff" }, { targetStaffId: session.id }],
+    },
+    select: { id: true },
+  });
+  if (!message) return { success: false, error: "Message not found." };
+
+  await prisma.adminMessageAck.upsert({
+    where: { messageId_userId: { messageId: message.id, userId: session.id } },
+    update: {},
+    create: { messageId: message.id, userId: session.id },
+  });
+
+  // The owner mailbox also tracks "read" separately (auto-marked when the
+  // detail page is opened, see getMessageForOwner). Acknowledging straight
+  // from the pop-up — without ever opening the detail page — should still
+  // count as having seen it, so the unread dot clears too.
+  if (session.role === "owner") {
+    await prisma.adminMessageRead.upsert({
+      where: { messageId_ownerId: { messageId: message.id, ownerId: session.id } },
+      update: {},
+      create: { messageId: message.id, ownerId: session.id },
+    });
+  }
+
+  revalidatePath("/owner/messages");
+  revalidatePath("/staff/messages");
+  revalidatePath(`/owner/messages/${messageId}`);
+  revalidatePath(`/staff/messages/${messageId}`);
+  revalidatePath("/owner/dashboard");
+  revalidatePath("/staff/dashboard");
+
+  return { success: true };
+}
+
+// The single next message the pop-up modal should show for the current
+// owner/staff session — oldest-unacknowledged-first, and only ONE at a
+// time, so a recipient with several pending announcements sees them one
+// pop-up per visit/acknowledgment rather than all stacked at once. Called
+// on dashboard load and again right after an acknowledgment to chain to
+// the next pending one, if any.
+export async function getPendingAdminAnnouncementForRecipient() {
+  const session = await getSessionUser();
+  if (!session || (session.role !== "owner" && session.role !== "staff")) return null;
+
+  const where =
+    session.role === "owner"
+      ? { OR: [{ audience: "all_owners" as const }, { targetOwnerId: session.id }] }
+      : { OR: [{ audience: "all_staff" as const }, { targetStaffId: session.id }] };
+
+  const [messages, acks] = await Promise.all([
+    prisma.adminMessage.findMany({
+      where,
+      orderBy: { createdAt: "asc" },
+      select: { id: true, subject: true, body: true, link: true, imageUrl: true, createdAt: true },
+    }),
+    prisma.adminMessageAck.findMany({
+      where: { userId: session.id },
+      select: { messageId: true },
+    }),
+  ]);
+
+  const ackedIds = new Set(acks.map((a) => a.messageId));
+  return messages.find((m) => !ackedIds.has(m.id)) ?? null;
 }

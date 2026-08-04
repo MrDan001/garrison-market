@@ -2,7 +2,7 @@
 // FILE: apps/frontend/app/owner/messages/messages-list-client.tsx
 
 import Link from "next/link";
-import { ArrowLeft, Mail, MailOpen, ImageIcon, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, Mail, MailOpen, ImageIcon, Link as LinkIcon, CheckCircle2 } from "lucide-react";
 
 type MessageRow = {
   id: number;
@@ -12,6 +12,7 @@ type MessageRow = {
   link: string | null;
   createdAt: Date;
   isRead: boolean;
+  isAcknowledged?: boolean;
 };
 
 function timeAgo(date: Date) {
@@ -74,10 +75,11 @@ export default function MessagesListClient({ messages }: { messages: MessageRow[
                     <span className="text-[11px] text-slate-500 shrink-0">{timeAgo(m.createdAt)}</span>
                   </div>
                   <p className="text-xs text-slate-500 truncate mt-0.5">{m.preview}</p>
-                  {(m.imageUrl || m.link) && (
+                  {(m.imageUrl || m.link || m.isAcknowledged) && (
                     <div className="flex items-center gap-3 mt-1.5">
                       {m.imageUrl && <span className="flex items-center gap-1 text-[11px] text-slate-400"><ImageIcon size={11} /> Image</span>}
                       {m.link && <span className="flex items-center gap-1 text-[11px] text-slate-400"><LinkIcon size={11} /> Link</span>}
+                      {m.isAcknowledged && <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-500"><CheckCircle2 size={11} /> Acknowledged</span>}
                     </div>
                   )}
                 </div>

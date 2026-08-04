@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getBillingStatus } from "@/lib/subscription-guard";
 import TrialTopBar from "@/components/TrialTopBar";
 import OwnerSupportBubble from "@/components/OwnerSupportBubble";
+import AdminAnnouncementGate from "@/components/AdminAnnouncementGate";
 
 /**
  * Wraps every page under /owner/* (dashboard, inventory, staff, reports,
@@ -35,6 +36,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
       />
       {children}
       <OwnerSupportBubble currentUserId={session.id} />
+      <AdminAnnouncementGate />
     </>
   );
 }

@@ -6,8 +6,8 @@ import { useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
 import { withTimeout } from "@/lib/with-timeout";
-import { sendAdminMessageAction } from "@/lib/admin-message.actions";
-import { Send, Image as ImageIcon, Link as LinkIcon, X, Users, User, CheckCircle2, MessageCircle } from "lucide-react";
+import { sendAdminMessageToOwnersAction } from "@/lib/admin-message.actions";
+import { Send, Image as ImageIcon, Link as LinkIcon, X, Users, User, CheckCircle2, MessageCircle, UserCog } from "lucide-react";
 
 type Owner = { id: number; fullName: string | null; storeName: string | null; email: string };
 type SentMessage = {
@@ -15,6 +15,7 @@ type SentMessage = {
   subject: string;
   audience: string;
   targetOwnerName: string | null;
+  targetStaffName?: string | null;
   createdAt: Date;
   readCount: number;
   recipientCount: number;
@@ -82,7 +83,7 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
       }
 
       setStatus("Sending...");
-      const result = await sendAdminMessageAction({
+      const result = await sendAdminMessageToOwnersAction({
         subject: subject.trim(),
         body: body.trim(),
         link: link.trim() || undefined,
@@ -137,9 +138,24 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 pb-24 max-w-3xl mx-auto space-y-8">
+      {/* Route switcher — this page only ever sends to owners; staff
+          broadcasts live on their own dedicated route so the two
+          audiences can never be mixed up in one send. */}
+      <div className="flex gap-2">
+        <div className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold bg-blue-600/10 border border-blue-500/30 text-blue-400">
+          <Users size={14} /> Send to Owners
+        </div>
+        <Link
+          href="/admin/messages/staff"
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-800 text-slate-500 hover:border-blue-400/50 hover:text-blue-400 transition-colors"
+        >
+          <UserCog size={14} /> Send to Staff
+        </Link>
+      </div>
+
       {/* Compose */}
       <div className="bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 sm:p-6">
-        <h2 className="text-sm font-bold text-[var(--text-primary)] mb-4">Compose a Message</h2>
+        <h2 className="text-sm font-bold text-[var(--text-primary)] mb-4">Compose a Message to Owners</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Audience */}
@@ -256,16 +272,30 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
           <p className="text-xs text-slate-500">No messages sent yet.</p>
         ) : (
           <div className="space-y-2">
-            {sent.map((m) => (
-              <Link
+            {sent.map((m) => {
+              const isStaffAudience = m.audience === "all_staff" || m.audience === "single_staff";
+              // Reply-thread detail page (/admin/messages/[id]) currently
+              // only resolves owner recipients — staff reply threads are a
+              // later stage. Staff-audience rows show as a plain summary
+              // row for now rather than linking somewhere that won't
+              // render their recipients correctly.
+              const Wrapper = isStaffAudience ? "div" : Link;
+              const wrapperProps = isStaffAudience ? {} : { href: `/admin/messages/${m.id}` };
+              return (
+              <Wrapper
                 key={m.id}
-                href={`/admin/messages/${m.id}`}
-                className="bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-xl px-4 py-3 flex items-center justify-between gap-3 hover:border-blue-400/50 transition-colors"
+                {...(wrapperProps as any)}
+                className={`bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-colors ${
+                  isStaffAudience ? "" : "hover:border-blue-400/50"
+                }`}
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{m.subject}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {m.audience === "single_owner" ? `To ${m.targetOwnerName || "one owner"}` : "To all owners"}
+                    {m.audience === "single_owner" && `To ${m.targetOwnerName || "one owner"}`}
+                    {m.audience === "all_owners" && "To all owners"}
+                    {m.audience === "single_staff" && `To ${m.targetStaffName || "one staff member"}`}
+                    {m.audience === "all_staff" && "To all staff"}
                     {" · "}
                     {new Date(m.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
                   </p>
@@ -278,8 +308,9 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
                   )}
                   <span className="text-xs font-bold text-slate-400">{m.readCount}/{m.recipientCount} read</span>
                 </div>
-              </Link>
-            ))}
+              </Wrapper>
+              );
+            })}
           </div>
         )}
       </div>
