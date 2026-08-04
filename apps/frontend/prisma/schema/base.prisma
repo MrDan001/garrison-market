@@ -179,6 +179,15 @@ model User {
   debtsOwned        Debt[]        @relation("OwnerDebts")
   debtPaymentsMade  DebtPayment[] @relation("StaffDebtPayments")
 
+  // --- Expenses --- expenseCategoriesOwned is only ever populated for
+  // owner-role users (they're the only ones who manage the category
+  // list); the other two are populated for whichever role actually did
+  // the thing (owner or staff can both log an expense).
+  expensesOwned          Expense[]         @relation("ExpenseOwner")
+  expenseCategoriesOwned ExpenseCategory[] @relation("ExpenseCategoryOwner")
+  expensesLogged         Expense[]         @relation("ExpenseLoggedBy")
+
+
   // --- Scale (weight/volume) inventory relations ---
   scaleInventory        ScaleInventory[]
   scaleWastageOwned     ScaleWastage[]   @relation("ScaleWastageOwner")
@@ -221,6 +230,7 @@ model Store {
 
   scaleInventory ScaleInventory[]
   scaleWastage   ScaleWastage[]
+  expenses       Expense[]
 
   @@index([ownerId])
 }
@@ -598,6 +608,58 @@ model DebtPayment {
 
   @@index([debtId])
   @@index([staffId])
+}
+
+// ============================================================================
+// Expenses — store running costs (rent, transport, utilities, salaries,
+// etc), tracked separately from inventory/product spend. Both owner and
+// staff can log an expense; the category list itself is owner-managed only
+// (staff pick from it, they don't create categories). loggedById records
+// who actually logged each entry, since "today's expenses" is a shared,
+// store-wide view — every staff member sees everyone's entries for today,
+// not just their own, and each row is expected to display "Logged by: X"
+// using that field.
+// ============================================================================
+model ExpenseCategory {
+  id        Int      @id @default(autoincrement())
+  ownerId   Int
+  name      String
+  createdAt DateTime @default(now())
+
+  owner    User      @relation("ExpenseCategoryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+
+  // One "Rent" per owner, not one globally — different owners' category
+  // lists are fully independent of each other.
+  @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
+model Expense {
+  id         Int      @id @default(autoincrement())
+  ownerId    Int
+  storeId    Int?
+  categoryId Int?
+  amount     Decimal
+  note       String?
+  loggedById Int?
+  createdAt  DateTime @default(now())
+
+  owner    User             @relation("ExpenseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store    Store?           @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  // SetNull rather than Cascade — an owner deleting/renaming their category
+  // list shouldn't wipe out the historical expense rows that used it; the
+  // amount and note stand on their own even with no category attached.
+  category ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  // Same SetNull convention as every other "who logged this" field in the
+  // schema (Order.staffId, Consignment.staffId, DebtPayment.staffId) — the
+  // expense record and the owner's history stay intact even if that one
+  // staff account is later removed; it just loses the specific name.
+  loggedBy User?            @relation("ExpenseLoggedBy", fields: [loggedById], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, storeId, createdAt])
+  @@index([categoryId])
+  @@index([loggedById])
 }
 
 model SupportMessage {

@@ -1,7 +1,7 @@
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck, Lock, Scale as ScaleIcon, HandCoins } from "lucide-react";
+import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck, Lock, Scale as ScaleIcon, HandCoins, CreditCard } from "lucide-react";
 import Link from "next/link";
 import NotificationBell from "@/components/NotificationBell";
 import StaffSupportBubble from "@/components/StaffSupportBubble";
@@ -314,6 +314,16 @@ export default async function StaffDashboard() {
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Debtors</p>
                   <p className="text-[11px] text-slate-500">Log part-payment balances</p>
+                </div>
+              </Link>
+
+              <Link href="/staff/expenses" className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col gap-3 active:bg-slate-200 active:dark:bg-slate-800 transition-colors">
+                <div className="h-9 w-9 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                  <CreditCard size={18} className="text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Expenses</p>
+                  <p className="text-[11px] text-slate-500">Log today's store spend</p>
                 </div>
               </Link>
 
