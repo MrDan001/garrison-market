@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth.actions";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Package, History, ShoppingBag, FileText, CircleUser } from "lucide-react";
+import { Package, History, ShoppingBag, FileText, CircleUser, Mail, ChevronRight } from "lucide-react";
 import StaffProfileSections from "@/components/StaffProfileSections";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +83,22 @@ export default async function StaffProfilePage() {
 
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 md:pb-10">
         <div className="max-w-2xl mx-auto w-full space-y-4">
+          <Link
+            href="/staff/messages"
+            className="flex items-center justify-between rounded-2xl border border-white/[0.06] bg-[var(--bg-surface)] px-4 py-3.5 hover:bg-white/[0.03] active:bg-white/[0.05] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+                <Mail size={16} strokeWidth={2} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Messages</p>
+                <p className="text-[11.5px] text-slate-500">Announcements from the Admin Desk</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-slate-400 dark:text-slate-600" strokeWidth={1.8} />
+          </Link>
+
           <StaffProfileSections
             email={staff.email}
             phone={staff.phoneNumber || "Not set"}
