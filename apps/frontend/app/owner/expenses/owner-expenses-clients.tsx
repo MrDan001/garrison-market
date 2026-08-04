@@ -26,7 +26,7 @@ import {
 type Category = { id: number; name: string };
 type ExpenseRow = {
   id: number;
-  amount: number;
+  amount: unknown;
   note: string | null;
   createdAt: Date;
   category: { name: string } | null;
@@ -208,7 +208,7 @@ export default function OwnerExpensesClient({
                     {new Date(e.createdAt).toLocaleString("en-NG", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
                   </p>
                 </div>
-                <p className="text-sm font-bold text-rose-500 shrink-0">{naira(e.amount)}</p>
+                <p className="text-sm font-bold text-rose-500 shrink-0">{naira(Number(e.amount))}</p>
               </div>
             ))}
           </div>

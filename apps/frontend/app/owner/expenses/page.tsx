@@ -7,7 +7,7 @@ import {
   getExpenseOverviewForOwner,
   getExpensesForOwner,
 } from "@/lib/expense.actions";
-import OwnerExpensesClient from "./owner-expenses-client";
+import OwnerExpensesClient from "./owner-expenses-clients";
 
 export const dynamic = "force-dynamic";
 
