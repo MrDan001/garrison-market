@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, ExternalLink, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import MessageBody from "@/components/MessageBody";
+import { getLinkRanges } from "@/lib/message-links";
 
 export type AdminAnnouncementMessage = {
   id: number;
@@ -27,6 +29,7 @@ function splitBodyIntoSlides(body: string): string[] {
 
   const slideCount = trimmed.length <= TWO_SLIDE_MAX_CHARS ? 2 : 3;
   const target = Math.ceil(trimmed.length / slideCount);
+  const linkRanges = getLinkRanges(trimmed);
 
   const slides: string[] = [];
   let start = 0;
@@ -37,6 +40,10 @@ function splitBodyIntoSlides(body: string): string[] {
     }
     let end = Math.min(start + target, trimmed.length);
     while (end < trimmed.length && trimmed[end] !== " " && trimmed[end] !== "\n") end++;
+    // Never split inside a [label](url) span — snap forward to the end of
+    // it instead, same as the whitespace snap above.
+    const straddled = linkRanges.find((r) => end > r.start && end < r.end);
+    if (straddled) end = straddled.end;
     slides.push(trimmed.slice(start, end).trim());
     start = end;
   }
@@ -134,7 +141,7 @@ export default function AdminAnnouncementModal({
           )}
 
           <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-line">
-            {slides[slideIndex]}
+            <MessageBody text={slides[slideIndex]} />
           </p>
 
           {message.link && isLastSlide && (

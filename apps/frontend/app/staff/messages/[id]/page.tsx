@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth.actions";
 import { getMessageForStaff } from "@/lib/admin-message.actions";
 import { ArrowLeft, Mail, ExternalLink, CheckCircle2 } from "lucide-react";
 import StaffAcknowledgeButton from "./staff-acknowledge-button";
+import MessageBody from "@/components/MessageBody";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,9 @@ export default async function StaffMessageDetailPage({ params }: { params: Promi
           </div>
 
           <div className="p-5 sm:p-6 space-y-4 border-b border-slate-200/60 dark:border-slate-800/60">
-            <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">{message.body}</p>
+            <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">
+              <MessageBody text={message.body} />
+            </p>
 
             {message.imageUrl && (
               // eslint-disable-next-line @next/next/no-img-element

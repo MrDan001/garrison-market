@@ -743,6 +743,15 @@ model AdminMessage {
   targetOwnerId Int?
   targetStaffId Int?
 
+  // "popup" -> info-only: in-app notification/pop-up + mailbox row, no
+  // email, not repliable. "email" -> today's original behavior: mailbox
+  // row + notification + email + a repliable thread. Chosen once at send
+  // time via the compose screen's Pop-up/Email toggle; staff sends are
+  // always forced to "popup" server-side since staff has no reply/email
+  // thread. Defaults to "email" so every message sent before this field
+  // existed keeps behaving exactly as it did (repliable, already emailed).
+  channel   String   @default("email")
+
   sentById  Int
   createdAt DateTime @default(now())
 

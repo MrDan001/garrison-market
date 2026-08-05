@@ -6,8 +6,9 @@ import Link from "next/link";
 import { getAdminMessageThread, sendAdminReplyAction } from "@/lib/admin-message.actions";
 import { closeThreadAction, getThreadStatusAction } from "@/lib/admin-thread-close.actions";
 import { ArrowLeft, CheckCircle2, Lock, MessageCircle, Send, ShieldCheck, User, XCircle } from "lucide-react";
+import MessageBody from "@/components/MessageBody";
 
-type MessageSummary = { id: number; subject: string; body: string; audience: string; createdAt: Date };
+type MessageSummary = { id: number; subject: string; body: string; audience: string; channel: string; createdAt: Date };
 type ThreadSummary = {
   ownerId: number;
   ownerName: string | null;
@@ -142,7 +143,7 @@ export default function MessageThreadsClient({
               <ArrowLeft size={18} /> Back to recipients
             </button>
 
-            {!isClosed && !confirmingClose && (
+            {!isClosed && !confirmingClose && message.channel === "email" && (
               <button
                 onClick={() => setConfirmingClose(true)}
                 className="flex items-center gap-1.5 text-xs font-bold text-rose-500 hover:text-rose-600 border border-rose-200 dark:border-rose-900/50 rounded-lg px-3 py-1.5 transition-colors"
@@ -151,7 +152,7 @@ export default function MessageThreadsClient({
               </button>
             )}
 
-            {!isClosed && confirmingClose && (
+            {!isClosed && confirmingClose && message.channel === "email" && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500">Close & send review request?</span>
                 <button
@@ -190,7 +191,9 @@ export default function MessageThreadsClient({
                   <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-1">
                     <ShieldCheck size={11} /> You (original message)
                   </div>
-                  <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap">{message.body}</p>
+                  <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap">
+                    <MessageBody text={message.body} />
+                  </p>
                   <p className="text-[10px] text-slate-400 mt-1">{timeAgo(message.createdAt)}</p>
                 </div>
               </div>
@@ -241,7 +244,11 @@ export default function MessageThreadsClient({
 
             <div className="p-3 sm:p-4 border-t border-slate-200/60 dark:border-slate-800/60">
               {error && <p className="text-xs font-semibold text-rose-500 mb-2">{error}</p>}
-              {isClosed ? (
+              {message.channel !== "email" ? (
+                <p className="text-xs text-slate-400 text-center py-2">
+                  This is a pop-up message — it's info-only and isn't repliable.
+                </p>
+              ) : isClosed ? (
                 <p className="text-xs text-slate-400 text-center py-2">
                   This ticket is closed. Replies are no longer accepted on this thread.
                 </p>
@@ -284,7 +291,16 @@ export default function MessageThreadsClient({
         </Link>
 
         <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)]">{message.subject}</h1>
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)]">{message.subject}</h1>
+            <span
+              className={`text-[10px] font-bold rounded-full px-2 py-1 shrink-0 ${
+                message.channel === "popup" ? "bg-indigo-500/10 text-indigo-400" : "bg-slate-500/10 text-slate-400"
+              }`}
+            >
+              {message.channel === "popup" ? "Pop-up" : "Email"}
+            </span>
+          </div>
           <p className="text-xs text-slate-500 mt-1.5">
             {message.audience === "single_owner" ? "Sent to one owner" : "Sent to all owners"}
             {" · "}

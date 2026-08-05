@@ -7,13 +7,15 @@ import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
 import { withTimeout } from "@/lib/with-timeout";
 import { sendAdminMessageToOwnersAction } from "@/lib/admin-message.actions";
-import { Send, Image as ImageIcon, Link as LinkIcon, X, Users, User, CheckCircle2, MessageCircle, UserCog } from "lucide-react";
+import InsertLinkButton from "@/components/InsertLinkButton";
+import { Send, Image as ImageIcon, Link as LinkIcon, X, Users, User, CheckCircle2, MessageCircle, UserCog, Bell, Mail } from "lucide-react";
 
 type Owner = { id: number; fullName: string | null; storeName: string | null; email: string };
 type SentMessage = {
   id: number;
   subject: string;
   audience: string;
+  channel: string;
   targetOwnerName: string | null;
   targetStaffName?: string | null;
   createdAt: Date;
@@ -28,6 +30,7 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
   const [body, setBody] = useState("");
   const [link, setLink] = useState("");
   const [audience, setAudience] = useState<"all_owners" | "single_owner">("all_owners");
+  const [channel, setChannel] = useState<"popup" | "email">("email");
   const [targetOwnerId, setTargetOwnerId] = useState<number | "">("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -37,6 +40,7 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [sent, setSent] = useState(initialSent);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bodyTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -90,6 +94,7 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
         imageUrl,
         audience,
         targetOwnerId: audience === "single_owner" ? Number(targetOwnerId) : undefined,
+        channel,
       });
 
       if (!result.success) {
@@ -109,6 +114,7 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
           id: result.messageId,
           subject: subject.trim(),
           audience,
+          channel,
           targetOwnerName:
             audience === "single_owner"
               ? owners.find((o) => o.id === Number(targetOwnerId))?.fullName ?? null
@@ -158,6 +164,40 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
         <h2 className="text-sm font-bold text-[var(--text-primary)] mb-4">Compose a Message to Owners</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Channel — determines whether this send is an info-only pop-up
+              (no email, not repliable) or a repliable email thread. */}
+          <div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setChannel("popup")}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold border transition-colors ${
+                  channel === "popup"
+                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-400"
+                    : "border-slate-200 dark:border-slate-800 text-slate-500"
+                }`}
+              >
+                <Bell size={14} /> Pop-up
+              </button>
+              <button
+                type="button"
+                onClick={() => setChannel("email")}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold border transition-colors ${
+                  channel === "email"
+                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-400"
+                    : "border-slate-200 dark:border-slate-800 text-slate-500"
+                }`}
+              >
+                <Mail size={14} /> Email
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              {channel === "popup"
+                ? "Info-only pop-up + mailbox copy. No email, and owners can't reply."
+                : "Sent as an email too, with a repliable thread in the owner's mailbox."}
+            </p>
+          </div>
+
           {/* Audience */}
           <div className="flex gap-2">
             <button
@@ -212,8 +252,11 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={5}
+            ref={bodyTextareaRef}
             className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 resize-none"
           />
+
+          <InsertLinkButton textareaRef={bodyTextareaRef} body={body} setBody={setBody} />
 
           <div className="relative">
             <LinkIcon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -301,6 +344,16 @@ export default function MessagesClient({ owners, initialSent }: { owners: Owner[
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-1 ${
+                      m.channel === "popup"
+                        ? "bg-indigo-500/10 text-indigo-400"
+                        : "bg-slate-500/10 text-slate-400"
+                    }`}
+                  >
+                    {m.channel === "popup" ? <Bell size={10} /> : <Mail size={10} />}
+                    {m.channel === "popup" ? "Pop-up" : "Email"}
+                  </span>
                   {m.pendingReplyCount > 0 && (
                     <span className="flex items-center gap-1 text-xs font-bold bg-indigo-500 text-white rounded-full px-2 py-1">
                       <MessageCircle size={11} /> {m.pendingReplyCount}

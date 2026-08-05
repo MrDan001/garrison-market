@@ -9,6 +9,7 @@ import { getSessionUser } from "./auth.actions";
 import { createNotification } from "./notification.actions";
 import { createAdminNotification } from "./admin-notification.actions";
 import { sendAdminBroadcastEmail, sendAdminMessageReplyEmail, getAdminMessageReplyAddress } from "./email";
+import { stripMessageLinksForPreview } from "./message-links";
 
 async function getBaseUrl(): Promise<string> {
   const headerList = await headers();
@@ -34,6 +35,7 @@ async function getBaseUrl(): Promise<string> {
 // so the AdminMessage row, notification, and email logic never drifts
 // between the two routes.
 type SendAudience = "all_owners" | "single_owner" | "all_staff" | "single_staff";
+type SendChannel = "popup" | "email";
 
 async function sendAdminMessage(
   session: { id: number },
@@ -45,6 +47,7 @@ async function sendAdminMessage(
     audience: SendAudience;
     targetOwnerId?: number;
     targetStaffId?: number;
+    channel: SendChannel;
   }
 ): Promise<
   | { success: true; messageId: number; recipientCount: number; emailFailures: number }
@@ -61,6 +64,13 @@ async function sendAdminMessage(
   }
 
   const isStaffSend = params.audience === "all_staff" || params.audience === "single_staff";
+
+  // Email channel is owner-only — staff has no reply/email thread concept.
+  // The staff compose route never passes "email" (it forces "popup" below),
+  // but guard here too in case that ever changes upstream.
+  if (params.channel === "email" && isStaffSend) {
+    return { success: false, error: "Email isn't available for staff — use Pop-up instead." };
+  }
 
   // Resolve recipients up front so we know the send actually has someone
   // to go to before writing anything. Staff recipients also need the
@@ -94,6 +104,7 @@ async function sendAdminMessage(
       audience: params.audience,
       targetOwnerId: params.audience === "single_owner" ? params.targetOwnerId : null,
       targetStaffId: params.audience === "single_staff" ? params.targetStaffId : null,
+      channel: params.channel,
       sentById: session.id,
     },
   });
@@ -122,23 +133,29 @@ async function sendAdminMessage(
 
   // Email every recipient — best-effort, one failure doesn't affect
   // anyone else's copy or the notification that already went out.
-  const emailResults = await Promise.allSettled(
-    recipients
-      .filter((recipient) => recipient.email)
-      .map((recipient) =>
-        sendAdminBroadcastEmail(recipient.email, recipient.fullName || "there", {
-          subject,
-          body,
-          link: params.link?.trim() || null,
-          imageUrl: params.imageUrl || null,
-          messageUrl,
-          replyTo: getAdminMessageReplyAddress(message.id, recipient.id),
-        })
-      )
-  );
-  const emailFailures = emailResults.filter((r) => r.status === "rejected").length;
-  if (emailFailures > 0) {
-    console.error(`[admin-message] ${emailFailures}/${recipients.length} broadcast emails failed to send`);
+  // Popup-channel messages are info-only: no email, so skip this block
+  // entirely rather than sending an email nobody's meant to reply to.
+  let emailFailures = 0;
+  if (params.channel === "email") {
+    const emailResults = await Promise.allSettled(
+      recipients
+        .filter((recipient) => recipient.email)
+        .map((recipient) =>
+          sendAdminBroadcastEmail(recipient.email, recipient.fullName || "there", {
+            subject,
+            body,
+            link: params.link?.trim() || null,
+            imageUrl: params.imageUrl || null,
+            messageUrl,
+            replyTo: getAdminMessageReplyAddress(message.id, recipient.id),
+            baseUrl,
+          })
+        )
+    );
+    emailFailures = emailResults.filter((r) => r.status === "rejected").length;
+    if (emailFailures > 0) {
+      console.error(`[admin-message] ${emailFailures}/${recipients.length} broadcast emails failed to send`);
+    }
   }
 
   revalidatePath("/admin/messages");
@@ -157,13 +174,16 @@ export async function sendAdminMessageToOwnersAction(params: {
   imageUrl?: string;
   audience: "all_owners" | "single_owner";
   targetOwnerId?: number;
+  channel: "popup" | "email";
 }) {
   const session = await getSessionUser();
   if (!session || session.role !== "admin") return { success: false as const, error: "Unauthorized" };
   return sendAdminMessage(session, params);
 }
 
-// Route 2 — admin/messages/staff (Send to Staff).
+// Route 2 — admin/messages/staff (Send to Staff). Always forced to the
+// "popup" channel here, regardless of what's passed in — staff has no
+// email/reply thread, so this route never offers that choice in the UI.
 export async function sendAdminMessageToStaffAction(params: {
   subject: string;
   body: string;
@@ -174,7 +194,7 @@ export async function sendAdminMessageToStaffAction(params: {
 }) {
   const session = await getSessionUser();
   if (!session || session.role !== "admin") return { success: false as const, error: "Unauthorized" };
-  return sendAdminMessage(session, params);
+  return sendAdminMessage(session, { ...params, channel: "popup" });
 }
 
 // List of owners for the admin compose screen's "single owner" picker.
@@ -260,6 +280,7 @@ export async function getSentAdminMessages() {
     id: m.id,
     subject: m.subject,
     audience: m.audience,
+    channel: m.channel,
     targetOwnerName: m.targetOwner?.fullName ?? m.targetOwner?.storeName ?? null,
     targetStaffName: m.targetStaff?.fullName ?? m.targetStaff?.email ?? null,
     createdAt: m.createdAt,
@@ -339,6 +360,7 @@ export async function getAdminMessageWithRecipients(messageId: number) {
       subject: message.subject,
       body: message.body,
       audience: message.audience,
+      channel: message.channel,
       createdAt: message.createdAt,
     },
     threads,
@@ -352,7 +374,7 @@ export async function getAdminMessageThread(messageId: number, ownerId: number) 
   const [message, owner, replies] = await Promise.all([
     prisma.adminMessage.findUnique({
       where: { id: messageId },
-      select: { id: true, subject: true, body: true, createdAt: true },
+      select: { id: true, subject: true, body: true, channel: true, createdAt: true },
     }),
     prisma.user.findUnique({
       where: { id: ownerId },
@@ -381,11 +403,12 @@ export async function sendAdminReplyAction(
   if (!trimmed) return { success: false, error: "Reply can't be empty." };
 
   const [message, owner] = await Promise.all([
-    prisma.adminMessage.findUnique({ where: { id: messageId }, select: { id: true, subject: true } }),
+    prisma.adminMessage.findUnique({ where: { id: messageId }, select: { id: true, subject: true, channel: true } }),
     prisma.user.findUnique({ where: { id: ownerId }, select: { id: true, email: true, fullName: true, role: true } }),
   ]);
   if (!message) return { success: false, error: "Message not found." };
   if (!owner || owner.role !== "owner") return { success: false, error: "Owner not found." };
+  if (message.channel !== "email") return { success: false, error: "Pop-up messages aren't repliable." };
 
   await prisma.adminMessageReply.create({
     data: { messageId, ownerId, authorRole: "admin", body: trimmed },
@@ -430,7 +453,7 @@ export async function getMessagesForOwner() {
     prisma.adminMessage.findMany({
       where: { OR: [{ audience: "all_owners" }, { targetOwnerId: session.id }] },
       orderBy: { createdAt: "desc" },
-      select: { id: true, subject: true, body: true, imageUrl: true, link: true, createdAt: true },
+      select: { id: true, subject: true, body: true, imageUrl: true, link: true, channel: true, createdAt: true },
     }),
     prisma.adminMessageRead.findMany({
       where: { ownerId: session.id },
@@ -447,7 +470,7 @@ export async function getMessagesForOwner() {
 
   return messages.map((m) => ({
     ...m,
-    preview: m.body.slice(0, 120),
+    preview: stripMessageLinksForPreview(m.body).slice(0, 120),
     isRead: readIds.has(m.id),
     isAcknowledged: ackedIds.has(m.id),
   }));
@@ -532,9 +555,10 @@ export async function sendOwnerReplyAction(
       id: messageId,
       OR: [{ audience: "all_owners" }, { targetOwnerId: session.id }],
     },
-    select: { id: true, subject: true },
+    select: { id: true, subject: true, channel: true },
   });
   if (!message) return { success: false, error: "Message not found." };
+  if (message.channel !== "email") return { success: false, error: "Pop-up messages aren't repliable." };
 
   await prisma.adminMessageReply.create({
     data: { messageId, ownerId: session.id, authorRole: "owner", body: trimmed },
@@ -581,7 +605,7 @@ export async function getMessagesForStaff() {
     prisma.adminMessage.findMany({
       where: { OR: [{ audience: "all_staff" }, { targetStaffId: session.id }] },
       orderBy: { createdAt: "desc" },
-      select: { id: true, subject: true, body: true, imageUrl: true, link: true, createdAt: true },
+      select: { id: true, subject: true, body: true, imageUrl: true, link: true, channel: true, createdAt: true },
     }),
     prisma.adminMessageAck.findMany({
       where: { userId: session.id },
@@ -593,7 +617,7 @@ export async function getMessagesForStaff() {
 
   return messages.map((m) => ({
     ...m,
-    preview: m.body.slice(0, 120),
+    preview: stripMessageLinksForPreview(m.body).slice(0, 120),
     isAcknowledged: ackedIds.has(m.id),
   }));
 }

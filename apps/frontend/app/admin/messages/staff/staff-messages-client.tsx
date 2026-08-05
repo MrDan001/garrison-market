@@ -7,7 +7,8 @@ import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
 import { withTimeout } from "@/lib/with-timeout";
 import { sendAdminMessageToStaffAction } from "@/lib/admin-message.actions";
-import { Send, Image as ImageIcon, Link as LinkIcon, X, Users, UserCog, User, CheckCircle2 } from "lucide-react";
+import InsertLinkButton from "@/components/InsertLinkButton";
+import { Send, Image as ImageIcon, Link as LinkIcon, X, Users, UserCog, User, CheckCircle2, Bell } from "lucide-react";
 
 type Staff = { id: number; fullName: string | null; email: string; storeName: string | null };
 type SentMessage = {
@@ -35,6 +36,7 @@ export default function StaffMessagesClient({ staff, initialSent }: { staff: Sta
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [sent, setSent] = useState(initialSent);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bodyTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -153,6 +155,12 @@ export default function StaffMessagesClient({ staff, initialSent }: { staff: Sta
         <h2 className="text-sm font-bold text-[var(--text-primary)] mb-4">Compose a Message to Staff</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Staff sends are always an info-only pop-up — no email, no
+              reply thread. That toggle only exists on the owners route. */}
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold bg-indigo-600/10 border border-indigo-500/30 text-indigo-400">
+            <Bell size={14} /> Pop-up only — staff can't reply, no email is sent
+          </div>
+
           {/* Audience */}
           <div className="flex gap-2">
             <button
@@ -207,8 +215,11 @@ export default function StaffMessagesClient({ staff, initialSent }: { staff: Sta
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={5}
+            ref={bodyTextareaRef}
             className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 resize-none"
           />
+
+          <InsertLinkButton textareaRef={bodyTextareaRef} body={body} setBody={setBody} />
 
           <div className="relative">
             <LinkIcon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />

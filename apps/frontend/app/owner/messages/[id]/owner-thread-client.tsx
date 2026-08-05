@@ -21,9 +21,11 @@ function timeAgo(date: Date) {
 
 export default function OwnerThreadClient({
   messageId,
+  channel,
   initialReplies,
 }: {
   messageId: number;
+  channel: string;
   initialReplies: Reply[];
 }) {
   const [replies, setReplies] = useState(initialReplies);
@@ -86,25 +88,33 @@ export default function OwnerThreadClient({
 
       <div className="p-5 sm:p-6">
         {error && <p className="text-xs font-semibold text-rose-500 mb-2">{error}</p>}
-        <div className="flex items-end gap-2">
-          <textarea
-            value={replyBody}
-            onChange={(e) => setReplyBody(e.target.value)}
-            placeholder="Write a reply…"
-            rows={2}
-            className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-blue-500 resize-none"
-          />
-          <button
-            onClick={handleSendReply}
-            disabled={sending || !replyBody.trim()}
-            className="shrink-0 h-11 w-11 flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl transition-colors"
-          >
-            <Send size={16} />
-          </button>
-        </div>
-        <p className="text-[11px] text-slate-400 mt-2">
-          You can also just reply to the email if that's easier.
-        </p>
+        {channel !== "email" ? (
+          <p className="text-xs text-slate-400 text-center py-2">
+            This is a pop-up message — it's info-only and isn't repliable.
+          </p>
+        ) : (
+          <>
+            <div className="flex items-end gap-2">
+              <textarea
+                value={replyBody}
+                onChange={(e) => setReplyBody(e.target.value)}
+                placeholder="Write a reply…"
+                rows={2}
+                className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-blue-500 resize-none"
+              />
+              <button
+                onClick={handleSendReply}
+                disabled={sending || !replyBody.trim()}
+                className="shrink-0 h-11 w-11 flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl transition-colors"
+              >
+                <Send size={16} />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2">
+              You can also just reply to the email if that's easier.
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

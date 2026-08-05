@@ -11,6 +11,7 @@
 //    address you signed up with until you verify your own domain.
 
 import { Resend } from "resend";
+import { renderMessageBodyHtml } from "./message-links";
 
 const FROM = process.env.EMAIL_FROM || "Garrison Market <onboarding@resend.dev>";
 
@@ -339,15 +340,16 @@ export async function sendAdminBroadcastEmail(
     imageUrl?: string | null;
     messageUrl: string;
     replyTo?: string;
+    baseUrl: string;
   }
 ) {
   const firstName = ownerFullName?.split(" ")[0] || "there";
 
-  // params.body is plain text from a textarea — escape it before turning
-  // newlines into <br> so it can never inject markup into the email.
-  const escapeHtml = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const bodyHtml = escapeHtml(params.body).replace(/\n/g, "<br>");
+  // params.body can carry inline [label](url) links (same syntax the
+  // in-app MessageBody component and the compose screen's Insert Link
+  // button use) — renderMessageBodyHtml turns those into real <a> tags and
+  // escapes everything else, so this can never inject markup into the email.
+  const bodyHtml = renderMessageBodyHtml(params.body, params.baseUrl);
 
   const html = layout({
     preheader: params.subject,
