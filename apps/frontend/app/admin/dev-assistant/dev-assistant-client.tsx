@@ -3,14 +3,24 @@
 "use client";
 
 import { useState, useRef, useEffect, useTransition } from "react";
-import { Send, Code2, Upload, FileText, Trash2, Loader2, Paperclip, X } from "lucide-react";
-import { sendDevAssistantMessage, type DevAssistantChatMessage } from "@/lib/dev-assistant.actions";
+import { Send, Code2, Upload, FileText, Trash2, Loader2, Paperclip, X, Play, ImagePlus, Download, FileDown } from "lucide-react";
+import {
+  sendDevAssistantMessage,
+  getOrCreateDevAssistantThread,
+  type DevAssistantChatMessage,
+  type DevAssistantImage,
+} from "@/lib/dev-assistant.actions";
+import { runDevAssistantSandbox } from "@/lib/dev-assistant-sandbox.actions";
+import { extractFilesFromReply } from "@/lib/dev-assistant-file-utils";
 import {
   getDevAssistantProject,
   getDevAssistantFileContent,
   deleteDevAssistantProject,
   type DevAssistantProjectSummary,
 } from "@/lib/dev-assistant-project.actions";
+
+const MAX_IMAGES_PER_MESSAGE = 3; // keep in sync with dev-assistant.actions.ts
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024; // 6MB raw — base64 inflates ~33%, stays well under the 10MB server action body limit
 
 export default function DevAssistantClient({
   threadId,
@@ -44,6 +54,131 @@ export default function DevAssistantClient({
     setAttachedIds((prev) => (prev.includes(fileId) ? prev.filter((id) => id !== fileId) : [...prev, fileId]));
   }
 
+  // Images (Stage 5) — attached to the NEXT message only, same lifecycle
+  // as attachedIds above. Read client-side as base64 data URLs; never
+  // touch the server until the message is actually sent.
+  const [pendingImages, setPendingImages] = useState<DevAssistantImage[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  function handleImagesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? []);
+    if (selected.length === 0) return;
+
+    setImageError(null);
+    const room = MAX_IMAGES_PER_MESSAGE - pendingImages.length;
+    if (room <= 0) {
+      setImageError(`You can attach up to ${MAX_IMAGES_PER_MESSAGE} images per message.`);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+      return;
+    }
+
+    const toAdd = selected.slice(0, room);
+    if (selected.length > room) {
+      setImageError(`Only added ${room} — max ${MAX_IMAGES_PER_MESSAGE} images per message.`);
+    }
+
+    toAdd.forEach((file) => {
+      if (file.size > MAX_IMAGE_BYTES) {
+        setImageError(`"${file.name}" is too large — max ${MAX_IMAGE_BYTES / 1024 / 1024}MB per image.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setPendingImages((prev) => [...prev, { name: file.name, dataUrl }]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  }
+
+  function removePendingImage(name: string) {
+    setPendingImages((prev) => prev.filter((img) => img.name !== name));
+  }
+
+  // --- Sandbox (Stage 4 — new) ---
+  // Opt-in per assistant message: a "Run in sandbox" button appears under
+  // any reply containing "// FILE:" blocks. Clicking it is the only thing
+  // that spends E2B usage — nothing runs automatically.
+  const [runningMessageId, setRunningMessageId] = useState<number | null>(null);
+  const [sandboxError, setSandboxError] = useState<string | null>(null);
+
+  function hasRunnableFiles(content: string): boolean {
+    // Retained for reference — message rendering now calls
+    // extractFilesFromReply directly to get the actual file list, not
+    // just a yes/no check.
+    return /\/\/ FILE: /.test(content);
+  }
+
+  async function handleRunSandbox(messageId: number) {
+    setRunningMessageId(messageId);
+    setSandboxError(null);
+    try {
+      const result = await runDevAssistantSandbox(threadId, messageId);
+      // The action already appended a summary message to the thread —
+      // reload from the DB so the chat reflects exactly what's stored,
+      // same "resume where you left off" source of truth as everywhere else.
+      const fresh = await getOrCreateDevAssistantThread();
+      setMessages(fresh.messages);
+      if (!result.success && "error" in result) {
+        setSandboxError(result.error);
+      }
+    } catch {
+      setSandboxError("Sandbox run failed unexpectedly — please try again.");
+    } finally {
+      setRunningMessageId(null);
+    }
+  }
+
+  // --- Downloads (Stage 5 — new) ---
+  // Individual files are extracted and downloaded entirely client-side —
+  // the content is already sitting in the message that's rendered, so no
+  // server round trip is needed. Zipping several files together does need
+  // the server (adm-zip), via the download-zip API route.
+  const [downloadingZipFor, setDownloadingZipFor] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  function triggerBrowserDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadFile(path: string, content: string) {
+    const filename = path.split("/").pop() || path;
+    triggerBrowserDownload(new Blob([content], { type: "text/plain" }), filename);
+  }
+
+  async function handleDownloadZip(messageId: number) {
+    setDownloadingZipFor(messageId);
+    setDownloadError(null);
+    try {
+      const res = await fetch("/api/dev-assistant/download-zip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setDownloadError(data?.error ?? "Download failed.");
+        return;
+      }
+      const blob = await res.blob();
+      triggerBrowserDownload(blob, "dev-assistant-files.zip");
+    } catch {
+      setDownloadError("Download failed — please try again.");
+    } finally {
+      setDownloadingZipFor(null);
+    }
+  }
+
   function handleSend() {
     const trimmed = input.trim();
     if (!trimmed || isPending) return;
@@ -56,21 +191,25 @@ export default function DevAssistantClient({
             .filter(Boolean)
             .join(", ")}`
         : "";
+    const imageNote =
+      pendingImages.length > 0 ? `\n\n📷 Attached image(s): ${pendingImages.map((i) => i.name).join(", ")}` : "";
 
     const optimisticUser: DevAssistantChatMessage = {
       id: Date.now(),
       role: "user",
-      content: trimmed + attachNote,
+      content: trimmed + attachNote + imageNote,
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimisticUser]);
     const idsToSend = attachedIds;
+    const imagesToSend = pendingImages;
     setInput("");
     setAttachedIds([]);
+    setPendingImages([]);
     setAttachPickerOpen(false);
 
     startTransition(async () => {
-      const result = await sendDevAssistantMessage(threadId, trimmed, idsToSend);
+      const result = await sendDevAssistantMessage(threadId, trimmed, idsToSend, imagesToSend);
       if (result.success) {
         setMessages((prev) => [...prev, result.reply]);
       } else {
@@ -197,19 +336,76 @@ export default function DevAssistantClient({
                 uploaded project using the paperclip below so the AI can actually see them.
               </p>
             )}
-            {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                    m.role === "user"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 dark:bg-slate-900 text-[var(--text-primary)] font-mono text-[13px]"
-                  }`}
-                >
-                  {m.content}
+            {messages.map((m) => {
+              const detectedFiles = m.role === "assistant" ? extractFilesFromReply(m.content) : [];
+              return (
+                <div key={m.id} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                      m.role === "user"
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 dark:bg-slate-900 text-[var(--text-primary)] font-mono text-[13px]"
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+
+                  {detectedFiles.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 max-w-[85%]">
+                      <button
+                        onClick={() => handleRunSandbox(m.id)}
+                        disabled={runningMessageId !== null}
+                        className="flex items-center gap-1.5 text-xs font-bold text-emerald-500 disabled:opacity-50"
+                      >
+                        {runningMessageId === m.id ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" /> Running in sandbox...
+                          </>
+                        ) : (
+                          <>
+                            <Play size={13} /> Run in sandbox
+                          </>
+                        )}
+                      </button>
+
+                      <span className="text-slate-300 dark:text-slate-700">·</span>
+
+                      <button
+                        onClick={() => handleDownloadZip(m.id)}
+                        disabled={downloadingZipFor !== null}
+                        className="flex items-center gap-1.5 text-xs font-bold text-blue-500 disabled:opacity-50"
+                      >
+                        {downloadingZipFor === m.id ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" /> Zipping...
+                          </>
+                        ) : (
+                          <>
+                            <Download size={13} /> Download all (.zip)
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {detectedFiles.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5 max-w-[85%]">
+                      {detectedFiles.map((f) => (
+                        <button
+                          key={f.path}
+                          onClick={() => handleDownloadFile(f.path, f.content)}
+                          title={`Download ${f.path}`}
+                          className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-500 hover:border-blue-300"
+                        >
+                          <FileDown size={11} />
+                          {f.path}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {isPending && (
               <div className="flex justify-start">
                 <div className="rounded-2xl px-4 py-2.5 bg-slate-100 dark:bg-slate-900 flex items-center gap-2">
@@ -222,6 +418,9 @@ export default function DevAssistantClient({
           </div>
 
           {chatError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{chatError}</p>}
+          {sandboxError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{sandboxError}</p>}
+          {downloadError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{downloadError}</p>}
+          {imageError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{imageError}</p>}
 
           <div className="border-t border-slate-100 dark:border-slate-900">
             {attachPickerOpen && project && (
@@ -264,6 +463,20 @@ export default function DevAssistantClient({
               </div>
             )}
 
+            {pendingImages.length > 0 && (
+              <div className="px-6 sm:px-8 pt-3 flex flex-wrap gap-1.5">
+                {pendingImages.map((img) => (
+                  <span
+                    key={img.name}
+                    className="flex items-center gap-1 text-[11px] font-mono bg-purple-500/10 text-purple-500 px-2 py-1 rounded-lg"
+                  >
+                    📷 {img.name}
+                    <X size={10} className="cursor-pointer" onClick={() => removePendingImage(img.name)} />
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="px-6 sm:px-8 py-4 flex gap-2">
               <button
                 onClick={() => setAttachPickerOpen((v) => !v)}
@@ -272,6 +485,22 @@ export default function DevAssistantClient({
                 className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-500 disabled:opacity-40"
               >
                 <Paperclip size={16} />
+              </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImagesSelected}
+                className="hidden"
+              />
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                disabled={pendingImages.length >= MAX_IMAGES_PER_MESSAGE}
+                title="Attach a screenshot or mockup"
+                className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-500 disabled:opacity-40"
+              >
+                <ImagePlus size={16} />
               </button>
               <input
                 value={input}

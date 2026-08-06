@@ -14,7 +14,9 @@ import { getDevAssistantFilesContent } from "@/lib/dev-assistant-project.actions
  * into or read from the owner/staff assistant.
  *
  * SETUP: uses the same GROQ_API_KEY env var store-assistant.actions.ts
- * already requires — no second key needed.
+ * already requires — no second key needed. qwen/qwen3.6-27b (the same
+ * model already in use) is vision-capable, so Stage 5's image support
+ * needed no new provider or key.
  *
  * CONTEXT STRATEGY ("never forget a single thing" vs. the model's context
  * window — see chat explanation): every message is stored forever in
@@ -24,6 +26,14 @@ import { getDevAssistantFilesContent } from "@/lib/dev-assistant-project.actions
  * maybeSummarizeOlderMessages below). Attached file content (Stage 2's
  * uploaded project, explicitly selected by the admin per message — see
  * DEV_ASSISTANT_IDENTITY) is added on top, also capped.
+ *
+ * IMAGES (Stage 5): attached images are sent to the model for the current
+ * turn only and are NOT persisted as image data — only a short text note
+ * ("📷 attached: name.png") is saved to the message, same as the
+ * attached-files note below. Storing raw image bytes in every message
+ * forever would bloat the database for no lasting benefit; the code the
+ * AI produces FROM the image is what's actually kept, same as everything
+ * else in this file.
  */
 
 const GROQ_MODEL = "qwen/qwen3.6-27b";
@@ -37,6 +47,12 @@ const MAX_MESSAGE_CHARS = 4000; // code-heavy messages need more room than the s
 const MAX_SINGLE_ATTACHED_FILE_CHARS = 20_000;
 const MAX_TOTAL_ATTACHED_CHARS = 45_000;
 const MAX_ATTACHED_FILES_PER_MESSAGE = 8;
+
+// Attached images (Stage 5) — Groq's vision docs cap requests at 5
+// images; we cap lower since a UI screenshot rarely needs more than a
+// couple to make the point, and each one adds real request size (base64
+// inflates a file's byte size by roughly a third).
+const MAX_IMAGES_PER_MESSAGE = 3;
 
 // Summarization: once the thread has grown past the verbatim window,
 // fold the next batch of older messages into thread.summary via a small
@@ -68,6 +84,13 @@ export type DevAssistantChatMessage = {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+};
+
+// Base64 data URL (e.g. "data:image/png;base64,...") plus a display name
+// — never persisted, used only for the current request. See file header.
+export type DevAssistantImage = {
+  name: string;
+  dataUrl: string;
 };
 
 async function requireAdmin() {
@@ -186,7 +209,8 @@ Return ONLY the updated summary text, nothing else.`;
 export async function sendDevAssistantMessage(
   threadId: number,
   content: string,
-  attachedFileIds: number[] = []
+  attachedFileIds: number[] = [],
+  images: DevAssistantImage[] = []
 ): Promise<
   | { success: true; reply: DevAssistantChatMessage }
   | { success: false; error: string }
@@ -207,8 +231,18 @@ export async function sendDevAssistantMessage(
     return { success: false, error: "Thread not found." };
   }
 
+  const boundedImages = images.slice(0, MAX_IMAGES_PER_MESSAGE);
+
+  // What actually gets stored forever — the note keeps resumed history
+  // readable about what was attached, without persisting the image bytes
+  // themselves or duplicating the full attached-file content in storage.
+  let storedContent = trimmed.slice(0, MAX_MESSAGE_CHARS);
+  if (boundedImages.length > 0) {
+    storedContent += `\n\n📷 Attached image(s): ${boundedImages.map((i) => i.name).join(", ")}`;
+  }
+
   await prisma.devAssistantMessage.create({
-    data: { threadId, role: "user", content: trimmed.slice(0, MAX_MESSAGE_CHARS) },
+    data: { threadId, role: "user", content: storedContent },
   });
 
   // --- Build system prompt: identity + summary + attached files ---
@@ -258,7 +292,28 @@ export async function sendDevAssistantMessage(
     content: m.content,
   }));
 
-  const requestMessages = [{ role: "system", content: systemPrompt }, ...orderedHistory];
+  // The current turn's user message is always the last entry in
+  // orderedHistory (it was stored above, before this fetch). If images
+  // are attached, replace just that entry's content with the
+  // OpenAI-compatible multimodal array format — text plus one or more
+  // image_url blocks — instead of the plain string every other message
+  // uses. Only the CURRENT turn ever includes images; past turns in
+  // history are always plain text, matching what's actually stored.
+  const requestMessages: { role: string; content: any }[] = [
+    { role: "system", content: systemPrompt },
+    ...orderedHistory,
+  ];
+
+  if (boundedImages.length > 0 && requestMessages.length > 1) {
+    const lastIndex = requestMessages.length - 1;
+    requestMessages[lastIndex] = {
+      role: "user",
+      content: [
+        { type: "text", text: trimmed },
+        ...boundedImages.map((img) => ({ type: "image_url", image_url: { url: img.dataUrl } })),
+      ],
+    };
+  }
 
   try {
     const controller = new AbortController();

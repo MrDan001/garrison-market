@@ -6,6 +6,7 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
+    "@daytona/sdk": "^0.203.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@vercel/blob": "^2.5.0",
