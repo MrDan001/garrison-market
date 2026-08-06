@@ -73,6 +73,14 @@ model User {
   supportOwnerScope      SupportMessage[] @relation("SupportOwnerScope")
   supportSent            SupportMessage[] @relation("SupportSender")
 
+  // Dev Assistant (admin-only code assistant) — one resumable thread per
+  // admin account. See prisma/schema/dev-assistant.prisma.
+  devAssistantThread     DevAssistantThread? @relation("DevAssistantThreadAdmin")
+
+  // Dev Assistant uploaded codebase — one active project per admin
+  // account. See prisma/schema/dev-assistant-project.prisma.
+  devAssistantProject    DevAssistantProject? @relation("DevAssistantProjectAdmin")
+
   // Admin -> owner/staff mailbox (see AdminMessage below). sentAdminMessages
   // is populated only for admin-role users; targetedAdminMessages only for
   // owners; targetedStaffAdminMessages only for staff. adminMessageAcks is

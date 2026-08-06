@@ -10,7 +10,8 @@ import {
   LogOut, 
   Menu, 
   X, 
-  ShieldAlert 
+  ShieldAlert,
+  Code2, // <-- Dev Assistant icon
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
@@ -29,6 +30,7 @@ export default function AdminLayout({
     { name: "Manage Users", href: "/admin/users", icon: Users },
     { name: "Support Tickets", href: "/admin/support", icon: MessageSquare }, 
     { name: "Messages", href: "/admin/messages", icon: Mail },
+    { name: "Dev Assistant", href: "/admin/dev-assistant", icon: Code2 },
   ];
 
   // Helper to determine active section name for the header
@@ -38,6 +40,7 @@ export default function AdminLayout({
     if (path === "/admin/users") return "Account Configurations";
     if (path === "/admin/messages/staff") return "Staff Messages";
     if (path === "/admin/messages") return "Owner Messages";
+    if (path === "/admin/dev-assistant") return "Dev Assistant";
     return "Admin Console";
   };
 

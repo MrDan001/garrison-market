@@ -1,0 +1,44 @@
+// FILE: apps/frontend/prisma/schema/dev-assistant-project.prisma
+//
+// Stage 2: persistent storage for the codebase an admin uploads to the Dev
+// Assistant. One "project" (workspace) per admin — uploading a new zip
+// replaces the previous project's files, same one-active-workspace pattern
+// as DevAssistantThread from Stage 1. Nothing here talks to the AI yet —
+// Stage 3 will read these rows to build the model's context.
+//
+// SETUP REQUIRED:
+//   1. Add ONE line inside the User model in schema/base.prisma, right
+//      next to devAssistantThread:
+//        devAssistantProject DevAssistantProject? @relation("DevAssistantProjectAdmin")
+//   2. Run: npx prisma migrate dev --name add_dev_assistant_project
+model DevAssistantProject {
+  id        Int      @id @default(autoincrement())
+  adminId   Int      @unique
+  name      String // original zip filename, for display only
+  fileCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  admin User               @relation("DevAssistantProjectAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  files DevAssistantFile[]
+
+  @@index([adminId])
+}
+
+// One row per ingested source file. Binary files, node_modules, build
+// output, and anything over the per-file size cap are skipped at upload
+// time (see app/api/dev-assistant/upload-project/route.ts) — this table
+// only ever holds text/source content the model can actually read.
+model DevAssistantFile {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  path      String // relative path inside the zip, e.g. "src/app.ts"
+  content   String   @db.Text
+  sizeBytes Int
+  createdAt DateTime @default(now())
+
+  project DevAssistantProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, path])
+  @@index([projectId])
+}
