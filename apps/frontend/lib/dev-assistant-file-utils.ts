@@ -12,6 +12,12 @@
 
 export type ExtractedFile = { path: string; content: string };
 
+// Alias so both dev-assistant-sandbox.ts and dev-assistant-screenshot.ts
+// can import "SandboxFile" directly from this neutral file instead of
+// through each other — avoids any risk of a circular/self-referential
+// import between sandbox-related files.
+export type SandboxFile = ExtractedFile;
+
 // Parses the "// FILE: path" fenced-block convention (see
 // DEV_ASSISTANT_IDENTITY in dev-assistant-knowledge.ts) out of an AI
 // reply. Best-effort: a reply whose file content itself contains triple

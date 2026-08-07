@@ -4,8 +4,10 @@
 
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { put } from "@vercel/blob";
 import { DEV_ASSISTANT_IDENTITY } from "@/lib/dev-assistant-knowledge";
 import { extractFilesFromReply, runFilesInSandbox, type SandboxFile } from "@/lib/dev-assistant-sandbox";
+import { captureAppScreenshot } from "@/lib/dev-assistant-screenshot";
 
 const GROQ_MODEL = "qwen/qwen3.6-27b";
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
@@ -40,7 +42,7 @@ ${errorLog.slice(0, 6000)}`;
         { role: "user", content: prompt },
       ],
       temperature: 0.2,
-      max_tokens: 3000,
+      max_completion_tokens: 3000,
       reasoning_effort: "none",
       reasoning_format: "hidden",
     }),
@@ -116,7 +118,7 @@ export async function runDevAssistantSandbox(threadId: number, messageId: number
       break;
     }
     // Replace whichever files the AI touched, keep the rest as-is.
-    const byPath = new Map(files.map((f) => [f.path, f]));
+    const byPath = new Map<string, SandboxFile>(files.map((f: SandboxFile) => [f.path, f]));
     for (const nf of newFiles) byPath.set(nf.path, nf);
     files = Array.from(byPath.values());
   }
@@ -130,4 +132,59 @@ export async function runDevAssistantSandbox(threadId: number, messageId: number
   });
   await prisma.devAssistantThread.update({ where: { id: threadId }, data: { updatedAt: new Date() } });
 
-  return { success, iterations } as SandboxLoopResult;}
+  if (success) {
+    return { success: true, iterations };
+  }
+  return { success: false, error: `Still failing after ${iterations} attempt(s) — see the new message in chat for the full log.` };
+}
+
+export type ScreenshotLoopResult = { success: true } | { success: false; error: string };
+
+// Boots the "// FILE:" blocks from a specific assistant message for real
+// in a sandbox and captures an actual screenshot — see
+// dev-assistant-screenshot.ts for the pipeline itself and its honesty
+// notes. Opt-in per message, same as runDevAssistantSandbox above, since
+// this spends real Daytona sandbox time (more than the build-check flow
+// — installing a browser and booting a dev server takes longer). The
+// screenshot is uploaded to Vercel Blob (not stored as image bytes in the
+// database) and only its URL is saved in the thread, same "don't bloat
+// storage with binary data" reasoning used for uploaded project files and
+// attached chat images.
+export async function runDevAssistantScreenshot(threadId: number, messageId: number): Promise<ScreenshotLoopResult> {
+  const session = await requireAdmin();
+
+  const thread = await prisma.devAssistantThread.findUnique({ where: { id: threadId } });
+  if (!thread || thread.adminId !== session.id) {
+    return { success: false, error: "Thread not found." };
+  }
+
+  const message = await prisma.devAssistantMessage.findUnique({ where: { id: messageId } });
+  if (!message || message.threadId !== threadId || message.role !== "assistant") {
+    return { success: false, error: "That message isn't a Dev Assistant reply." };
+  }
+
+  const files = extractFilesFromReply(message.content);
+  if (files.length === 0) {
+    return { success: false, error: 'No "// FILE:" code blocks found in that reply to screenshot.' };
+  }
+
+  const outcome = await captureAppScreenshot(files);
+
+  let summary: string;
+  if (outcome.success) {
+    const blob = await put(`dev-assistant-screenshots/${threadId}-${Date.now()}.png`, outcome.imageBuffer, {
+      access: "public",
+      contentType: "image/png",
+    });
+    summary = `📸 Screenshot captured (port ${outcome.port}):\n![screenshot](${blob.url})`;
+  } else {
+    summary = `❌ Couldn't capture a screenshot — here's what happened:\n\n${outcome.log.slice(-3000)}`;
+  }
+
+  await prisma.devAssistantMessage.create({ data: { threadId, role: "assistant", content: summary } });
+  await prisma.devAssistantThread.update({ where: { id: threadId }, data: { updatedAt: new Date() } });
+
+  return outcome.success
+    ? { success: true }
+    : { success: false, error: "Screenshot failed — see the new message in chat for the full log." };
+}

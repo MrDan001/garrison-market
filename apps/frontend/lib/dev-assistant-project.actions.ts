@@ -9,14 +9,23 @@ import prisma from "@/lib/prisma";
  * Stage 2 — read access to the admin's uploaded codebase. Ingestion itself
  * happens in app/api/dev-assistant/upload-project/route.ts (a regular API
  * route rather than a server action, since server actions default to a
- * 1MB body limit and zip uploads need more room). This file just lets the
- * UI list files and fetch one file's content on demand.
+ * 1MB body limit and uploads need more room). This file just lets the UI
+ * list files and fetch one file's content on demand.
+ *
+ * Stage 6 update: files can now be binary (images, PDFs, etc. — stored in
+ * Vercel Blob, see the upload route) as well as text. Summaries now
+ * include isBinary/blobUrl/mimeType so the Files tab can render an image
+ * preview or a download link instead of assuming everything is source
+ * code.
  */
 
 export type DevAssistantFileSummary = {
   id: number;
   path: string;
   sizeBytes: number;
+  isBinary: boolean;
+  blobUrl: string | null;
+  mimeType: string | null;
 };
 
 export type DevAssistantProjectSummary = {
@@ -42,7 +51,7 @@ export async function getDevAssistantProject(): Promise<DevAssistantProjectSumma
     where: { adminId: session.id },
     include: {
       files: {
-        select: { id: true, path: true, sizeBytes: true },
+        select: { id: true, path: true, sizeBytes: true, isBinary: true, blobUrl: true, mimeType: true },
         orderBy: { path: "asc" },
       },
     },
@@ -60,11 +69,14 @@ export async function getDevAssistantProject(): Promise<DevAssistantProjectSumma
 }
 
 // Content is fetched lazily, per file, rather than shipping the entire
-// codebase to the browser on page load — keeps the initial page fast even
-// for a project near the file-count/size limits.
-export async function getDevAssistantFileContent(
-  fileId: number
-): Promise<{ success: true; path: string; content: string } | { success: false; error: string }> {
+// codebase to the browser on page load. For binary files, "content" is
+// never sent (it isn't stored here at all) — the caller gets isBinary +
+// blobUrl instead and renders/download from Blob directly.
+export async function getDevAssistantFileContent(fileId: number): Promise<
+  | { success: true; path: string; isBinary: false; content: string }
+  | { success: true; path: string; isBinary: true; blobUrl: string; mimeType: string | null }
+  | { success: false; error: string }
+> {
   const session = await requireAdmin();
 
   const file = await prisma.devAssistantFile.findUnique({
@@ -76,13 +88,18 @@ export async function getDevAssistantFileContent(
     return { success: false, error: "File not found." };
   }
 
-  return { success: true, path: file.path, content: file.content };
+  if (file.isBinary) {
+    return { success: true, path: file.path, isBinary: true, blobUrl: file.blobUrl!, mimeType: file.mimeType };
+  }
+  return { success: true, path: file.path, isBinary: false, content: file.content ?? "" };
 }
 
-// Fetches content for several files at once (the admin's attached-files
-// selection for a single chat message) — scoped to this admin's own
-// project so one admin can never pull another admin's files by guessing
-// ids.
+// Fetches TEXT content for several files at once (the admin's
+// attached-files selection for a single chat message). Binary files are
+// silently excluded — there's no text content to inject into the model's
+// context for them (chat attachment is text-only; binary files are
+// viewed/downloaded from the Files tab instead, and the attach-file
+// picker in chat only lists text files in the first place).
 export async function getDevAssistantFilesContent(
   fileIds: number[]
 ): Promise<{ path: string; content: string }[]> {
@@ -90,11 +107,11 @@ export async function getDevAssistantFilesContent(
   if (fileIds.length === 0) return [];
 
   const files = await prisma.devAssistantFile.findMany({
-    where: { id: { in: fileIds }, project: { adminId: session.id } },
+    where: { id: { in: fileIds }, project: { adminId: session.id }, isBinary: false },
     select: { path: true, content: true },
   });
 
-  return files;
+  return files.map((f) => ({ path: f.path, content: f.content ?? "" }));
 }
 
 export async function deleteDevAssistantProject(): Promise<

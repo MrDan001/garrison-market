@@ -3,14 +3,14 @@
 "use client";
 
 import { useState, useRef, useEffect, useTransition } from "react";
-import { Send, Code2, Upload, FileText, Trash2, Loader2, Paperclip, X, Play, ImagePlus, Download, FileDown } from "lucide-react";
+import { Send, Code2, Upload, FileText, Trash2, Loader2, Paperclip, X, Play, ImagePlus, Download, FileDown, Camera, FileImage } from "lucide-react";
 import {
   sendDevAssistantMessage,
   getOrCreateDevAssistantThread,
   type DevAssistantChatMessage,
   type DevAssistantImage,
 } from "@/lib/dev-assistant.actions";
-import { runDevAssistantSandbox } from "@/lib/dev-assistant-sandbox.actions";
+import { runDevAssistantSandbox, runDevAssistantScreenshot } from "@/lib/dev-assistant-sandbox.actions";
 import { extractFilesFromReply } from "@/lib/dev-assistant-file-utils";
 import {
   getDevAssistantProject,
@@ -132,6 +132,30 @@ export default function DevAssistantClient({
     }
   }
 
+  // Screenshot (Stage 6 — new) — boots the code for real and captures an
+  // actual screenshot, rather than the model guessing at an image. Costs
+  // more sandbox time than "Run in sandbox" (installing a browser +
+  // booting a dev server), so this stays a separate opt-in action.
+  const [screenshottingMessageId, setScreenshottingMessageId] = useState<number | null>(null);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
+
+  async function handleScreenshot(messageId: number) {
+    setScreenshottingMessageId(messageId);
+    setScreenshotError(null);
+    try {
+      const result = await runDevAssistantScreenshot(threadId, messageId);
+      const fresh = await getOrCreateDevAssistantThread();
+      setMessages(fresh.messages);
+      if (!result.success) {
+        setScreenshotError(result.error);
+      }
+    } catch {
+      setScreenshotError("Screenshot failed unexpectedly — please try again.");
+    } finally {
+      setScreenshottingMessageId(null);
+    }
+  }
+
   // --- Downloads (Stage 5 — new) ---
   // Individual files are extracted and downloaded entirely client-side —
   // the content is already sitting in the message that's rendered, so no
@@ -223,7 +247,11 @@ export default function DevAssistantClient({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<{ path: string; content: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<
+    | { path: string; isBinary: false; content: string }
+    | { path: string; isBinary: true; blobUrl: string; mimeType: string | null }
+    | null
+  >(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -257,11 +285,11 @@ export default function DevAssistantClient({
         await refreshProject();
         setAttachedIds([]);
         const notes: string[] = [];
-        if (data.skippedBinary) notes.push(`${data.skippedBinary} binary/non-source files skipped`);
-        if (data.skippedTooLarge) notes.push(`${data.skippedTooLarge} files skipped for being too large`);
-        setUploadNote(
-          `Ingested ${data.project.fileCount} files.` + (notes.length ? ` (${notes.join(", ")})` : "")
-        );
+        if (data.binaryCount) notes.push(`${data.binaryCount} binary file(s)`);
+        if (data.textCount) notes.push(`${data.textCount} text file(s)`);
+        if (data.skippedArchive) notes.push(`${data.skippedArchive} nested archive(s) skipped`);
+        if (data.skippedTooLarge) notes.push(`${data.skippedTooLarge} file(s) skipped for being too large`);
+        setUploadNote(`Ingested ${data.project.fileCount} files.` + (notes.length ? ` (${notes.join(", ")})` : ""));
       }
     } catch {
       setUploadError("Upload failed — please try again.");
@@ -277,7 +305,7 @@ export default function DevAssistantClient({
     const result = await getDevAssistantFileContent(fileId);
     setLoadingFile(false);
     if (result.success) {
-      setSelectedFile({ path: result.path, content: result.content });
+      setSelectedFile(result);
     }
   }
 
@@ -338,17 +366,31 @@ export default function DevAssistantClient({
             )}
             {messages.map((m) => {
               const detectedFiles = m.role === "assistant" ? extractFilesFromReply(m.content) : [];
+              const screenshotMatch = m.role === "assistant" ? m.content.match(/!\[screenshot\]\((.+?)\)/) : null;
+              const displayContent = screenshotMatch
+                ? m.content.replace(/!\[screenshot\]\(.+?\)/, "").trim()
+                : m.content;
               return (
                 <div key={m.id} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                      m.role === "user"
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 dark:bg-slate-900 text-[var(--text-primary)] font-mono text-[13px]"
-                    }`}
-                  >
-                    {m.content}
-                  </div>
+                  {displayContent && (
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                        m.role === "user"
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 dark:bg-slate-900 text-[var(--text-primary)] font-mono text-[13px]"
+                      }`}
+                    >
+                      {displayContent}
+                    </div>
+                  )}
+
+                  {screenshotMatch && (
+                    <img
+                      src={screenshotMatch[1]}
+                      alt="App screenshot"
+                      className="mt-1.5 max-w-[85%] rounded-xl border border-slate-200 dark:border-slate-800"
+                    />
+                  )}
 
                   {detectedFiles.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 max-w-[85%]">
@@ -364,6 +406,24 @@ export default function DevAssistantClient({
                         ) : (
                           <>
                             <Play size={13} /> Run in sandbox
+                          </>
+                        )}
+                      </button>
+
+                      <span className="text-slate-300 dark:text-slate-700">·</span>
+
+                      <button
+                        onClick={() => handleScreenshot(m.id)}
+                        disabled={screenshottingMessageId !== null}
+                        className="flex items-center gap-1.5 text-xs font-bold text-purple-500 disabled:opacity-50"
+                      >
+                        {screenshottingMessageId === m.id ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" /> Capturing...
+                          </>
+                        ) : (
+                          <>
+                            <Camera size={13} /> Screenshot
                           </>
                         )}
                       </button>
@@ -419,6 +479,7 @@ export default function DevAssistantClient({
 
           {chatError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{chatError}</p>}
           {sandboxError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{sandboxError}</p>}
+          {screenshotError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{screenshotError}</p>}
           {downloadError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{downloadError}</p>}
           {imageError && <p className="px-6 sm:px-8 text-xs text-rose-400 pb-2">{imageError}</p>}
 
@@ -429,7 +490,7 @@ export default function DevAssistantClient({
                   Attach files to this message
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {project.files.map((f) => (
+                  {project.files.filter((f) => !f.isBinary).map((f) => (
                     <button
                       key={f.id}
                       onClick={() => toggleAttachment(f.id)}
@@ -443,6 +504,12 @@ export default function DevAssistantClient({
                     </button>
                   ))}
                 </div>
+                {project.files.some((f) => f.isBinary) && (
+                  <p className="text-[10px] text-slate-400 mt-2">
+                    Binary files (images, PDFs, etc.) aren't listed here — the AI can't read their content as
+                    chat text. View or download them from the Files tab.
+                  </p>
+                )}
               </div>
             )}
 
@@ -524,20 +591,14 @@ export default function DevAssistantClient({
       {tab === "files" && (
         <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-5">
           <div className="flex flex-wrap items-center gap-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".zip"
-              onChange={handleZipSelected}
-              className="hidden"
-            />
+            <input ref={fileInputRef} type="file" onChange={handleZipSelected} className="hidden" />
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               className="flex items-center gap-2 rounded-xl bg-blue-600 text-white px-4 py-2.5 text-sm font-bold disabled:opacity-50"
             >
               {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-              {uploading ? "Uploading..." : project ? "Replace project (.zip)" : "Upload project (.zip)"}
+              {uploading ? "Uploading..." : project ? "Replace project" : "Upload project (.zip or any file)"}
             </button>
 
             {project && (
@@ -556,9 +617,9 @@ export default function DevAssistantClient({
 
           {!project && !uploading && (
             <p className="text-sm text-slate-500">
-              No project uploaded yet. Upload a .zip of your codebase — node_modules, build output, and
-              binary files are skipped automatically. Once uploaded, switch to Chat and use the paperclip
-              icon to attach specific files for the AI to review.
+              No project uploaded yet. Upload a .zip of your codebase, or a single loose file — any type,
+              including images and PDFs. Text files become chat-attachable; binary files are viewable/downloadable
+              here in the Files tab.
             </p>
           )}
 
@@ -579,7 +640,11 @@ export default function DevAssistantClient({
                           : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
-                      <FileText size={12} className="shrink-0" />
+                      {f.isBinary ? (
+                        <FileImage size={12} className="shrink-0" />
+                      ) : (
+                        <FileText size={12} className="shrink-0" />
+                      )}
                       <span className="truncate">{f.path}</span>
                     </button>
                   ))}
@@ -592,11 +657,38 @@ export default function DevAssistantClient({
                 </div>
                 <div className="max-h-[50vh] overflow-auto p-4">
                   {loadingFile && <Loader2 size={16} className="animate-spin text-slate-400" />}
-                  {!loadingFile && selectedFile && (
+
+                  {!loadingFile && selectedFile && !selectedFile.isBinary && (
                     <pre className="text-xs font-mono whitespace-pre-wrap text-[var(--text-primary)]">
                       {selectedFile.content}
                     </pre>
                   )}
+
+                  {!loadingFile && selectedFile && selectedFile.isBinary && (
+                    <div className="space-y-3">
+                      {selectedFile.mimeType?.startsWith("image/") ? (
+                        <img
+                          src={selectedFile.blobUrl}
+                          alt={selectedFile.path}
+                          className="max-w-full rounded-lg border border-slate-200 dark:border-slate-800"
+                        />
+                      ) : (
+                        <p className="text-xs text-slate-500">
+                          {selectedFile.mimeType ?? "Binary file"} — no inline preview available.
+                        </p>
+                      )}
+                      <a
+                        href={selectedFile.blobUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-500"
+                      >
+                        <Download size={13} /> Download
+                      </a>
+                    </div>
+                  )}
+
                   {!loadingFile && !selectedFile && (
                     <p className="text-xs text-slate-500">Click a file on the left to view its contents.</p>
                   )}

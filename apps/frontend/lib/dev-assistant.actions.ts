@@ -183,7 +183,7 @@ Return ONLY the updated summary text, nothing else.`;
         model: GROQ_MODEL,
         messages: [{ role: "user", content: summaryPrompt }],
         temperature: 0.2,
-        max_tokens: 500,
+        max_completion_tokens: 500,
         reasoning_effort: "none",
         reasoning_format: "hidden",
       }),
@@ -329,7 +329,7 @@ export async function sendDevAssistantMessage(
         model: GROQ_MODEL,
         messages: requestMessages,
         temperature: 0.2, // lower than Ask Me's 0.3 — code answers should be consistent, not chatty
-        max_tokens: 3000, // generous — full-file rewrites need room
+        max_completion_tokens: 3000, // generous — full-file rewrites need room
         reasoning_effort: "none",
         reasoning_format: "hidden",
       }),
