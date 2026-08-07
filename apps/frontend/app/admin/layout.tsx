@@ -7,6 +7,7 @@ import {
   Users, 
   MessageSquare, // <-- Added Support icon
   Mail,
+  Bell, // <-- Broadcast icon
   LogOut, 
   Menu, 
   X, 
@@ -30,6 +31,7 @@ export default function AdminLayout({
     { name: "Manage Users", href: "/admin/users", icon: Users },
     { name: "Support Tickets", href: "/admin/support", icon: MessageSquare }, 
     { name: "Messages", href: "/admin/messages", icon: Mail },
+    { name: "Broadcast", href: "/admin/broadcast", icon: Bell },
     { name: "Dev Assistant", href: "/admin/dev-assistant", icon: Code2 },
   ];
 
@@ -40,6 +42,7 @@ export default function AdminLayout({
     if (path === "/admin/users") return "Account Configurations";
     if (path === "/admin/messages/staff") return "Staff Messages";
     if (path === "/admin/messages") return "Owner Messages";
+    if (path === "/admin/broadcast") return "Push Broadcast";
     if (path === "/admin/dev-assistant") return "Dev Assistant";
     return "Admin Console";
   };

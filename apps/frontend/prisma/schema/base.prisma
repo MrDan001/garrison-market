@@ -88,6 +88,10 @@ model User {
   sentAdminMessages          AdminMessage[]      @relation("AdminMessageSender")
   targetedAdminMessages      AdminMessage[]      @relation("AdminMessageTarget")
   targetedStaffAdminMessages AdminMessage[]      @relation("AdminMessageTargetStaff")
+
+  // Engagement push blasts this admin has triggered (see AdminBroadcast
+  // below) — populated only for admin-role users.
+  sentAdminBroadcasts        AdminBroadcast[]    @relation("AdminBroadcastSender")
   adminMessageReads          AdminMessageRead[]
   adminMessageAcks           AdminMessageAck[]
   adminMessageReplies        AdminMessageReply[] @relation("AdminMessageReplyOwner")
@@ -504,6 +508,39 @@ model AdminNotification {
 
   @@index([read])
   @@index([createdAt])
+}
+
+// Admin-triggered engagement pushes — deliberately separate from
+// AdminNotification above (that's the reverse direction: system events
+// notifying admin) and from AdminMessage (that's a threaded mailbox
+// message tied to a specific owner/staff conversation). A broadcast is a
+// one-off, admin-authored push blast aimed at pulling owners/staff back
+// into the app — "New feature available", "Your report is ready", etc.
+// One row per trigger, kept for a simple send history / audit trail.
+model AdminBroadcast {
+  id         Int      @id @default(autoincrement())
+  title      String
+  body       String
+  link       String?
+  // Who the admin targeted at send time. "owners" | "staff" | "everyone"
+  // | "owner_tenant" | "store". Kept as a plain string (matching the
+  // AdminNotification.type convention above) rather than an enum, since
+  // this is UI-facing copy more than a strict domain concept.
+  targetType String
+  // Only set when targetType is "owner_tenant" (a specific owner + their
+  // staff) or "store" (staff pinned to one specific Store via
+  // User.staffStoreId). Null for "owners" / "staff" / "everyone".
+  targetId   Int?
+  // How many devices actually received a push at send time (subscriptions
+  // sent to, not unique users) — a quick sanity signal that this isn't
+  // silently reaching zero people. Not a live delivery receipt.
+  recipientCount Int      @default(0)
+  sentById       Int
+  sentBy         User     @relation("AdminBroadcastSender", fields: [sentById], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([sentById])
 }
 
 model Consignment {
