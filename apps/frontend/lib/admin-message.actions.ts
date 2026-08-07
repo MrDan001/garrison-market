@@ -709,8 +709,8 @@ export async function getPendingAdminAnnouncementForRecipient() {
 
   const where =
     session.role === "owner"
-      ? { OR: [{ audience: "all_owners" as const }, { targetOwnerId: session.id }] }
-      : { OR: [{ audience: "all_staff" as const }, { targetStaffId: session.id }] };
+      ? { channel: "popup", OR: [{ audience: "all_owners" as const }, { targetOwnerId: session.id }] }
+      : { channel: "popup", OR: [{ audience: "all_staff" as const }, { targetStaffId: session.id }] };
 
   const [messages, acks] = await Promise.all([
     prisma.adminMessage.findMany({
