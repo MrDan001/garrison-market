@@ -19,6 +19,36 @@ async function requireAdmin() {
   return session;
 }
 
+// Loads the admin's uploaded project (Files tab) as a base layer of
+// files, text-only — binary files (images, fonts, etc.) aren't useful
+// inside a sandbox run and would just add dead weight. Returns [] if the
+// admin has never uploaded a project, in which case callers fall back to
+// running the reply's files alone, same as before.
+async function getProjectBaseFiles(adminId: number): Promise<SandboxFile[]> {
+  const project = await prisma.devAssistantProject.findUnique({
+    where: { adminId },
+    include: { files: { where: { isBinary: false } } },
+  });
+  if (!project) return [];
+  return project.files
+    .filter((f): f is typeof f & { content: string } => f.content !== null)
+    .map((f) => ({ path: f.path, content: f.content }));
+}
+
+// Merges a message's "// FILE:" blocks on top of the admin's uploaded
+// project files — the project acts as a base layer (package.json,
+// next.config, existing routes, etc.) and the reply's files are the
+// overlay, replacing/adding whatever the assistant just generated or
+// changed. This is what lets a reply containing only a single component
+// still run/screenshot successfully against the rest of a real app.
+async function mergeWithProjectFiles(adminId: number, replyFiles: SandboxFile[]): Promise<SandboxFile[]> {
+  const baseFiles = await getProjectBaseFiles(adminId);
+  if (baseFiles.length === 0) return replyFiles;
+  const byPath = new Map<string, SandboxFile>(baseFiles.map((f) => [f.path, f]));
+  for (const f of replyFiles) byPath.set(f.path, f);
+  return Array.from(byPath.values());
+}
+
 async function askGroqToFix(files: SandboxFile[], errorLog: string): Promise<string | null> {
   const filesBlock = files.map((f) => `// FILE: ${f.path}\n${f.content}`).join("\n\n---\n\n");
   const prompt = `The following files were just run in a sandbox and produced an error. Fix the code.
@@ -83,6 +113,7 @@ export async function runDevAssistantSandbox(threadId: number, messageId: number
   if (files.length === 0) {
     return { success: false, error: 'No "// FILE:" code blocks found in that reply to run.' };
   }
+  files = await mergeWithProjectFiles(session.id, files);
 
   let fullLog = "";
   let iterations = 0;
@@ -163,10 +194,11 @@ export async function runDevAssistantScreenshot(threadId: number, messageId: num
     return { success: false, error: "That message isn't a Dev Assistant reply." };
   }
 
-  const files = extractFilesFromReply(message.content);
+  let files = extractFilesFromReply(message.content);
   if (files.length === 0) {
     return { success: false, error: 'No "// FILE:" code blocks found in that reply to screenshot.' };
   }
+  files = await mergeWithProjectFiles(session.id, files);
 
   const outcome = await captureAppScreenshot(files);
 

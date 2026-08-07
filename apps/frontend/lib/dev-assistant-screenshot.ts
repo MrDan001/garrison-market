@@ -19,7 +19,11 @@ import type { SandboxFile } from "./dev-assistant-file-utils";
  *     arbitrary generated app will listen on. This tries common defaults
  *     (3000, 5173, 8080, 4200) in order and uses whichever responds
  *     first. If the app uses something else, this reports failure rather
- *     than silently screenshotting the wrong thing.
+ *     than silently screenshotting the wrong thing. (Fixed: the port
+ *     check no longer uses curl's -f flag, which used to swallow 4xx/5xx
+ *     responses and report them identically to "nothing listening" —
+ *     now any numeric HTTP code counts as "listening," and a non-2xx/3xx
+ *     code is called out explicitly in the log instead of being hidden.)
  *   - HEADLESS CHROMIUM DEPENDENCIES: Puppeteer's bundled Chromium
  *     usually needs OS-level libraries (libnss3, libatk, etc.) that a
  *     minimal sandbox image may not have preinstalled. This attempts an
@@ -150,18 +154,29 @@ export async function captureAppScreenshot(files: SandboxFile[]): Promise<Screen
     await new Promise((r) => setTimeout(r, SERVER_BOOT_WAIT_MS));
 
     // Probe common dev-server ports until one responds — see PORT
-    // GUESSING in the honesty note above.
+    // GUESSING in the honesty note above. Deliberately NOT using curl's
+    // -f flag: -f makes curl print nothing and "fail" on any HTTP error
+    // (400+), which is indistinguishable from nothing listening at all.
+    // Since the merged project can now pull in real middleware/auth code
+    // that needs env vars (DATABASE_URL, etc.) the sandbox doesn't have,
+    // the server can be up and returning 500 on every request — and the
+    // old -f check would've silently reported that as "no server ever
+    // responded." Checking for ANY numeric HTTP code (including 4xx/5xx)
+    // distinguishes "something is listening" from "connection refused."
     let readyPort: number | null = null;
+    let readyStatusCode: string | null = null;
     for (const port of CANDIDATE_PORTS) {
       for (let attempt = 0; attempt < PORT_POLL_ATTEMPTS; attempt++) {
         const probe = await runCommand(
           sandbox,
-          `curl -sf -o /dev/null -w "%{http_code}" http://localhost:${port}`,
+          `curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}`,
           root,
           10
         );
-        if (probe.stdout.trim().startsWith("2") || probe.stdout.trim().startsWith("3")) {
+        const code = probe.stdout.trim();
+        if (/^\d{3}$/.test(code) && code !== "000") {
           readyPort = port;
+          readyStatusCode = code;
           break;
         }
         await new Promise((r) => setTimeout(r, PORT_POLL_INTERVAL_MS));
@@ -177,7 +192,13 @@ export async function captureAppScreenshot(files: SandboxFile[]): Promise<Screen
         "or the start command itself erroring before it ever listens.)\n";
       return { success: false, log };
     }
-    log += `Server responded on port ${readyPort}.\n`;
+    if (readyStatusCode && !readyStatusCode.startsWith("2") && !readyStatusCode.startsWith("3")) {
+      log += `\nServer responded on port ${readyPort}, but with HTTP ${readyStatusCode} — the page ` +
+        "likely errored (e.g. a missing DATABASE_URL or other env var the sandbox doesn't have, if this " +
+        "reply pulled in your real project's middleware/auth code). Screenshotting it anyway — the image " +
+        "may just show an error page rather than your app.\n";
+    }
+    log += `Server responded on port ${readyPort}` + (readyStatusCode ? ` (HTTP ${readyStatusCode}).\n` : ".\n");
 
     const screenshotScript = `
 const puppeteer = require('puppeteer');
