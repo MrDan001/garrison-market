@@ -28,11 +28,11 @@ function resolveOptimisticTargetLabel(
 ) {
   if (targetType === "owner_tenant" && targetId) {
     const o = owners.find((o) => o.id === targetId);
-    return `Owner + Staff — ${o ? o.storeName || o.fullName || o.email : `#${targetId}`}`;
+    return `Owner — ${o ? o.storeName || o.fullName || o.email : `#${targetId}`}`;
   }
   if (targetType === "owner_only" && targetId) {
     const o = owners.find((o) => o.id === targetId);
-    return `Owner — ${o ? o.storeName || o.fullName || o.email : `#${targetId}`}`;
+    return `Owner Only — ${o ? o.storeName || o.fullName || o.email : `#${targetId}`}`;
   }
   if (targetType === "store" && targetId) {
     const s = stores.find((s) => s.id === targetId);
@@ -86,7 +86,7 @@ export default function BroadcastClient({
       return;
     }
     if (needsTargetId && !targetId) {
-      setError(targetType === "store" ? "Pick a store." : "Pick an owner.");
+      setError(targetType === "owner_tenant" || targetType === "owner_only" ? "Pick an owner." : "Pick a store.");
       return;
     }
     if (link.trim() && !link.trim().startsWith("/")) {
@@ -187,7 +187,22 @@ export default function BroadcastClient({
             </div>
           </div>
 
-          {(targetType === "owner_tenant" || targetType === "owner_only") && (
+          {targetType === "owner_tenant" && (
+            <select
+              value={targetId}
+              onChange={(e) => setTargetId(e.target.value ? parseInt(e.target.value, 10) : "")}
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+            >
+              <option value="">Select an owner…</option>
+              {owners.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.fullName || o.email} {o.storeName ? `— ${o.storeName}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {targetType === "owner_only" && (
             <select
               value={targetId}
               onChange={(e) => setTargetId(e.target.value ? parseInt(e.target.value, 10) : "")}

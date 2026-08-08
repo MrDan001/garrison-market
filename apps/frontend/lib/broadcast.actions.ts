@@ -15,7 +15,8 @@ export type SendBroadcastParams = {
   link?: string | null;
   targetType: BroadcastTargetType;
   // Required (and only meaningful) when targetType is "owner_tenant"
-  // (an owner's User.id — reaches that owner + their staff) or "store"
+  // (an owner's User.id — reaches that owner + their staff), "owner_only"
+  // (an owner's User.id — reaches that owner alone, no staff), or "store"
   // (a Store.id — reaches staff pinned to that store via staffStoreId).
   targetId?: number | null;
 };
@@ -46,7 +47,9 @@ export async function sendBroadcastNotification(params: SendBroadcastParams) {
     throw new Error("Link must be an internal app path, e.g. /owner/promotions");
   }
   if (
-    (params.targetType === "owner_tenant" || params.targetType === "owner_only" || params.targetType === "store") &&
+    (params.targetType === "owner_tenant" ||
+      params.targetType === "owner_only" ||
+      params.targetType === "store") &&
     !params.targetId
   ) {
     throw new Error("targetId is required for this target type");
@@ -128,9 +131,14 @@ async function resolveTargetUserIds(targetType: BroadcastTargetType, targetId: n
       return users.map((u) => u.id);
     }
     case "owner_only": {
-      // Just the owner account itself — no staff. Distinct from
-      // owner_tenant above, which also pulls in everyone under them.
-      return [targetId!];
+      // The owner alone — no staff. targetId is already that owner's
+      // User.id, so there's nothing to resolve; just confirm they still
+      // exist and hold the owner role before sending.
+      const owner = await prisma.user.findFirst({
+        where: { id: targetId!, role: "owner" },
+        select: { id: true },
+      });
+      return owner ? [owner.id] : [];
     }
     case "store": {
       const users = await prisma.user.findMany({
@@ -167,8 +175,8 @@ const TARGET_TYPE_LABELS: Record<BroadcastTargetType, string> = {
   everyone: "Everyone",
   owners: "All Owners",
   staff: "All Staff",
-  owner_tenant: "Owner + Staff",
-  owner_only: "Owner",
+  owner_tenant: "Owner",
+  owner_only: "Owner Only",
   store: "Store",
 };
 
@@ -206,9 +214,9 @@ async function attachTargetLabels(broadcasts: any[]) {
   return broadcasts.map((b) => {
     let targetLabel = TARGET_TYPE_LABELS[b.targetType as BroadcastTargetType] ?? b.targetType;
     if (b.targetType === "owner_tenant" && b.targetId) {
-      targetLabel = `Owner + Staff — ${ownerMap.get(b.targetId) || `#${b.targetId}`}`;
-    } else if (b.targetType === "owner_only" && b.targetId) {
       targetLabel = `Owner — ${ownerMap.get(b.targetId) || `#${b.targetId}`}`;
+    } else if (b.targetType === "owner_only" && b.targetId) {
+      targetLabel = `Owner Only — ${ownerMap.get(b.targetId) || `#${b.targetId}`}`;
     } else if (b.targetType === "store" && b.targetId) {
       targetLabel = `Store — ${storeMap.get(b.targetId) || `#${b.targetId}`}`;
     }
