@@ -4,8 +4,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Package, Plus, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Flame } from "lucide-react";
+import { Package, Plus, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Flame, Hash, Clock } from "lucide-react";
 import Link from "next/link";
+import { getExpiryStatus } from "@/lib/expiry-status";
 
 interface ScaleInventoryItem {
   id: number | string;
@@ -14,13 +15,17 @@ interface ScaleInventoryItem {
   unit: string;
   price: number;
   costPrice: number | null;
-  category: string | null;
+  category: string | null; // legacy string — used only if categoryName isn't set
+  categoryName?: string | null;
+  sku?: string | null;
+  trackExpiry?: boolean;
+  expiryDate?: string | null;
   restockLevel: number | null;
   image: string | null;
   salesCount?: number;
 }
 
-type Tab = "all" | "low-stock" | "out-of-stock" | "top-selling";
+type Tab = "all" | "low-stock" | "out-of-stock" | "expiring" | "top-selling";
 
 // Stage 2 follow-up: the Scale tab now looks and behaves exactly like the
 // List tab (InventoryGrid) — same card grid, same image handling, same
@@ -62,6 +67,10 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
     return [...items].sort((a, b) => (b.salesCount ?? 0) - (a.salesCount ?? 0));
   }, [items]);
 
+  const expiringItems = useMemo(() => {
+    return items.filter((i) => getExpiryStatus(i.trackExpiry, i.expiryDate) !== null);
+  }, [items]);
+
   const [searchQuery, setSearchQuery] = useState("");
 
   const tabFiltered = useMemo(() => {
@@ -70,12 +79,14 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
         return lowStockItems;
       case "out-of-stock":
         return outOfStockItems;
+      case "expiring":
+        return expiringItems;
       case "top-selling":
         return topSellingItems.filter((i) => (i.salesCount ?? 0) > 0);
       default:
         return items;
     }
-  }, [tab, items, lowStockItems, outOfStockItems, topSellingItems]);
+  }, [tab, items, lowStockItems, outOfStockItems, expiringItems, topSellingItems]);
 
   const visibleItems = useMemo(() => {
     if (!searchQuery.trim()) return tabFiltered;
@@ -87,6 +98,7 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
     { key: "all", label: "All", icon: null, count: items.length },
     { key: "low-stock", label: "Low Stock", icon: null, count: lowStockItems.length },
     { key: "out-of-stock", label: "Out of Stock", icon: null, count: outOfStockItems.length },
+    { key: "expiring", label: "Expiring Soon", icon: <Clock size={11} className="text-orange-500" />, count: expiringItems.length },
     { key: "top-selling", label: "Top Selling", icon: <Flame size={11} /> },
   ];
 
@@ -194,6 +206,8 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
           const isOutOfStock = item.quantity <= 0;
           const isLowStock = !isOutOfStock && item.restockLevel != null && item.quantity <= item.restockLevel;
           const margin = item.costPrice != null ? item.price - item.costPrice : null;
+          const displayCategory = item.categoryName ?? item.category;
+          const expiryStatus = getExpiryStatus(item.trackExpiry, item.expiryDate);
 
           return (
             <Link
@@ -223,18 +237,32 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
                   </div>
                 )}
 
-                {isLowStock && (
-                  <div className="absolute top-2 left-2 z-10">
-                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-md">
-                      Low Stock
-                    </span>
+                {(isLowStock || expiryStatus) && (
+                  <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+                    {isLowStock && (
+                      <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-md">
+                        Low Stock
+                      </span>
+                    )}
+                    {expiryStatus && (
+                      <span
+                        className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border ${
+                          expiryStatus === "expired"
+                            ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                            : "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                        }`}
+                      >
+                        <Clock size={9} />
+                        {expiryStatus === "expired" ? "Expired" : "Expiring Soon"}
+                      </span>
+                    )}
                   </div>
                 )}
 
-                {item.category && (
+                {displayCategory && (
                   <div className="absolute bottom-2 left-2 z-10">
                     <span className="bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 text-[9px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md">
-                      {item.category}
+                      {displayCategory}
                     </span>
                   </div>
                 )}
@@ -267,8 +295,18 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
                   </div>
                 )}
 
-                {item.restockLevel != null && (
-                  <p className="text-[10px] text-slate-400 dark:text-slate-600">Restock at: {item.restockLevel}{item.unit}</p>
+                {(item.restockLevel != null || item.sku) && (
+                  <div className="flex items-center justify-between gap-1">
+                    {item.restockLevel != null && (
+                      <p className="text-[10px] text-slate-400 dark:text-slate-600">Restock at: {item.restockLevel}{item.unit}</p>
+                    )}
+                    {item.sku && (
+                      <p className="flex items-center gap-0.5 text-[10px] text-slate-400 dark:text-slate-600 truncate">
+                        <Hash size={9} />
+                        {item.sku}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </Link>
@@ -284,6 +322,8 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
               ? "No out-of-stock items right now."
               : tab === "low-stock"
               ? "No low stock items right now."
+              : tab === "expiring"
+              ? "No items expiring soon."
               : tab === "top-selling"
               ? "No top-selling history found."
               : "No scale products yet. Add your first one to get started."}

@@ -7,34 +7,48 @@ import { compressImage } from "@/lib/image-compress";
 import { withTimeout } from "@/lib/with-timeout";
 import { addItemAction } from "@/lib/business.actions";
 import UpgradeLimitModal, { isLimitReachedError } from "@/components/UpgradeLimitModal";
-import { ArrowLeft, UploadCloud } from "lucide-react";
+import CategoryPickerModal from "@/components/CategoryPickerModal";
+import MultiImageUploadField from "@/components/MultiImageUploadField";
+import { ArrowLeft, Tag, ChevronRight, Clock } from "lucide-react";
 import Link from "next/link";
 
 export default function AddInventoryForm() {
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<(File | null)[]>([null, null, null]);
+  const [imagePreviews, setImagePreviews] = useState<(string | null)[]>([null, null, null]);
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [categoryName, setCategoryName] = useState<string | null>(null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [trackExpiry, setTrackExpiry] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [limitModalMessage, setLimitModalMessage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
 
-  const handleCardClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  const handleImageChange = (index: number, file: File | null) => {
+    setImageFiles((prev) => {
+      const next = [...prev];
+      next[index] = file;
+      return next;
+    });
+    if (!file) {
+      setImagePreviews((prev) => {
+        const next = [...prev];
+        next[index] = null;
+        return next;
+      });
+      return;
     }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreviews((prev) => {
+        const next = [...prev];
+        next[index] = reader.result as string;
+        return next;
+      });
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -46,13 +60,16 @@ export default function AddInventoryForm() {
     const formData = new FormData(formRef.current);
 
     try {
-      // Upload the file directly browser -> Blob storage, bypassing the
-      // server action entirely. Only the resulting URL travels through
-      // our server, which is what makes this fast.
-      if (selectedFile) {
-        setUploadStatus("Optimizing image...");
-        const compressed = await compressImage(selectedFile, { maxDimension: 1000, quality: 0.82 });
-        setUploadStatus("Uploading image...");
+      // Upload each present slot browser -> Blob storage directly, same
+      // pattern as the original single-image flow — only the resulting
+      // URLs travel through our server.
+      const uploadFieldNames = ["imageUrl", "image2Url", "image3Url"];
+      for (let i = 0; i < 3; i++) {
+        const file = imageFiles[i];
+        if (!file) continue;
+        setUploadStatus(`Optimizing image ${i + 1}...`);
+        const compressed = await compressImage(file, { maxDimension: 1000, quality: 0.82 });
+        setUploadStatus(`Uploading image ${i + 1}...`);
         const blob = await withTimeout(
           upload(compressed.name, compressed, {
             access: "public",
@@ -61,9 +78,12 @@ export default function AddInventoryForm() {
           30000,
           "Image upload timed out. Check your connection and try again."
         );
-        formData.set("imageUrl", blob.url);
+        formData.set(uploadFieldNames[i], blob.url);
       }
-      formData.delete("image"); // raw file no longer needed by the action
+
+      formData.set("categoryId", categoryId != null ? String(categoryId) : "");
+      formData.set("trackExpiry", trackExpiry ? "true" : "false");
+      if (!trackExpiry) formData.delete("expiryDate");
 
       setUploadStatus("Saving item...");
       const result: { success: true } | { success: false; error: string } = await withTimeout(
@@ -97,6 +117,17 @@ export default function AddInventoryForm() {
       {limitModalMessage && (
         <UpgradeLimitModal message={limitModalMessage} onClose={() => setLimitModalMessage(null)} />
       )}
+      {showCategoryPicker && (
+        <CategoryPickerModal
+          selectedCategoryId={categoryId}
+          onSelect={(id, name) => {
+            setCategoryId(id);
+            setCategoryName(name);
+            setShowCategoryPicker(false);
+          }}
+          onClose={() => setShowCategoryPicker(false)}
+        />
+      )}
       <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-4 py-4 flex items-center gap-4">
         <Link href="/owner/inventory" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
           <ArrowLeft size={24} />
@@ -109,6 +140,33 @@ export default function AddInventoryForm() {
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Product name *</label>
             <input name="name" required className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</label>
+            <textarea
+              name="description"
+              rows={3}
+              placeholder="Optional notes about this product"
+              className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Category</label>
+            <button
+              type="button"
+              onClick={() => setShowCategoryPicker(true)}
+              className="w-full flex items-center justify-between bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-left hover:border-blue-500/50 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Tag size={14} className="text-slate-400" />
+                <span className={categoryName ? "text-[var(--text-primary)] font-semibold" : "text-slate-500"}>
+                  {categoryName ?? "No Category"}
+                </span>
+              </span>
+              <ChevronRight size={16} className="text-slate-400" />
+            </button>
           </div>
 
           <div>
@@ -127,54 +185,50 @@ export default function AddInventoryForm() {
             </div>
           </div>
 
-          {/* Category field temporarily disabled
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Categories *</label>
-            <select name="category" className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600">
-              <option value="phones">Phones</option>
-              <option value="charger">Charger</option>
-              <option value="headsets">Headsets</option>
-              <option value="pouch">Pouch</option>
-            </select>
-          </div>
-          */}
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Add product image</label>
-
-            <input
-              type="file"
-              name="image"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*"
-              className="hidden"
-            />
-
-            <div
-              onClick={handleCardClick}
-              className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-blue-500/50 rounded-2xl p-4 flex flex-col items-center justify-center text-slate-500 min-h-32 bg-[var(--bg-surface)] cursor-pointer transition-all relative overflow-hidden group"
-            >
-              {imagePreview ? (
-                <div className="absolute inset-0 w-full h-full bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
-                  <img src={imagePreview} alt="Upload Preview" className="w-full h-full object-cover" />
-                  <div className="absolute bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-[var(--text-primary)] rounded-xl px-3 py-1.5 text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                    <UploadCloud size={14} /> Change Picture
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <UploadCloud size={32} className="group-hover:text-blue-500 transition-colors" />
-                  <span className="text-xs mt-2 group-hover:text-slate-700 group-hover:dark:text-slate-300">Tap to upload</span>
-                </>
-              )}
-            </div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">SKU (Stock Keeping Unit)</label>
+            <input name="sku" placeholder="Optional" className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600" />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Restock alert level *</label>
-            <input name="restockLevel" type="number" className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600" />
+            <input
+              name="restockLevel"
+              type="number"
+              defaultValue={10}
+              className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600"
+            />
           </div>
+
+          <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3">
+            <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+              <Clock size={14} className="text-slate-400" />
+              Track expiry date
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={trackExpiry}
+              onClick={() => setTrackExpiry((v) => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${trackExpiry ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-700"}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${trackExpiry ? "translate-x-5" : ""}`} />
+            </button>
+          </div>
+
+          {trackExpiry && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Expiry date *</label>
+              <input
+                name="expiryDate"
+                type="date"
+                required={trackExpiry}
+                className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600"
+              />
+            </div>
+          )}
+
+          <MultiImageUploadField previews={imagePreviews} onChange={handleImageChange} />
 
           {submitError && (
             <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-4 py-3 text-sm font-semibold text-rose-500">

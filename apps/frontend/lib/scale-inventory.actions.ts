@@ -70,6 +70,25 @@ export async function addScaleItemAction(
   const restockLevelRaw = formData.get("restockLevel") as string;
   const restockLevel = restockLevelRaw ? parseFloat(restockLevelRaw) : null;
   const imageUrl = (formData.get("imageUrl") as string) || null;
+  const image2Url = (formData.get("image2Url") as string) || null;
+  const image3Url = (formData.get("image3Url") as string) || null;
+  const description = (formData.get("description") as string)?.trim() || null;
+  const sku = (formData.get("sku") as string)?.trim() || null;
+
+  const categoryIdRaw = formData.get("categoryId") as string;
+  let categoryId: number | null = categoryIdRaw ? parseInt(categoryIdRaw, 10) : null;
+  if (categoryId != null && !isNaN(categoryId)) {
+    const validCategory = await prisma.productCategory.findFirst({
+      where: { id: categoryId, ownerId: session.id },
+    });
+    if (!validCategory) categoryId = null;
+  } else {
+    categoryId = null;
+  }
+
+  const trackExpiry = formData.get("trackExpiry") === "true";
+  const expiryDateRaw = formData.get("expiryDate") as string;
+  const expiryDate = trackExpiry && expiryDateRaw ? new Date(expiryDateRaw) : null;
 
   if (!name?.trim()) return { success: false, error: "Product name is required." };
   if (isNaN(quantity) || quantity < 0) return { success: false, error: "Enter a valid starting quantity." };
@@ -86,6 +105,13 @@ export async function addScaleItemAction(
       category,
       restockLevel,
       image: imageUrl,
+      image2: image2Url,
+      image3: image3Url,
+      description,
+      sku,
+      categoryId: categoryId ?? undefined,
+      trackExpiry,
+      expiryDate,
       ownerId: session.id,
       storeId: activeStore.id,
     },
@@ -152,8 +178,37 @@ export async function updateScaleItemAction(
     restockLevel,
   };
 
+  const description = (formData.get("description") as string)?.trim();
+  updateData.description = description || null;
+  const sku = (formData.get("sku") as string)?.trim();
+  updateData.sku = sku || null;
+
+  const categoryIdRaw = formData.get("categoryId") as string;
+  if (categoryIdRaw) {
+    const parsedCategoryId = parseInt(categoryIdRaw, 10);
+    if (!isNaN(parsedCategoryId)) {
+      const validCategory = await prisma.productCategory.findFirst({
+        where: { id: parsedCategoryId, ownerId: session.id },
+      });
+      updateData.categoryId = validCategory ? parsedCategoryId : null;
+    } else {
+      updateData.categoryId = null;
+    }
+  } else {
+    updateData.categoryId = null;
+  }
+
+  const trackExpiry = formData.get("trackExpiry") === "true";
+  updateData.trackExpiry = trackExpiry;
+  const expiryDateRaw = formData.get("expiryDate") as string;
+  updateData.expiryDate = trackExpiry && expiryDateRaw ? new Date(expiryDateRaw) : null;
+
   const imageUrl = formData.get("imageUrl") as string | null;
   if (imageUrl) updateData.image = imageUrl;
+  const image2Url = formData.get("image2Url") as string | null;
+  if (image2Url) updateData.image2 = image2Url;
+  const image3Url = formData.get("image3Url") as string | null;
+  if (image3Url) updateData.image3 = image3Url;
 
   const updated = await prisma.scaleInventory.update({ where: { id }, data: updateData });
 
@@ -245,14 +300,23 @@ export async function getScaleInventoryForStaff() {
       price: true,
       costPrice: true,
       category: true,
+      categoryRef: { select: { name: true } },
+      sku: true,
+      trackExpiry: true,
+      expiryDate: true,
       restockLevel: true,
       image: true,
     },
     orderBy: { name: "asc" },
   });
 
+  const withCategoryName = data.map((item) => ({
+    ...item,
+    categoryName: item.categoryRef?.name ?? null,
+  }));
+
   return JSON.parse(
-    JSON.stringify(data, (key, value) => {
+    JSON.stringify(withCategoryName, (key, value) => {
       if (value && typeof value === "object" && value.constructor.name === "Decimal") return Number(value);
       return value;
     })

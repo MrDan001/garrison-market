@@ -500,7 +500,7 @@ export async function getOpenScaleConsignmentsForStaff() {
     },
     include: {
       store: { select: { id: true, name: true } },
-      scaleItems: { include: { scaleInventory: true } },
+      scaleItems: { include: { scaleInventory: { include: { categoryRef: { select: { name: true } } } } } },
     },
     orderBy: { createdAt: "desc" },
   });

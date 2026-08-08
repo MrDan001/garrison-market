@@ -88,12 +88,12 @@ model User {
   sentAdminMessages          AdminMessage[]      @relation("AdminMessageSender")
   targetedAdminMessages      AdminMessage[]      @relation("AdminMessageTarget")
   targetedStaffAdminMessages AdminMessage[]      @relation("AdminMessageTargetStaff")
+  adminMessageReads          AdminMessageRead[]
+  adminMessageAcks           AdminMessageAck[]
 
   // Engagement push blasts this admin has triggered (see AdminBroadcast
   // below) — populated only for admin-role users.
   sentAdminBroadcasts        AdminBroadcast[]    @relation("AdminBroadcastSender")
-  adminMessageReads          AdminMessageRead[]
-  adminMessageAcks           AdminMessageAck[]
   adminMessageReplies        AdminMessageReply[] @relation("AdminMessageReplyOwner")
 
   shopAddress   String?
@@ -197,6 +197,11 @@ model User {
   // the thing (owner or staff can both log an expense).
   expensesOwned          Expense[]         @relation("ExpenseOwner")
   expenseCategoriesOwned ExpenseCategory[] @relation("ExpenseCategoryOwner")
+
+  // --- Product categories (shared by standard + scale inventory) ---
+  // Same convention as expenseCategoriesOwned above: one list per owner,
+  // staff pick from it rather than create their own.
+  productCategoriesOwned ProductCategory[] @relation("ProductCategoryOwner")
   expensesLogged         Expense[]         @relation("ExpenseLoggedBy")
 
 
@@ -296,7 +301,7 @@ model Inventory {
   quantity     Int
   price        Decimal
   costPrice    Decimal?
-  category     String?
+  category     String?  // legacy free-text field — superseded by categoryId, kept for backfill/back-compat
   restockLevel Int?
   image        String?
   createdAt    DateTime @default(now())
@@ -304,14 +309,30 @@ model Inventory {
   ownerId      Int
   storeId      Int?
 
+  // --- New product detail fields ---
+  description  String?
+  sku          String?
+  // Reserved for a future barcode-scan feature — not read or written by any
+  // action yet. Deliberately nullable/unindexed until that feature lands.
+  barcode      String?
+  image2       String?
+  image3       String?
+  trackExpiry  Boolean  @default(false)
+  expiryDate   DateTime?
+  categoryId   Int?
+
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   store        Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  // Deleting a category shouldn't delete the products in it — same
+  // SetNull convention as Expense.category above.
+  categoryRef  ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   orderItems   OrderItem[]
   reportItems  ReportItem[]
   consignmentItems ConsignmentItem[]
 
   @@index([ownerId, storeId])
   @@index([storeId])
+  @@index([categoryId])
 }
 
 model Order {
@@ -665,6 +686,31 @@ model DebtPayment {
 // not just their own, and each row is expected to display "Logged by: X"
 // using that field.
 // ============================================================================
+// ============================================================================
+// PRODUCT CATEGORIES — shared by standard Inventory and ScaleInventory
+// ============================================================================
+// Same pattern as ExpenseCategory below: one list per owner (not per store),
+// staff/owner pick from it when adding/editing a product rather than typing
+// free text. Inventory.category / ScaleInventory.category (the old string
+// fields) are left in place untouched for now — existing rows keep working,
+// and a one-time backfill (Stage 2) will create ProductCategory rows from
+// their distinct values and link categoryId. Nothing reads categoryId yet.
+// ============================================================================
+model ProductCategory {
+  id        Int      @id @default(autoincrement())
+  ownerId   Int
+  name      String
+  createdAt DateTime @default(now())
+
+  owner            User             @relation("ProductCategoryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  inventoryItems   Inventory[]
+  scaleInventoryItems ScaleInventory[]
+
+  // One "Beverages" per owner, not one globally.
+  @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
 model ExpenseCategory {
   id        Int      @id @default(autoincrement())
   ownerId   Int

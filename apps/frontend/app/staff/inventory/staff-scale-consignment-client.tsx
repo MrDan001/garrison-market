@@ -9,6 +9,7 @@ import {
 import { sellFromScaleConsignmentAction } from "@/lib/consignment.actions";
 import { convertToBaseUnit, unitsForBase, quantityFromAmount } from "@/lib/scale-units";
 import CustomerFields from "@/components/CustomerFields";
+import { getExpiryStatus } from "@/lib/expiry-status";
 
 interface ConsignmentLine {
   consignmentItemId: number; // ScaleConsignmentItem id
@@ -21,6 +22,10 @@ interface ConsignmentLine {
   remaining: number; // quantityOut - quantitySold - quantityWasted, what's actually sellable
   price: number; // per base unit
   isShared: boolean; // true when this came from a store-wide shared consignment (staffId: null)
+  categoryName?: string | null;
+  sku?: string | null;
+  trackExpiry?: boolean;
+  expiryDate?: string | null;
 }
 
 interface CartLine extends ConsignmentLine {
@@ -53,7 +58,7 @@ export default function StaffScaleConsignmentClient({
   discountEnabled: boolean;
 }) {
   const [view, setView] = useState<"sell" | "history">("sell");
-  const [tab, setTab] = useState<"all" | "out-of-stock">("all");
+  const [tab, setTab] = useState<"all" | "out-of-stock" | "expiring">("all");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCart, setShowCart] = useState(false);
@@ -93,13 +98,21 @@ export default function StaffScaleConsignmentClient({
           remaining: Number(i.quantityOut) - Number(i.quantitySold) - Number(i.quantityWasted ?? 0),
           price: Number(i.priceAtTime),
           isShared: c.staffId === null,
+          categoryName: i.scaleInventory?.categoryRef?.name ?? i.scaleInventory?.category ?? null,
+          sku: i.scaleInventory?.sku ?? null,
+          trackExpiry: i.scaleInventory?.trackExpiry ?? false,
+          expiryDate: i.scaleInventory?.expiryDate ?? null,
         }))
       ),
     [openConsignments]
   );
 
   const outOfStockItems = useMemo(() => allLines.filter((i) => i.remaining <= 0), [allLines]);
-  const tabFiltered = tab === "out-of-stock" ? outOfStockItems : allLines;
+  const expiringLines = useMemo(
+    () => allLines.filter((i) => getExpiryStatus(i.trackExpiry, i.expiryDate) !== null),
+    [allLines]
+  );
+  const tabFiltered = tab === "out-of-stock" ? outOfStockItems : tab === "expiring" ? expiringLines : allLines;
   const filteredItems = useMemo(
     () => tabFiltered.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase())),
     [tabFiltered, searchQuery]
@@ -108,9 +121,10 @@ export default function StaffScaleConsignmentClient({
   const total = cart.reduce((sum, line) => sum + line.linePrice * line.baseQty, 0);
   const cartCount = cart.length;
 
-  const tabs: { key: "all" | "out-of-stock"; label: string; count: number }[] = [
+  const tabs: { key: "all" | "out-of-stock" | "expiring"; label: string; count: number; icon?: React.ReactNode }[] = [
     { key: "all", label: "All", count: allLines.length },
     { key: "out-of-stock", label: "Out of Stock", count: outOfStockItems.length },
+    { key: "expiring", label: "Expiring Soon", count: expiringLines.length, icon: <Clock size={10} className="text-orange-500" /> },
   ];
 
   const openDrawer = (item: ConsignmentLine) => {
@@ -334,6 +348,7 @@ export default function StaffScaleConsignmentClient({
                       : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-800 hover:dark:text-slate-200 border border-slate-200/85 dark:border-slate-800/85"
                   }`}
                 >
+                  <span>{t.icon}</span>
                   <span>{t.label}</span>
                   <span className="opacity-60 text-[10px]">({t.count})</span>
                 </button>
@@ -359,6 +374,8 @@ export default function StaffScaleConsignmentClient({
                     ? `No items match "${searchQuery}"`
                     : allLines.length === 0
                     ? "Nothing has been signed out to you yet today."
+                    : tab === "expiring"
+                    ? "No items expiring soon."
                     : `No items in ${tab.replace("-", " ")}`}
                 </p>
               </div>
@@ -368,6 +385,7 @@ export default function StaffScaleConsignmentClient({
                   const cartLine = cart.find((c) => c.consignmentItemId === item.consignmentItemId);
                   const isOutOfStock = item.remaining <= 0;
                   const hasDiscount = !!cartLine?.discountValue;
+                  const expiryStatus = getExpiryStatus(item.trackExpiry, item.expiryDate);
 
                   return (
                     <div
@@ -395,11 +413,25 @@ export default function StaffScaleConsignmentClient({
                             <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded-full">OUT OF STOCK</span>
                           </div>
                         )}
-                        {hasDiscount && (
-                          <span className="absolute top-1.5 left-1.5 text-[9px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded-full z-10">
-                            DISCOUNT
-                          </span>
-                        )}
+                        <div className="absolute top-1.5 left-1.5 z-10 flex flex-col gap-1 items-start">
+                          {hasDiscount && (
+                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded-full">
+                              DISCOUNT
+                            </span>
+                          )}
+                          {expiryStatus && (
+                            <span
+                              className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
+                                expiryStatus === "expired"
+                                  ? "text-rose-400 bg-rose-950/80"
+                                  : "text-orange-400 bg-orange-950/80"
+                              }`}
+                            >
+                              <Clock size={9} />
+                              {expiryStatus === "expired" ? "Expired" : "Expiring Soon"}
+                            </span>
+                          )}
+                        </div>
                         {item.isShared && (
                           <span className="absolute top-1.5 right-1.5 flex items-center gap-0.5 text-[9px] font-bold text-blue-300 bg-blue-950/80 px-1.5 py-0.5 rounded-full z-10">
                             <Users size={9} /> SHARED
@@ -471,7 +503,21 @@ export default function StaffScaleConsignmentClient({
                   </div>
                   <div className="min-w-0">
                     <h2 className="text-lg font-bold text-[var(--text-primary)] leading-tight truncate">{drawerItem.name}</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Sold by {drawerItem.baseUnit}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Sold by {drawerItem.baseUnit}
+                      {drawerItem.categoryName ? ` · ${drawerItem.categoryName}` : ""}
+                    </p>
+                    {(() => {
+                      const status = getExpiryStatus(drawerItem.trackExpiry, drawerItem.expiryDate);
+                      if (!status) return null;
+                      return (
+                        <p className={`flex items-center gap-1 text-xs mt-1 font-semibold ${status === "expired" ? "text-rose-400" : "text-orange-400"}`}>
+                          <Clock size={11} />
+                          {status === "expired" ? "Expired" : "Expiring soon"}
+                          {drawerItem.expiryDate && ` · ${new Date(drawerItem.expiryDate).toLocaleDateString()}`}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
                 <button onClick={closeDrawer} className="p-2 text-slate-500 hover:text-[var(--text-primary)] transition-colors shrink-0">

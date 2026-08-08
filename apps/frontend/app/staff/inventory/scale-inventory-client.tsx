@@ -4,13 +4,14 @@
 import { useState, useMemo } from "react";
 import {
   ArrowLeft, Search, ShoppingCart, X, Package, Tag, ChevronRight,
-  AlertCircle, Trash2, Scale as ScaleIcon,
+  AlertCircle, Trash2, Scale as ScaleIcon, Clock,
 } from "lucide-react";
 import Link from "next/link";
 import { processScaleSaleAction } from "@/lib/scale-inventory.actions";
 import { convertToBaseUnit, unitsForBase, quantityFromAmount } from "@/lib/scale-units";
 import CustomerFields from "@/components/CustomerFields";
 import PartPaymentFields, { validatePartPayment } from "@/components/PartPaymentFields";
+import { getExpiryStatus } from "@/lib/expiry-status";
 
 interface ScaleItem {
   id: number;
@@ -19,7 +20,11 @@ interface ScaleItem {
   unit: string; // "kg" | "L"
   price: number; // per base unit
   costPrice?: number | null;
-  category?: string | null;
+  category?: string | null; // legacy string — used only if categoryName isn't set
+  categoryName?: string | null;
+  sku?: string | null;
+  trackExpiry?: boolean;
+  expiryDate?: string | null;
   image?: string | null;
   restockLevel?: number | null;
 }
@@ -39,7 +44,7 @@ interface ScaleCartLine {
   discountReason?: string;
 }
 
-type Tab = "all" | "low-stock" | "out-of-stock";
+type Tab = "all" | "low-stock" | "out-of-stock" | "expiring";
 
 const DISCOUNT_REASONS = [
   "Loyalty customer",
@@ -87,6 +92,10 @@ export default function ScaleInventoryClient({
     () => initialItems.filter((i) => i.quantity > 0 && i.restockLevel != null && i.quantity <= i.restockLevel),
     [initialItems]
   );
+  const expiringItems = useMemo(
+    () => initialItems.filter((i) => getExpiryStatus(i.trackExpiry, i.expiryDate) !== null),
+    [initialItems]
+  );
 
   const tabFiltered = useMemo(() => {
     switch (tab) {
@@ -94,11 +103,13 @@ export default function ScaleInventoryClient({
         return lowStockItems;
       case "out-of-stock":
         return outOfStockItems;
+      case "expiring":
+        return expiringItems;
       case "all":
       default:
         return initialItems;
     }
-  }, [tab, initialItems, lowStockItems, outOfStockItems]);
+  }, [tab, initialItems, lowStockItems, outOfStockItems, expiringItems]);
 
   const filteredItems = useMemo(
     () => tabFiltered.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase())),
@@ -108,10 +119,11 @@ export default function ScaleInventoryClient({
   const total = cart.reduce((sum, line) => sum + line.price * line.baseQty, 0);
   const cartCount = cart.length;
 
-  const tabs: { key: Tab; label: string; count?: number }[] = [
+  const tabs: { key: Tab; label: string; count?: number; icon?: React.ReactNode }[] = [
     { key: "all", label: "All", count: initialItems.length },
     { key: "low-stock", label: "Low Stock", count: lowStockItems.length },
     { key: "out-of-stock", label: "Out of Stock", count: outOfStockItems.length },
+    { key: "expiring", label: "Expiring Soon", count: expiringItems.length, icon: <Clock size={10} className="text-orange-500" /> },
   ];
 
   // --- Drawer ---
@@ -313,6 +325,7 @@ export default function ScaleInventoryClient({
                   : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-800 hover:dark:text-slate-200 border border-slate-200/85 dark:border-slate-800/85"
               }`}
             >
+              {t.icon}
               <span>{t.label}</span>
               {t.count !== undefined && <span className="opacity-60 text-[10px]">({t.count})</span>}
             </button>
@@ -334,7 +347,7 @@ export default function ScaleInventoryClient({
           <div className="py-16 text-center">
             <ScaleIcon size={36} className="mx-auto mb-3 text-slate-300 dark:text-slate-700" />
             <p className="text-slate-500 text-sm">
-              {searchQuery ? `No items match "${searchQuery}"` : `No items in ${tab.replace("-", " ")}`}
+              {searchQuery ? `No items match "${searchQuery}"` : tab === "expiring" ? "No items expiring soon." : `No items in ${tab.replace("-", " ")}`}
             </p>
           </div>
         ) : (
@@ -343,6 +356,7 @@ export default function ScaleInventoryClient({
               const cartLine = cart.find((c) => c.id === item.id);
               const isOutOfStock = item.quantity <= 0;
               const isLowStock = !isOutOfStock && item.restockLevel != null && item.quantity <= item.restockLevel;
+              const expiryStatus = getExpiryStatus(item.trackExpiry, item.expiryDate);
               const hasDiscount = !!cartLine?.discountValue;
 
               return (
@@ -376,6 +390,21 @@ export default function ScaleInventoryClient({
                       <div className="absolute top-2 left-2 z-10">
                         <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
                           Low Stock
+                        </span>
+                      </div>
+                    )}
+
+                    {expiryStatus && (
+                      <div className={`absolute ${isLowStock ? "top-8" : "top-2"} left-2 z-10`}>
+                        <span
+                          className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                            expiryStatus === "expired"
+                              ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                              : "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                          }`}
+                        >
+                          <Clock size={9} />
+                          {expiryStatus === "expired" ? "Expired" : "Expiring Soon"}
                         </span>
                       </div>
                     )}
@@ -448,6 +477,17 @@ export default function ScaleInventoryClient({
                     <p className="text-xs text-slate-500 mt-0.5">
                       ₦{drawerItem.price.toLocaleString()}/{drawerItem.unit} · {drawerItem.quantity}{drawerItem.unit} in stock
                     </p>
+                    {(() => {
+                      const status = getExpiryStatus(drawerItem.trackExpiry, drawerItem.expiryDate);
+                      if (!status) return null;
+                      return (
+                        <p className={`flex items-center gap-1 text-xs mt-1 font-semibold ${status === "expired" ? "text-rose-400" : "text-orange-400"}`}>
+                          <Clock size={11} />
+                          {status === "expired" ? "Expired" : "Expiring soon"}
+                          {drawerItem.expiryDate && ` · ${new Date(drawerItem.expiryDate).toLocaleDateString()}`}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
                 <button onClick={closeDrawer} className="p-2 text-slate-500 hover:text-[var(--text-primary)] transition-colors shrink-0">

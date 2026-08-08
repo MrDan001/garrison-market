@@ -3,10 +3,12 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, UploadCloud, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Tag, ChevronRight, Clock } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
 import { updateItemAction, deleteInventoryAction } from "@/lib/business.actions";
+import CategoryPickerModal from "@/components/CategoryPickerModal";
+import MultiImageUploadField from "@/components/MultiImageUploadField";
 
 interface Props {
   itemId: string;
@@ -17,6 +19,14 @@ interface Props {
   initialCategory: string; // Added this property[cite: 3, 4]
   initialRestockLevel: number;
   initialImage: string | null;
+  initialImage2?: string | null;
+  initialImage3?: string | null;
+  initialDescription?: string | null;
+  initialSku?: string | null;
+  initialCategoryId?: number | null;
+  initialCategoryName?: string | null;
+  initialTrackExpiry?: boolean;
+  initialExpiryDate?: string | null; // "YYYY-MM-DD", for the date input
 }
 
 export default function InventoryEditForm({
@@ -28,36 +38,54 @@ export default function InventoryEditForm({
   initialCategory, // Added this prop[cite: 3, 4]
   initialRestockLevel,
   initialImage,
+  initialImage2 = null,
+  initialImage3 = null,
+  initialDescription = null,
+  initialSku = null,
+  initialCategoryId = null,
+  initialCategoryName = null,
+  initialTrackExpiry = false,
+  initialExpiryDate = null,
 }: Props) {
   const [name, setName] = useState(initialName);
   const [quantity, setQuantity] = useState<number>(initialQuantity);
   const [costPrice, setCostPrice] = useState<number>(initialCostPrice);
   const [price, setPrice] = useState<number>(initialPrice);
   const [restockLevel, setRestockLevel] = useState<number>(initialRestockLevel);
-  const [imagePreview, setImagePreview] = useState<string | null>(initialImage);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Slot state: existing URL until the owner picks a replacement file.
+  const [imageFiles, setImageFiles] = useState<(File | null)[]>([null, null, null]);
+  const [imagePreviews, setImagePreviews] = useState<(string | null)[]>([initialImage, initialImage2, initialImage3]);
+
+  const [categoryId, setCategoryId] = useState<number | null>(initialCategoryId);
+  const [categoryName, setCategoryName] = useState<string | null>(initialCategoryName);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+
+  const [trackExpiry, setTrackExpiry] = useState(initialTrackExpiry);
+
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState("");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
 
-  const handleDivClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  const handleImageChange = (index: number, file: File | null) => {
+    setImageFiles((prev) => {
+      const next = [...prev];
+      next[index] = file;
+      return next;
+    });
+    if (!file) return; // keep showing the existing URL if the picker was cancelled
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreviews((prev) => {
+        const next = [...prev];
+        next[index] = reader.result as string;
+        return next;
+      });
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -68,17 +96,27 @@ export default function InventoryEditForm({
     const formData = new FormData(formRef.current);
 
     try {
-      if (selectedFile) {
-        setStatus("Optimizing image...");
-        const compressed = await compressImage(selectedFile, { maxDimension: 1000, quality: 0.82 });
-        setStatus("Uploading image...");
+      // Only upload — and only send a *Url field — for slots where the
+      // owner actually picked a new file. Slots left alone keep whatever
+      // is already stored server-side (updateItemAction only overwrites an
+      // image field when its *Url key is present).
+      const fieldNames = ["imageUrl", "image2Url", "image3Url"];
+      for (let i = 0; i < 3; i++) {
+        const file = imageFiles[i];
+        if (!file) continue;
+        setStatus(`Optimizing image ${i + 1}...`);
+        const compressed = await compressImage(file, { maxDimension: 1000, quality: 0.82 });
+        setStatus(`Uploading image ${i + 1}...`);
         const blob = await upload(compressed.name, compressed, {
           access: "public",
           handleUploadUrl: "/api/blob/upload",
         });
-        formData.set("imageUrl", blob.url);
+        formData.set(fieldNames[i], blob.url);
       }
-      formData.delete("image");
+
+      formData.set("categoryId", categoryId != null ? String(categoryId) : "");
+      formData.set("trackExpiry", trackExpiry ? "true" : "false");
+      if (!trackExpiry) formData.delete("expiryDate");
 
       setStatus("Saving changes...");
       await updateItemAction(formData);
@@ -112,6 +150,17 @@ export default function InventoryEditForm({
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200">
+      {showCategoryPicker && (
+        <CategoryPickerModal
+          selectedCategoryId={categoryId}
+          onSelect={(id, name) => {
+            setCategoryId(id);
+            setCategoryName(name);
+            setShowCategoryPicker(false);
+          }}
+          onClose={() => setShowCategoryPicker(false)}
+        />
+      )}
       <div className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 py-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link href="/owner/inventory" className="text-slate-600 dark:text-slate-400 hover:text-[var(--text-primary)]">
@@ -145,6 +194,36 @@ export default function InventoryEditForm({
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              Description
+            </label>
+            <textarea
+              name="description"
+              rows={3}
+              defaultValue={initialDescription ?? ""}
+              placeholder="Optional notes about this product"
+              className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Category</label>
+            <button
+              type="button"
+              onClick={() => setShowCategoryPicker(true)}
+              className="w-full flex items-center justify-between bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-left hover:border-blue-500/50 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Tag size={14} className="text-slate-400" />
+                <span className={categoryName ? "text-[var(--text-primary)] font-semibold" : "text-slate-500"}>
+                  {categoryName ?? "No Category"}
+                </span>
+              </span>
+              <ChevronRight size={16} className="text-slate-400" />
+            </button>
           </div>
 
           <div>
@@ -194,36 +273,14 @@ export default function InventoryEditForm({
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Update product image
+              SKU (Stock Keeping Unit)
             </label>
             <input
-              type="file"
-              name="image"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*"
-              className="hidden"
+              name="sku"
+              defaultValue={initialSku ?? ""}
+              placeholder="Optional"
+              className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
             />
-
-            <div
-              onClick={handleDivClick}
-              className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-blue-600/50 rounded-2xl p-4 flex flex-col items-center justify-center text-slate-500 min-h-36 bg-[var(--bg-surface)] cursor-pointer transition-all overflow-hidden group relative"
-            >
-              {imagePreview ? (
-                <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-black/40 group-hover:bg-black/60 transition-colors">
-                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                  <div className="absolute flex flex-col items-center text-[var(--text-primary)] bg-slate-50/80 dark:bg-slate-950/80 px-3 py-1.5 rounded-xl text-xs gap-1 border border-slate-200 dark:border-slate-800 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <UploadCloud size={14} className="text-blue-400" />
-                    <span>Change Image</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <UploadCloud size={32} className="group-hover:text-blue-400 transition-colors" />
-                  <span className="text-xs mt-2 group-hover:text-slate-700 group-hover:dark:text-slate-300">Tap to browse or change product picture</span>
-                </>
-              )}
-            </div>
           </div>
 
           <div>
@@ -238,6 +295,37 @@ export default function InventoryEditForm({
               className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
             />
           </div>
+
+          <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3">
+            <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+              <Clock size={14} className="text-slate-400" />
+              Track expiry date
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={trackExpiry}
+              onClick={() => setTrackExpiry((v) => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${trackExpiry ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-700"}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${trackExpiry ? "translate-x-5" : ""}`} />
+            </button>
+          </div>
+
+          {trackExpiry && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Expiry date *</label>
+              <input
+                name="expiryDate"
+                type="date"
+                required={trackExpiry}
+                defaultValue={initialExpiryDate ?? ""}
+                className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none"
+              />
+            </div>
+          )}
+
+          <MultiImageUploadField previews={imagePreviews} onChange={handleImageChange} />
 
           <button
             type="submit"

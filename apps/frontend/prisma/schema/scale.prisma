@@ -24,7 +24,7 @@ model ScaleInventory {
   unit         String   // "kg" | "L" — fixed at creation, never changes
   price        Decimal  // price per 1 unit (per kg or per L)
   costPrice    Decimal?
-  category     String?
+  category     String?  // legacy free-text field — superseded by categoryId, kept for backfill/back-compat
   restockLevel Decimal?
   image        String?
   createdAt    DateTime @default(now())
@@ -32,8 +32,21 @@ model ScaleInventory {
   ownerId      Int
   storeId      Int?
 
+  // --- New product detail fields — mirrors Inventory above ---
+  description  String?
+  sku          String?
+  // Reserved for a future barcode-scan feature — not read or written by any
+  // action yet.
+  barcode      String?
+  image2       String?
+  image3       String?
+  trackExpiry  Boolean  @default(false)
+  expiryDate   DateTime?
+  categoryId   Int?
+
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   store        Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  categoryRef  ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   orderItems       ScaleOrderItem[]
   reportItems      ScaleReportItem[]
@@ -42,6 +55,7 @@ model ScaleInventory {
 
   @@index([ownerId, storeId])
   @@index([storeId])
+  @@index([categoryId])
 }
 
 model ScaleOrderItem {

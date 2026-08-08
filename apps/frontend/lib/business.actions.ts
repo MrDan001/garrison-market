@@ -373,6 +373,10 @@ export async function getInventoryForStaff() {
       price: true,
       costPrice: true,
       category: true,
+      categoryRef: { select: { name: true } },
+      sku: true,
+      trackExpiry: true,
+      expiryDate: true,
       restockLevel: true,
       image: true,
       ownerId: true
@@ -380,7 +384,12 @@ export async function getInventoryForStaff() {
     orderBy: { name: "asc" }
   });
 
-  return serializeData(data);
+  const withCategoryName = data.map((item) => ({
+    ...item,
+    categoryName: item.categoryRef?.name ?? null,
+  }));
+
+  return serializeData(withCategoryName);
 }
 
 export async function addInventoryAction(formData: FormData) {
@@ -430,6 +439,28 @@ export async function addItemAction(
   const restockLevel = parseInt(formData.get("restockLevel") as string, 10);
 
   const imageUrl = (formData.get("imageUrl") as string) || null;
+  const image2Url = (formData.get("image2Url") as string) || null;
+  const image3Url = (formData.get("image3Url") as string) || null;
+  const description = (formData.get("description") as string)?.trim() || null;
+  const sku = (formData.get("sku") as string)?.trim() || null;
+
+  const categoryIdRaw = formData.get("categoryId") as string;
+  let categoryId: number | null = categoryIdRaw ? parseInt(categoryIdRaw, 10) : null;
+  if (categoryId != null && !isNaN(categoryId)) {
+    // Only trust a categoryId that actually belongs to this owner — same
+    // defensive check the expense category flow does at write time.
+    const validCategory = await prisma.productCategory.findFirst({
+      where: { id: categoryId, ownerId: session.id },
+    });
+    if (!validCategory) categoryId = null;
+  } else {
+    categoryId = null;
+  }
+
+  const trackExpiry = formData.get("trackExpiry") === "true";
+  const expiryDateRaw = formData.get("expiryDate") as string;
+  const expiryDate = trackExpiry && expiryDateRaw ? new Date(expiryDateRaw) : null;
+
   const storeId = await getActiveStoreId();
 
   const newItem = await prisma.inventory.create({
@@ -441,6 +472,13 @@ export async function addItemAction(
       category,
       restockLevel,
       image: imageUrl,
+      image2: image2Url,
+      image3: image3Url,
+      description,
+      sku,
+      categoryId: categoryId ?? undefined,
+      trackExpiry,
+      expiryDate,
       ownerId: session.id,
       storeId: storeId ?? undefined,
     },
@@ -495,9 +533,42 @@ export async function updateItemAction(formData: FormData) {
 
   const updateData: any = { name, quantity, costPrice, price, category, restockLevel };
 
+  const description = (formData.get("description") as string)?.trim();
+  updateData.description = description || null;
+  const sku = (formData.get("sku") as string)?.trim();
+  updateData.sku = sku || null;
+
+  const categoryIdRaw = formData.get("categoryId") as string;
+  if (categoryIdRaw) {
+    const parsedCategoryId = parseInt(categoryIdRaw, 10);
+    if (!isNaN(parsedCategoryId)) {
+      const validCategory = await prisma.productCategory.findFirst({
+        where: { id: parsedCategoryId, ownerId: session.id },
+      });
+      updateData.categoryId = validCategory ? parsedCategoryId : null;
+    } else {
+      updateData.categoryId = null;
+    }
+  } else {
+    updateData.categoryId = null;
+  }
+
+  const trackExpiry = formData.get("trackExpiry") === "true";
+  updateData.trackExpiry = trackExpiry;
+  const expiryDateRaw = formData.get("expiryDate") as string;
+  updateData.expiryDate = trackExpiry && expiryDateRaw ? new Date(expiryDateRaw) : null;
+
   const imageUrl = formData.get("imageUrl") as string | null;
   if (imageUrl) {
     updateData.image = imageUrl;
+  }
+  const image2Url = formData.get("image2Url") as string | null;
+  if (image2Url) {
+    updateData.image2 = image2Url;
+  }
+  const image3Url = formData.get("image3Url") as string | null;
+  if (image3Url) {
+    updateData.image3 = image3Url;
   }
 
   // Snapshot stock before the edit so we can tell whether this update

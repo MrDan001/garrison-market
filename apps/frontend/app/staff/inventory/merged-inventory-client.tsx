@@ -11,13 +11,14 @@
 import { useState, useMemo } from "react";
 import {
   ArrowLeft, Search, ShoppingCart, Plus, Minus, X, Package, Tag,
-  AlertCircle, Trash2, List, Scale as ScaleIcon,
+  AlertCircle, Trash2, List, Scale as ScaleIcon, Clock,
 } from "lucide-react";
 import Link from "next/link";
 import { processMergedSaleAction } from "@/lib/consignment.actions";
 import { convertToBaseUnit, unitsForBase, quantityFromAmount } from "@/lib/scale-units";
 import CustomerFields from "@/components/CustomerFields";
 import PartPaymentFields, { validatePartPayment } from "@/components/PartPaymentFields";
+import { getExpiryStatus } from "@/lib/expiry-status";
 
 interface ListItem {
   id: number;
@@ -25,6 +26,10 @@ interface ListItem {
   quantity: number;
   price: number;
   category?: string;
+  categoryName?: string | null;
+  sku?: string | null;
+  trackExpiry?: boolean;
+  expiryDate?: string | null;
   image?: string;
   restockLevel?: number;
 }
@@ -36,6 +41,10 @@ interface ScaleLine {
   baseUnit: string;
   remaining: number;
   price: number; // per base unit
+  categoryName?: string | null;
+  sku?: string | null;
+  trackExpiry?: boolean;
+  expiryDate?: string | null;
 }
 
 interface ListCartLine {
@@ -125,6 +134,10 @@ export default function MergedInventoryClient({
           baseUnit: i.unit,
           remaining: Number(i.quantityOut) - Number(i.quantitySold) - Number(i.quantityWasted ?? 0),
           price: Number(i.priceAtTime),
+          categoryName: i.scaleInventory?.categoryRef?.name ?? i.scaleInventory?.category ?? null,
+          sku: i.scaleInventory?.sku ?? null,
+          trackExpiry: i.scaleInventory?.trackExpiry ?? false,
+          expiryDate: i.scaleInventory?.expiryDate ?? null,
         }))
       ),
     [scaleOpenConsignments]
@@ -694,6 +707,7 @@ function ListCard({
   onRemove: () => void;
 }) {
   const isOutOfStock = item.quantity <= 0;
+  const expiryStatus = getExpiryStatus(item.trackExpiry, item.expiryDate);
   return (
     <div
       className={`relative bg-slate-900/60 border rounded-2xl overflow-hidden flex flex-col transition-all ${
@@ -711,6 +725,20 @@ function ListCard({
         {isOutOfStock && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
             <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded-full">OUT OF STOCK</span>
+          </div>
+        )}
+        {expiryStatus && (
+          <div className="absolute top-2 left-2 z-10">
+            <span
+              className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                expiryStatus === "expired"
+                  ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                  : "bg-orange-500/20 text-orange-400 border-orange-500/30"
+              }`}
+            >
+              <Clock size={9} />
+              {expiryStatus === "expired" ? "Expired" : "Expiring Soon"}
+            </span>
           </div>
         )}
         {!isOutOfStock && qty === 0 && (
@@ -752,6 +780,7 @@ function ScaleCard({
   onTap: () => void;
 }) {
   const isOutOfStock = item.remaining <= 0;
+  const expiryStatus = getExpiryStatus(item.trackExpiry, item.expiryDate);
   return (
     <button
       onClick={onTap}
@@ -771,6 +800,20 @@ function ScaleCard({
         {isOutOfStock && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
             <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded-full">NONE LEFT TODAY</span>
+          </div>
+        )}
+        {expiryStatus && (
+          <div className="absolute top-2 left-2 z-10">
+            <span
+              className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                expiryStatus === "expired"
+                  ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                  : "bg-orange-500/20 text-orange-400 border-orange-500/30"
+              }`}
+            >
+              <Clock size={9} />
+              {expiryStatus === "expired" ? "Expired" : "Expiring Soon"}
+            </span>
           </div>
         )}
       </div>

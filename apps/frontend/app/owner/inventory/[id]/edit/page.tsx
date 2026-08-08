@@ -35,7 +35,10 @@ export default async function EditItemPage({ params, searchParams }: EditPagePro
   }
 
   if (useScaleForm) {
-    const item = await prisma.scaleInventory.findUnique({ where: { id: itemId } });
+    const item = await prisma.scaleInventory.findUnique({
+      where: { id: itemId },
+      include: { categoryRef: { select: { name: true } } },
+    });
 
     if (!item || item.ownerId !== session.id) {
       redirect("/owner/inventory");
@@ -52,11 +55,22 @@ export default async function EditItemPage({ params, searchParams }: EditPagePro
         initialCategory={item.category || ""}
         initialRestockLevel={item.restockLevel ? Number(item.restockLevel) : 0}
         initialImage={item.image}
+        initialImage2={item.image2}
+        initialImage3={item.image3}
+        initialDescription={item.description}
+        initialSku={item.sku}
+        initialCategoryId={item.categoryId}
+        initialCategoryName={item.categoryRef?.name ?? null}
+        initialTrackExpiry={item.trackExpiry}
+        initialExpiryDate={item.expiryDate ? item.expiryDate.toISOString().slice(0, 10) : null}
       />
     );
   }
 
-  const item = await prisma.inventory.findUnique({ where: { id: itemId } });
+  const item = await prisma.inventory.findUnique({
+    where: { id: itemId },
+    include: { categoryRef: { select: { name: true } } },
+  });
 
   if (!item || item.ownerId !== session.id) {
     redirect("/owner/inventory");
@@ -72,6 +86,14 @@ export default async function EditItemPage({ params, searchParams }: EditPagePro
       initialCategory={item.category || "phones"}
       initialRestockLevel={item.restockLevel || 0}
       initialImage={item.image}
+      initialImage2={item.image2}
+      initialImage3={item.image3}
+      initialDescription={item.description}
+      initialSku={item.sku}
+      initialCategoryId={item.categoryId}
+      initialCategoryName={item.categoryRef?.name ?? null}
+      initialTrackExpiry={item.trackExpiry}
+      initialExpiryDate={item.expiryDate ? item.expiryDate.toISOString().slice(0, 10) : null}
     />
   );
 }
