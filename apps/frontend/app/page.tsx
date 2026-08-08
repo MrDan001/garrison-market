@@ -675,13 +675,75 @@ export default function HomePage() {
             <h4 className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)]/40 mb-4" style={{ fontFamily: "var(--font-mono)" }}>
               Contact
             </h4>
-            <p className="text-[var(--text-primary)]/60 text-xs leading-relaxed font-semibold">Replace this with your real support email / WhatsApp line.</p>
+            <ul className="space-y-3 text-[var(--text-primary)]/60 font-semibold text-xs">
+              <li>
+                <a
+                  href="https://wa.me/2347034336627"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-[var(--text-primary)] transition"
+                >
+                  WhatsApp: +234 703 433 6627
+                </a>
+              </li>
+              <li>
+                <a href="tel:+2347034336627" className="hover:text-[var(--text-primary)] transition">
+                  Call: +234 703 433 6627
+                </a>
+              </li>
+              <li className="text-[var(--text-primary)]/40 not-italic leading-relaxed">
+                No. 24 School Road, Igwuruta-Ali,<br />
+                Igwuruta, Port Harcourt,<br />
+                Rivers State, Nigeria
+              </li>
+            </ul>
           </div>
         </div>
         <div className="max-w-6xl mx-auto pt-8 border-t border-[var(--border-subtle)]/5 text-center text-[var(--text-primary)]/30 text-xs font-semibold uppercase tracking-wider">
           &copy; {new Date().getFullYear()} Garrison Market. Built for the shop floor.
         </div>
       </footer>
+
+      {/* JSON-LD structured data for SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "Garrison Market",
+            applicationCategory: "BusinessApplication",
+            operatingSystem: "Web, iOS, Android",
+            url: "https://gmstock.co",
+            description:
+              "Garrison Market is an all-in-one inventory and sales management app for shop and market owners in Nigeria. Track stock by piece or by weight, manage staff and multiple stores, process sales, generate daily reports, and handle consignments and wastage — all from your phone.",
+            offers: [
+              { "@type": "Offer", name: "Basic Plan", price: "6000", priceCurrency: "NGN" },
+              { "@type": "Offer", name: "Premium Plan", price: "12000", priceCurrency: "NGN" },
+            ],
+            provider: {
+              "@type": "Organization",
+              name: "Garrison Market",
+              url: "https://gmstock.co",
+              address: {
+                "@type": "PostalAddress",
+                streetAddress: "No. 24 School Road, Igwuruta-Ali, Igwuruta",
+                addressLocality: "Port Harcourt",
+                addressRegion: "Rivers State",
+                addressCountry: "NG",
+              },
+              contactPoint: {
+                "@type": "ContactPoint",
+                telephone: "+234-703-433-6627",
+                contactType: "customer support",
+                areaServed: "NG",
+                availableLanguage: ["en"],
+              },
+              sameAs: ["https://wa.me/2347034336627"],
+            },
+          }),
+        }}
+      />
 
       {/* Dynamic Scroll-driven physics style adjustments */}
       <style>{`

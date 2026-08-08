@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { sendPushToUsers } from "@/lib/push";
 
-export type BroadcastTargetType = "owners" | "staff" | "everyone" | "owner_tenant" | "store";
+export type BroadcastTargetType = "owners" | "staff" | "everyone" | "owner_tenant" | "owner_only" | "store";
 
 export type SendBroadcastParams = {
   title: string;
@@ -45,7 +45,10 @@ export async function sendBroadcastNotification(params: SendBroadcastParams) {
   if (link && !isInternalPath(link)) {
     throw new Error("Link must be an internal app path, e.g. /owner/promotions");
   }
-  if ((params.targetType === "owner_tenant" || params.targetType === "store") && !params.targetId) {
+  if (
+    (params.targetType === "owner_tenant" || params.targetType === "owner_only" || params.targetType === "store") &&
+    !params.targetId
+  ) {
     throw new Error("targetId is required for this target type");
   }
 
@@ -124,6 +127,11 @@ async function resolveTargetUserIds(targetType: BroadcastTargetType, targetId: n
       });
       return users.map((u) => u.id);
     }
+    case "owner_only": {
+      // Just the owner account itself — no staff. Distinct from
+      // owner_tenant above, which also pulls in everyone under them.
+      return [targetId!];
+    }
     case "store": {
       const users = await prisma.user.findMany({
         where: { staffStoreId: targetId! },
@@ -159,7 +167,8 @@ const TARGET_TYPE_LABELS: Record<BroadcastTargetType, string> = {
   everyone: "Everyone",
   owners: "All Owners",
   staff: "All Staff",
-  owner_tenant: "Owner",
+  owner_tenant: "Owner + Staff",
+  owner_only: "Owner",
   store: "Store",
 };
 
@@ -169,7 +178,9 @@ const TARGET_TYPE_LABELS: Record<BroadcastTargetType, string> = {
 // of history) rather than querying per-row, since this runs on every
 // page load of the history list.
 async function attachTargetLabels(broadcasts: any[]) {
-  const ownerIds = broadcasts.filter((b) => b.targetType === "owner_tenant" && b.targetId).map((b) => b.targetId);
+  const ownerIds = broadcasts
+    .filter((b) => (b.targetType === "owner_tenant" || b.targetType === "owner_only") && b.targetId)
+    .map((b) => b.targetId);
   const storeIds = broadcasts.filter((b) => b.targetType === "store" && b.targetId).map((b) => b.targetId);
 
   const [owners, stores] = await Promise.all([
@@ -195,6 +206,8 @@ async function attachTargetLabels(broadcasts: any[]) {
   return broadcasts.map((b) => {
     let targetLabel = TARGET_TYPE_LABELS[b.targetType as BroadcastTargetType] ?? b.targetType;
     if (b.targetType === "owner_tenant" && b.targetId) {
+      targetLabel = `Owner + Staff — ${ownerMap.get(b.targetId) || `#${b.targetId}`}`;
+    } else if (b.targetType === "owner_only" && b.targetId) {
       targetLabel = `Owner — ${ownerMap.get(b.targetId) || `#${b.targetId}`}`;
     } else if (b.targetType === "store" && b.targetId) {
       targetLabel = `Store — ${storeMap.get(b.targetId) || `#${b.targetId}`}`;

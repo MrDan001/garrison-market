@@ -13,6 +13,7 @@ const TARGET_OPTIONS: { value: BroadcastTargetType; label: string; icon: typeof 
   { value: "owners", label: "All Owners", icon: Users },
   { value: "staff", label: "All Staff", icon: UserCog },
   { value: "owner_tenant", label: "One Owner + Staff", icon: Building2 },
+  { value: "owner_only", label: "One Owner Only", icon: Building2 },
   { value: "store", label: "One Store's Staff", icon: Building2 },
 ];
 
@@ -26,6 +27,10 @@ function resolveOptimisticTargetLabel(
   stores: Store[]
 ) {
   if (targetType === "owner_tenant" && targetId) {
+    const o = owners.find((o) => o.id === targetId);
+    return `Owner + Staff — ${o ? o.storeName || o.fullName || o.email : `#${targetId}`}`;
+  }
+  if (targetType === "owner_only" && targetId) {
     const o = owners.find((o) => o.id === targetId);
     return `Owner — ${o ? o.storeName || o.fullName || o.email : `#${targetId}`}`;
   }
@@ -69,7 +74,7 @@ export default function BroadcastClient({
     return () => clearInterval(t);
   }, [cooldown]);
 
-  const needsTargetId = targetType === "owner_tenant" || targetType === "store";
+  const needsTargetId = targetType === "owner_tenant" || targetType === "owner_only" || targetType === "store";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,7 +86,7 @@ export default function BroadcastClient({
       return;
     }
     if (needsTargetId && !targetId) {
-      setError(targetType === "owner_tenant" ? "Pick an owner." : "Pick a store.");
+      setError(targetType === "store" ? "Pick a store." : "Pick an owner.");
       return;
     }
     if (link.trim() && !link.trim().startsWith("/")) {
@@ -182,7 +187,7 @@ export default function BroadcastClient({
             </div>
           </div>
 
-          {targetType === "owner_tenant" && (
+          {(targetType === "owner_tenant" || targetType === "owner_only") && (
             <select
               value={targetId}
               onChange={(e) => setTargetId(e.target.value ? parseInt(e.target.value, 10) : "")}
