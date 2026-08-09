@@ -9,6 +9,7 @@ import InventoryGrid from "@/components/InventoryGrid";
 import ScaleInventoryGrid from "@/components/ScaleInventoryGrid";
 import OwnerInventoryModeSwitcher from "@/components/OwnerInventoryModeSwitcher";
 import { getStaffForScaleOverride, getStaffScaleStockSummary } from "@/lib/consignment.actions";
+import { getProductCategories } from "@/lib/category.actions";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,7 @@ export default async function OwnerInventoryPage() {
 
     return (
       <Suspense fallback={<div className="min-h-screen bg-[var(--bg-app)]" />}>
-        <ScaleInventoryGrid items={serialized} />
+        <ScaleInventoryGrid items={serialized} categories={await getProductCategories()} />
       </Suspense>
     );
   }
@@ -205,6 +206,7 @@ export default async function OwnerInventoryPage() {
           scaleItems={serializedScaleItems}
           staff={staff}
           staffStock={staffStockSummary}
+          categories={await getProductCategories()}
         />
       </Suspense>
     );
@@ -212,7 +214,7 @@ export default async function OwnerInventoryPage() {
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-[var(--bg-app)]" />}>
-      <InventoryGrid items={serialized} />
+      <InventoryGrid items={serialized} categories={await getProductCategories()} />
     </Suspense>
   );
 }

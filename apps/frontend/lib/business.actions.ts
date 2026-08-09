@@ -385,9 +385,25 @@ export async function getInventoryForStaff() {
     orderBy: { name: "asc" }
   });
 
+  const salesCounts = await prisma.orderItem.groupBy({
+    by: ["inventoryId"],
+    where: {
+      inventory: {
+        ownerId: targetOwnerId,
+        ...(storeId ? { storeId } : {}),
+      },
+    },
+    _sum: { quantity: true },
+  });
+  const salesMap = new Map<string | number, number>();
+  salesCounts.forEach((s) => {
+    salesMap.set(s.inventoryId, s._sum.quantity ?? 0);
+  });
+
   const withCategoryName = data.map((item) => ({
     ...item,
     categoryName: item.categoryRef?.name ?? null,
+    salesCount: salesMap.get(item.id) ?? 0,
   }));
 
   return serializeData(withCategoryName);

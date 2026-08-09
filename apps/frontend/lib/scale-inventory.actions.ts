@@ -311,9 +311,25 @@ export async function getScaleInventoryForStaff() {
     orderBy: { name: "asc" },
   });
 
+  const scaleSalesCounts = await prisma.scaleOrderItem.groupBy({
+    by: ["scaleInventoryId"],
+    where: {
+      scaleInventory: {
+        ownerId: targetOwnerId,
+        ...(activeStore ? { storeId: activeStore.id } : {}),
+      },
+    },
+    _sum: { quantityInBaseUnit: true },
+  });
+  const scaleSalesMap = new Map<number, number>();
+  scaleSalesCounts.forEach((s) => {
+    scaleSalesMap.set(s.scaleInventoryId, Number(s._sum.quantityInBaseUnit ?? 0));
+  });
+
   const withCategoryName = data.map((item) => ({
     ...item,
     categoryName: item.categoryRef?.name ?? null,
+    salesCount: scaleSalesMap.get(item.id) ?? 0,
   }));
 
   return JSON.parse(

@@ -243,7 +243,7 @@ export default function InventoryClient({
     { key: "low-stock", label: "Low Stock", count: lowStockItems.length },
     { key: "out-of-stock", label: "Out of Stock", count: outOfStockItems.length },
     { key: "expiring", label: "Expiring Soon", count: expiringItems.length, icon: <Clock size={10} className="text-orange-500" /> },
- /*   { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> }, */
+    { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> },
   ];
 
   return (

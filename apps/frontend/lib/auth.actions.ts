@@ -69,7 +69,7 @@ export async function getSessionUser() {
 }
 
 export async function loginAction(formData: FormData) {
-  const email = formData.get("email") as string;
+  const email = (formData.get("email") as string)?.toLowerCase().trim();
   const password = formData.get("password") as string;
 
   if (!email || !password) return { error: "Email and password are required." };
@@ -183,7 +183,7 @@ export async function registerOwnerAction(formData: FormData) {
 
     const newUser = await prisma.user.create({
       data: {
-        email: data.email as string,
+        email: (data.email as string).toLowerCase().trim(),
         password: hashedPassword,
         fullName: data.fullName as string,
         storeName: targetStoreName || "N/A",

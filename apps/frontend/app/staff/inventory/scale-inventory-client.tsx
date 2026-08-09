@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import {
   ArrowLeft, Search, ShoppingCart, X, Package, Tag, ChevronRight, ChevronDown,
-  AlertCircle, Trash2, Scale as ScaleIcon, Clock,
+  AlertCircle, Trash2, Scale as ScaleIcon, Clock, Flame,
 } from "lucide-react";
 import Link from "next/link";
 import { processScaleSaleAction } from "@/lib/scale-inventory.actions";
@@ -28,6 +28,7 @@ interface ScaleItem {
   expiryDate?: string | null;
   image?: string | null;
   restockLevel?: number | null;
+  salesCount?: number; // Added to support Top Selling logic
 }
 
 interface ProductCategoryOption {
@@ -51,7 +52,7 @@ interface ScaleCartLine {
   discountReason?: string;
 }
 
-type Tab = "all" | "low-stock" | "out-of-stock" | "expiring";
+type Tab = "all" | "low-stock" | "out-of-stock" | "expiring" | "top-selling";
 
 const DISCOUNT_REASONS = [
   "Loyalty customer",
@@ -106,6 +107,9 @@ export default function ScaleInventoryClient({
     () => initialItems.filter((i) => getExpiryStatus(i.trackExpiry, i.expiryDate) !== null),
     [initialItems]
   );
+  const topSellingItems = useMemo(() => {
+    return [...initialItems].sort((a, b) => (b.salesCount ?? 0) - (a.salesCount ?? 0));
+  }, [initialItems]);
 
   const tabFiltered = useMemo(() => {
     switch (tab) {
@@ -115,11 +119,13 @@ export default function ScaleInventoryClient({
         return outOfStockItems;
       case "expiring":
         return expiringItems;
+      case "top-selling":
+        return topSellingItems;
       case "all":
       default:
         return initialItems;
     }
-  }, [tab, initialItems, lowStockItems, outOfStockItems, expiringItems]);
+  }, [tab, initialItems, lowStockItems, outOfStockItems, expiringItems, topSellingItems]);
 
   const filteredItems = useMemo(() => {
     const byCategory = categoryId === "all" ? tabFiltered : tabFiltered.filter((item) => item.categoryId === categoryId);
@@ -136,6 +142,7 @@ export default function ScaleInventoryClient({
     { key: "low-stock", label: "Low Stock", count: lowStockItems.length },
     { key: "out-of-stock", label: "Out of Stock", count: outOfStockItems.length },
     { key: "expiring", label: "Expiring Soon", count: expiringItems.length, icon: <Clock size={10} className="text-orange-500" /> },
+    { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> },
   ];
 
   // --- Drawer ---
@@ -379,7 +386,7 @@ export default function ScaleInventoryClient({
           <div className="py-16 text-center">
             <ScaleIcon size={36} className="mx-auto mb-3 text-slate-300 dark:text-slate-700" />
             <p className="text-slate-500 text-sm">
-              {searchQuery ? `No items match "${searchQuery}"` : tab === "expiring" ? "No items expiring soon." : `No items in ${tab.replace("-", " ")}`}
+              {searchQuery ? `No items match "${searchQuery}"` : tab === "expiring" ? "No items expiring soon." : tab === "top-selling" ? "No top-selling history found." : `No items in ${tab.replace("-", " ")}`}
               {selectedCategoryName && ` (Category: ${selectedCategoryName})`}
             </p>
           </div>
@@ -451,6 +458,13 @@ export default function ScaleInventoryClient({
                     {hasDiscount && (
                       <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-emerald-500 text-white flex items-center justify-center z-10">
                         <Tag size={10} />
+                      </div>
+                    )}
+
+                    {/* Flame Hot Badge for Top Selling items */}
+                    {tab === "top-selling" && (
+                      <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500 text-slate-50 dark:text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
+                        <Flame size={10} fill="currentColor" /> {item.salesCount ?? 0} sold
                       </div>
                     )}
                   </div>

@@ -11,7 +11,7 @@
 import { useState, useMemo } from "react";
 import {
   ArrowLeft, Search, ShoppingCart, Plus, Minus, X, Package, Tag,
-  AlertCircle, Trash2, List, Scale as ScaleIcon, Clock, ChevronDown,
+  AlertCircle, Trash2, List, Scale as ScaleIcon, Clock, ChevronDown, Flame,
 } from "lucide-react";
 import Link from "next/link";
 import { processMergedSaleAction } from "@/lib/consignment.actions";
@@ -33,6 +33,7 @@ interface ListItem {
   expiryDate?: string | null;
   image?: string;
   restockLevel?: number;
+  salesCount?: number; // Added to support Top Selling logic
 }
 
 interface ScaleLine {
@@ -87,6 +88,12 @@ interface ScaleCartLine {
 
 type CartLine = ListCartLine | ScaleCartLine;
 
+// Low Stock and Top Selling only apply to the Standard catalog — consignment
+// Scale lines track today's remaining sign-out amount, not an overall stock
+// level or a lifetime sales count, so those two tabs are hidden while
+// browsing the Scale catalog (see `tabs` below).
+type Tab = "all" | "low-stock" | "out-of-stock" | "expiring" | "top-selling";
+
 const DISCOUNT_REASONS = [
   "Loyalty customer",
   "Damaged/spoiled portion",
@@ -109,6 +116,7 @@ export default function MergedInventoryClient({
   categories?: ProductCategoryOption[];
 }) {
   const [catalog, setCatalog] = useState<"list" | "scale">("list");
+  const [tab, setTab] = useState<Tab>("all");
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [loading, setLoading] = useState(false);
@@ -155,23 +163,74 @@ export default function MergedInventoryClient({
     [scaleOpenConsignments]
   );
 
+  const outOfStockListItems = useMemo(() => listItems.filter((i) => i.quantity <= 0), [listItems]);
+  const lowStockListItems = useMemo(
+    () => listItems.filter((i) => i.quantity > 0 && i.restockLevel != null && i.quantity <= i.restockLevel),
+    [listItems]
+  );
+  const expiringListItems = useMemo(
+    () => listItems.filter((i) => getExpiryStatus(i.trackExpiry, i.expiryDate) !== null),
+    [listItems]
+  );
+  const topSellingListItems = useMemo(() => {
+    return [...listItems].sort((a, b) => (b.salesCount ?? 0) - (a.salesCount ?? 0));
+  }, [listItems]);
+
+  const tabFilteredListItems = useMemo(() => {
+    switch (tab) {
+      case "low-stock":
+        return lowStockListItems;
+      case "out-of-stock":
+        return outOfStockListItems;
+      case "expiring":
+        return expiringListItems;
+      case "top-selling":
+        return topSellingListItems;
+      case "all":
+      default:
+        return listItems;
+    }
+  }, [tab, listItems, lowStockListItems, outOfStockListItems, expiringListItems, topSellingListItems]);
+
+  // Scale consignment lines have no restockLevel/salesCount concept (see Tab
+  // type note above), so only "out-of-stock" and "expiring" apply here —
+  // "low-stock" and "top-selling" fall through to the full list, but those
+  // two tab buttons are hidden while catalog === "scale" so this never
+  // actually gets reached with those values in practice.
+  const outOfStockScaleLines = useMemo(() => scaleLines.filter((i) => i.remaining <= 0), [scaleLines]);
+  const expiringScaleLines = useMemo(
+    () => scaleLines.filter((i) => getExpiryStatus(i.trackExpiry, i.expiryDate) !== null),
+    [scaleLines]
+  );
+
+  const tabFilteredScaleLines = useMemo(() => {
+    switch (tab) {
+      case "out-of-stock":
+        return outOfStockScaleLines;
+      case "expiring":
+        return expiringScaleLines;
+      default:
+        return scaleLines;
+    }
+  }, [tab, scaleLines, outOfStockScaleLines, expiringScaleLines]);
+
   const filteredListItems = useMemo(
     () =>
-      listItems.filter(
+      tabFilteredListItems.filter(
         (i) =>
           i.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
           (categoryId === "all" || i.categoryId === categoryId)
       ),
-    [listItems, searchQuery, categoryId]
+    [tabFilteredListItems, searchQuery, categoryId]
   );
   const filteredScaleLines = useMemo(
     () =>
-      scaleLines.filter(
+      tabFilteredScaleLines.filter(
         (i) =>
           i.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
           (categoryId === "all" || i.categoryId === categoryId)
       ),
-    [scaleLines, searchQuery, categoryId]
+    [tabFilteredScaleLines, searchQuery, categoryId]
   );
 
   const selectedCategoryName = categoryId === "all" ? null : categories.find((c) => c.id === categoryId)?.name ?? null;
@@ -375,6 +434,31 @@ export default function MergedInventoryClient({
 
   const unitPair = drawerScaleItem ? unitsForBase(drawerScaleItem.baseUnit) : null;
 
+  // Low Stock and Top Selling are List-catalog-only (see Tab type note above).
+  const tabs: { key: Tab; label: string; count?: number; icon?: React.ReactNode }[] =
+    catalog === "list"
+      ? [
+          { key: "all", label: "All", count: listItems.length },
+          { key: "low-stock", label: "Low Stock", count: lowStockListItems.length },
+          { key: "out-of-stock", label: "Out of Stock", count: outOfStockListItems.length },
+          { key: "expiring", label: "Expiring Soon", count: expiringListItems.length, icon: <Clock size={10} className="text-orange-500" /> },
+          { key: "top-selling", label: "Top Selling", icon: <Flame size={10} className="text-amber-500" /> },
+        ]
+      : [
+          { key: "all", label: "All", count: scaleLines.length },
+          { key: "out-of-stock", label: "Out of Stock", count: outOfStockScaleLines.length },
+          { key: "expiring", label: "Expiring Soon", count: expiringScaleLines.length, icon: <Clock size={10} className="text-orange-500" /> },
+        ];
+
+  const switchCatalog = (next: "list" | "scale") => {
+    // Low Stock / Top Selling don't exist on the Scale side — fall back to
+    // "all" rather than silently showing an empty grid on an invalid tab.
+    if (next === "scale" && (tab === "low-stock" || tab === "top-selling")) {
+      setTab("all");
+    }
+    setCatalog(next);
+  };
+
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 pb-32">
       {/* Header */}
@@ -409,7 +493,7 @@ export default function MergedInventoryClient({
         {/* Catalog toggle — controls what's being BROWSED, not the cart */}
         <div className="flex gap-1.5">
           <button
-            onClick={() => setCatalog("list")}
+            onClick={() => switchCatalog("list")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
               catalog === "list" ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400"
             }`}
@@ -417,13 +501,32 @@ export default function MergedInventoryClient({
             <List size={13} /> Standard
           </button>
           <button
-            onClick={() => setCatalog("scale")}
+            onClick={() => switchCatalog("scale")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
               catalog === "scale" ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400"
             }`}
           >
             <ScaleIcon size={13} /> Scale
           </button>
+        </div>
+
+        {/* Tab Selection Row (Horizontal Scroll on Mobile) */}
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 -mx-1 px-1">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1 shrink-0 ${
+                tab === t.key
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-800 hover:dark:text-slate-200 border border-slate-200/85 dark:border-slate-800/85"
+              }`}
+            >
+              {t.icon}
+              <span>{t.label}</span>
+              {t.count !== undefined && <span className="opacity-60 text-[10px]">({t.count})</span>}
+            </button>
+          ))}
         </div>
 
         {/* Category Filter Dropdown — populated from owner-created categories */}
@@ -455,6 +558,7 @@ export default function MergedInventoryClient({
                 key={item.id}
                 item={item}
                 qty={qtyInCart(item.id)}
+                tab={tab}
                 onAdd={() => addListItem(item)}
                 onRemove={() => removeListItem(item.id)}
               />
@@ -476,12 +580,29 @@ export default function MergedInventoryClient({
 
       {catalog === "list" && filteredListItems.length === 0 && (
         <p className="text-center text-sm text-slate-500 py-10">
-          No standard items found.{selectedCategoryName && ` (Category: ${selectedCategoryName})`}
+          {searchQuery
+            ? `No items match "${searchQuery}"`
+            : tab === "expiring"
+            ? "No items expiring soon."
+            : tab === "top-selling"
+            ? "No top-selling history found."
+            : tab === "all"
+            ? "No standard items found."
+            : `No items in ${tab.replace("-", " ")}`}
+          {selectedCategoryName && ` (Category: ${selectedCategoryName})`}
         </p>
       )}
       {catalog === "scale" && filteredScaleLines.length === 0 && (
         <p className="text-center text-sm text-slate-500 py-10">
-          {scaleLines.length === 0 ? "Nothing signed out to you today." : "No scale items match this filter."}
+          {scaleLines.length === 0
+            ? "Nothing signed out to you today."
+            : searchQuery
+            ? `No items match "${searchQuery}"`
+            : tab === "expiring"
+            ? "No items expiring soon."
+            : tab === "all"
+            ? "No scale items match this filter."
+            : `No items in ${tab.replace("-", " ")}`}
           {selectedCategoryName && scaleLines.length > 0 && ` (Category: ${selectedCategoryName})`}
         </p>
       )}
@@ -747,15 +868,18 @@ export default function MergedInventoryClient({
 function ListCard({
   item,
   qty,
+  tab,
   onAdd,
   onRemove,
 }: {
   item: ListItem;
   qty: number;
+  tab: Tab;
   onAdd: () => void;
   onRemove: () => void;
 }) {
   const isOutOfStock = item.quantity <= 0;
+  const isLowStock = !isOutOfStock && item.restockLevel != null && item.quantity <= item.restockLevel;
   const expiryStatus = getExpiryStatus(item.trackExpiry, item.expiryDate);
   return (
     <div
@@ -776,8 +900,15 @@ function ListCard({
             <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded-full">OUT OF STOCK</span>
           </div>
         )}
-        {expiryStatus && (
+        {isLowStock && (
           <div className="absolute top-2 left-2 z-10">
+            <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+              Low Stock
+            </span>
+          </div>
+        )}
+        {expiryStatus && (
+          <div className={`absolute ${isLowStock ? "top-8" : "top-2"} left-2 z-10`}>
             <span
               className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
                 expiryStatus === "expired"
@@ -788,6 +919,12 @@ function ListCard({
               <Clock size={9} />
               {expiryStatus === "expired" ? "Expired" : "Expiring Soon"}
             </span>
+          </div>
+        )}
+        {/* Flame Hot Badge for Top Selling items */}
+        {tab === "top-selling" && (
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-amber-500 text-slate-50 dark:text-slate-950 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow">
+            <Flame size={10} fill="currentColor" /> {item.salesCount ?? 0} sold
           </div>
         )}
         {!isOutOfStock && qty === 0 && (
