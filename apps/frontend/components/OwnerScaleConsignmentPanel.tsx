@@ -4,7 +4,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Users, User, Zap } from "lucide-react";
+import { Send, Users, User, Zap, Tag, ChevronDown } from "lucide-react";
 import { ownerSignOutScaleToStaffAction } from "@/lib/consignment.actions";
 
 interface ScaleItem {
@@ -13,6 +13,8 @@ interface ScaleItem {
   quantity: number;
   unit: string;
   price: number;
+  categoryId?: number | null;
+  categoryName?: string | null;
 }
 
 interface StaffOption {
@@ -25,6 +27,12 @@ interface StaffStockLine {
   staffId: number | null; // null = the store-wide shared consignment
   staffName: string;
   items: { name: string; unit: string; quantityOut: number; quantitySold: number; remaining: number }[];
+}
+
+interface ProductCategoryOption {
+  id: number;
+  name: string;
+  itemCount: number;
 }
 
 // Stage 2: the daily sign-out-to-staff workflow, split out of
@@ -41,10 +49,12 @@ export default function OwnerScaleConsignmentPanel({
   items,
   staff,
   staffStock,
+  categories = [],
 }: {
   items: ScaleItem[];
   staff: StaffOption[];
   staffStock: StaffStockLine[];
+  categories?: ProductCategoryOption[];
 }) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -53,6 +63,10 @@ export default function OwnerScaleConsignmentPanel({
   const [selectedStaffId, setSelectedStaffId] = useState<string>(staff[0] ? String(staff[0].id) : "");
   const [signOutQty, setSignOutQty] = useState<Record<number, string>>({});
   const [signOutMsg, setSignOutMsg] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<number | "all">("all");
+
+  const visibleItems = categoryId === "all" ? items : items.filter((i) => i.categoryId === categoryId);
+  const selectedCategoryName = categoryId === "all" ? null : categories.find((c) => c.id === categoryId)?.name ?? null;
 
   const handleSendEverything = () => {
     const next: Record<number, string> = {};
@@ -224,25 +238,51 @@ export default function OwnerScaleConsignmentPanel({
               </button>
             </div>
 
+            {/* Category Filter Dropdown — populated from owner-created categories */}
+            {categories.length > 0 && (
+              <div className="relative">
+                <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none z-10" />
+                <select
+                  value={categoryId === "all" ? "all" : String(categoryId)}
+                  onChange={(e) => setCategoryId(e.target.value === "all" ? "all" : Number(e.target.value))}
+                  className="w-full appearance-none bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.itemCount})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              </div>
+            )}
+
             <div className="space-y-2">
-              {items.map((item) => (
-                <div key={item.id} className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs text-slate-400 block truncate">{item.name}</span>
-                    <span className="text-[10px] text-slate-600">
-                      {item.quantity}
-                      {item.unit} in stock
-                    </span>
+              {visibleItems.length === 0 ? (
+                <p className="text-xs text-slate-500 py-2">
+                  No items in this category.{selectedCategoryName && ` (Category: ${selectedCategoryName})`}
+                </p>
+              ) : (
+                visibleItems.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs text-slate-400 block truncate">{item.name}</span>
+                      <span className="text-[10px] text-slate-600">
+                        {item.quantity}
+                        {item.unit} in stock
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      placeholder={`Qty (${item.unit})`}
+                      value={signOutQty[item.id] || ""}
+                      onChange={(e) => setSignOutQty((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                      className="w-28 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200"
+                    />
                   </div>
-                  <input
-                    type="number"
-                    placeholder={`Qty (${item.unit})`}
-                    value={signOutQty[item.id] || ""}
-                    onChange={(e) => setSignOutQty((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                    className="w-28 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200"
-                  />
-                </div>
-              ))}
+                ))
+              )}
             </div>
             <button
               disabled={isPending}

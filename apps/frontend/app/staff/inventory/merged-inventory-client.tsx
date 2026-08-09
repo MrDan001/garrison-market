@@ -11,7 +11,7 @@
 import { useState, useMemo } from "react";
 import {
   ArrowLeft, Search, ShoppingCart, Plus, Minus, X, Package, Tag,
-  AlertCircle, Trash2, List, Scale as ScaleIcon, Clock,
+  AlertCircle, Trash2, List, Scale as ScaleIcon, Clock, ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import { processMergedSaleAction } from "@/lib/consignment.actions";
@@ -26,6 +26,7 @@ interface ListItem {
   quantity: number;
   price: number;
   category?: string;
+  categoryId?: number | null;
   categoryName?: string | null;
   sku?: string | null;
   trackExpiry?: boolean;
@@ -41,10 +42,17 @@ interface ScaleLine {
   baseUnit: string;
   remaining: number;
   price: number; // per base unit
+  categoryId?: number | null;
   categoryName?: string | null;
   sku?: string | null;
   trackExpiry?: boolean;
   expiryDate?: string | null;
+}
+
+interface ProductCategoryOption {
+  id: number;
+  name: string;
+  itemCount: number;
 }
 
 interface ListCartLine {
@@ -93,12 +101,15 @@ export default function MergedInventoryClient({
   listItems,
   discountEnabled,
   scaleOpenConsignments,
+  categories = [],
 }: {
   listItems: ListItem[];
   discountEnabled: boolean;
   scaleOpenConsignments: any[];
+  categories?: ProductCategoryOption[];
 }) {
   const [catalog, setCatalog] = useState<"list" | "scale">("list");
+  const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCart, setShowCart] = useState(false);
@@ -134,6 +145,7 @@ export default function MergedInventoryClient({
           baseUnit: i.unit,
           remaining: Number(i.quantityOut) - Number(i.quantitySold) - Number(i.quantityWasted ?? 0),
           price: Number(i.priceAtTime),
+          categoryId: i.scaleInventory?.categoryId ?? null,
           categoryName: i.scaleInventory?.categoryRef?.name ?? i.scaleInventory?.category ?? null,
           sku: i.scaleInventory?.sku ?? null,
           trackExpiry: i.scaleInventory?.trackExpiry ?? false,
@@ -144,13 +156,25 @@ export default function MergedInventoryClient({
   );
 
   const filteredListItems = useMemo(
-    () => listItems.filter((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase())),
-    [listItems, searchQuery]
+    () =>
+      listItems.filter(
+        (i) =>
+          i.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          (categoryId === "all" || i.categoryId === categoryId)
+      ),
+    [listItems, searchQuery, categoryId]
   );
   const filteredScaleLines = useMemo(
-    () => scaleLines.filter((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase())),
-    [scaleLines, searchQuery]
+    () =>
+      scaleLines.filter(
+        (i) =>
+          i.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          (categoryId === "all" || i.categoryId === categoryId)
+      ),
+    [scaleLines, searchQuery, categoryId]
   );
+
+  const selectedCategoryName = categoryId === "all" ? null : categories.find((c) => c.id === categoryId)?.name ?? null;
 
   const cartCount = cart.reduce((sum, l) => sum + (l.kind === "list" ? l.qty : 1), 0);
   const total = cart.reduce(
@@ -401,6 +425,26 @@ export default function MergedInventoryClient({
             <ScaleIcon size={13} /> Scale
           </button>
         </div>
+
+        {/* Category Filter Dropdown — populated from owner-created categories */}
+        {categories.length > 0 && (
+          <div className="relative">
+            <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none z-10" />
+            <select
+              value={categoryId === "all" ? "all" : String(categoryId)}
+              onChange={(e) => setCategoryId(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="w-full appearance-none bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-8 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-blue-500 transition-colors"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.itemCount})
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          </div>
+        )}
       </div>
 
       {/* Catalog grid */}
@@ -431,10 +475,15 @@ export default function MergedInventoryClient({
       </div>
 
       {catalog === "list" && filteredListItems.length === 0 && (
-        <p className="text-center text-sm text-slate-500 py-10">No standard items found.</p>
+        <p className="text-center text-sm text-slate-500 py-10">
+          No standard items found.{selectedCategoryName && ` (Category: ${selectedCategoryName})`}
+        </p>
       )}
       {catalog === "scale" && filteredScaleLines.length === 0 && (
-        <p className="text-center text-sm text-slate-500 py-10">Nothing signed out to you today.</p>
+        <p className="text-center text-sm text-slate-500 py-10">
+          {scaleLines.length === 0 ? "Nothing signed out to you today." : "No scale items match this filter."}
+          {selectedCategoryName && scaleLines.length > 0 && ` (Category: ${selectedCategoryName})`}
+        </p>
       )}
 
       {/* Scale weigh-out drawer */}

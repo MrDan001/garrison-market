@@ -12,6 +12,7 @@ import InventoryClient from "./inventory-client";
 import ScaleInventoryClient from "./scale-inventory-client";
 import StaffInventoryModeSwitcher from "./staff-inventory-mode-switcher";
 import MergedInventoryClient from "./merged-inventory-client";
+import { getProductCategories } from "@/lib/category.actions";
 
 function sanitize(data: any) {
   return JSON.parse(
@@ -53,6 +54,7 @@ export default async function InventoryPage() {
         <ScaleInventoryClient
           initialItems={sanitize(scaleItems || [])}
           discountEnabled={discountEnabled}
+          categories={await getProductCategories()}
         />
       );
     }
@@ -80,6 +82,7 @@ export default async function InventoryPage() {
             listItems={serializedItems}
             discountEnabled={discountEnabled}
             scaleOpenConsignments={sanitize(openConsignments || [])}
+            categories={await getProductCategories()}
           />
         );
       }
@@ -90,6 +93,7 @@ export default async function InventoryPage() {
           discountEnabled={discountEnabled}
           scaleOpenConsignments={sanitize(openConsignments || [])}
           scaleHistory={sanitize(history || [])}
+          categories={await getProductCategories()}
         />
       );
     }
@@ -98,6 +102,7 @@ export default async function InventoryPage() {
       <InventoryClient
         initialItems={serializedItems}
         discountEnabled={discountEnabled}
+        categories={await getProductCategories()}
       />
     );
   } catch (error: any) {

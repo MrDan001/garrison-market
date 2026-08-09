@@ -22,11 +22,13 @@ export default function OwnerInventoryModeSwitcher({
   scaleItems,
   staff,
   staffStock,
+  categories = [],
 }: {
   listItems: any[];
   scaleItems: any[];
   staff: any[];
   staffStock: any[];
+  categories?: any[];
 }) {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
@@ -63,9 +65,9 @@ export default function OwnerInventoryModeSwitcher({
         </button>
       </div>
 
-      {mode === "list" && <InventoryGrid items={listItems} />}
+      {mode === "list" && <InventoryGrid items={listItems} categories={categories} />}
 
-      {mode === "scale" && <OwnerScaleInventoryGrid items={scaleItems} />}
+      {mode === "scale" && <OwnerScaleInventoryGrid items={scaleItems} categories={categories} />}
 
       {mode === "consignment" && (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pb-24 pt-4">
@@ -75,7 +77,7 @@ export default function OwnerInventoryModeSwitcher({
           >
             ← Back to Dashboard
           </Link>
-          <OwnerScaleConsignmentPanel items={scaleItems} staff={staff} staffStock={staffStock} />
+          <OwnerScaleConsignmentPanel items={scaleItems} staff={staff} staffStock={staffStock} categories={categories} />
         </div>
       )}
     </div>

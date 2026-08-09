@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Package, Plus, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Flame, Hash, Clock } from "lucide-react";
+import { Package, Plus, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Flame, Hash, Clock, Tag } from "lucide-react";
 import Link from "next/link";
 import { getExpiryStatus } from "@/lib/expiry-status";
 
@@ -16,6 +16,7 @@ interface ScaleInventoryItem {
   price: number;
   costPrice: number | null;
   category: string | null; // legacy string — used only if categoryName isn't set
+  categoryId?: number | null;
   categoryName?: string | null;
   sku?: string | null;
   trackExpiry?: boolean;
@@ -23,6 +24,12 @@ interface ScaleInventoryItem {
   restockLevel: number | null;
   image: string | null;
   salesCount?: number;
+}
+
+interface ProductCategoryOption {
+  id: number;
+  name: string;
+  itemCount: number;
 }
 
 type Tab = "all" | "low-stock" | "out-of-stock" | "expiring" | "top-selling";
@@ -35,8 +42,9 @@ type Tab = "all" | "low-stock" | "out-of-stock" | "expiring" | "top-selling";
 // edit both navigate to the existing full-page forms (AddScaleInventoryForm
 // / ScaleInventoryEditForm) via ?type=scale, the same forms native scale
 // stores already use.
-export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInventoryItem[] }) {
+export default function OwnerScaleInventoryGrid({ items, categories = [] }: { items: ScaleInventoryItem[]; categories?: ProductCategoryOption[] }) {
   const [tab, setTab] = useState<Tab>("all");
+  const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [isTotalsOpen, setIsTotalsOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,10 +97,13 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
   }, [tab, items, lowStockItems, outOfStockItems, expiringItems, topSellingItems]);
 
   const visibleItems = useMemo(() => {
-    if (!searchQuery.trim()) return tabFiltered;
+    const byCategory = categoryId === "all" ? tabFiltered : tabFiltered.filter((i) => i.categoryId === categoryId);
+    if (!searchQuery.trim()) return byCategory;
     const q = searchQuery.toLowerCase();
-    return tabFiltered.filter((i) => i.name.toLowerCase().includes(q));
-  }, [tabFiltered, searchQuery]);
+    return byCategory.filter((i) => i.name.toLowerCase().includes(q));
+  }, [tabFiltered, categoryId, searchQuery]);
+
+  const selectedCategoryName = categoryId === "all" ? null : categories.find((c) => c.id === categoryId)?.name ?? null;
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode; count?: number }[] = [
     { key: "all", label: "All", icon: null, count: items.length },
@@ -180,6 +191,26 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
             className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-slate-500 focus:outline-none focus:border-blue-600 transition-colors"
           />
         </div>
+
+        {/* Category Filter Dropdown — populated from owner-created categories */}
+        {categories.length > 0 && (
+          <div className="relative mb-2">
+            <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none z-10" />
+            <select
+              value={categoryId === "all" ? "all" : String(categoryId)}
+              onChange={(e) => setCategoryId(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="w-full appearance-none bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-8 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-blue-600 transition-colors"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.itemCount})
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          </div>
+        )}
 
         {/* Tab Selection Row */}
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 -mx-1 px-1">
@@ -327,6 +358,7 @@ export default function OwnerScaleInventoryGrid({ items }: { items: ScaleInvento
               : tab === "top-selling"
               ? "No top-selling history found."
               : "No scale products yet. Add your first one to get started."}
+            {selectedCategoryName && ` (Category: ${selectedCategoryName})`}
           </p>
         </div>
       )}

@@ -17,11 +17,13 @@ export default function StaffInventoryModeSwitcher({
   discountEnabled,
   scaleOpenConsignments,
   scaleHistory,
+  categories = [],
 }: {
   listItems: any[];
   discountEnabled: boolean;
   scaleOpenConsignments: any[];
   scaleHistory: any[];
+  categories?: any[];
 }) {
   const [mode, setMode] = useState<"list" | "scale">("list");
 
@@ -52,12 +54,13 @@ export default function StaffInventoryModeSwitcher({
       </div>
 
       {mode === "list" ? (
-        <InventoryClient initialItems={listItems} discountEnabled={discountEnabled} />
+        <InventoryClient initialItems={listItems} discountEnabled={discountEnabled} categories={categories} />
       ) : (
         <StaffScaleConsignmentClient
           openConsignments={scaleOpenConsignments}
           history={scaleHistory}
           discountEnabled={discountEnabled}
+          categories={categories}
         />
       )}
     </div>

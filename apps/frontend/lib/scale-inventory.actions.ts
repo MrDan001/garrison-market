@@ -300,6 +300,7 @@ export async function getScaleInventoryForStaff() {
       price: true,
       costPrice: true,
       category: true,
+      categoryId: true,
       categoryRef: { select: { name: true } },
       sku: true,
       trackExpiry: true,

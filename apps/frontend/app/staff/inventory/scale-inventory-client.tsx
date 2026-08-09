@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from "react";
 import {
-  ArrowLeft, Search, ShoppingCart, X, Package, Tag, ChevronRight,
+  ArrowLeft, Search, ShoppingCart, X, Package, Tag, ChevronRight, ChevronDown,
   AlertCircle, Trash2, Scale as ScaleIcon, Clock,
 } from "lucide-react";
 import Link from "next/link";
@@ -21,12 +21,19 @@ interface ScaleItem {
   price: number; // per base unit
   costPrice?: number | null;
   category?: string | null; // legacy string — used only if categoryName isn't set
+  categoryId?: number | null;
   categoryName?: string | null;
   sku?: string | null;
   trackExpiry?: boolean;
   expiryDate?: string | null;
   image?: string | null;
   restockLevel?: number | null;
+}
+
+interface ProductCategoryOption {
+  id: number;
+  name: string;
+  itemCount: number;
 }
 
 interface ScaleCartLine {
@@ -59,11 +66,14 @@ const DISCOUNT_REASONS = [
 export default function ScaleInventoryClient({
   initialItems,
   discountEnabled,
+  categories = [],
 }: {
   initialItems: ScaleItem[];
   discountEnabled: boolean;
+  categories?: ProductCategoryOption[];
 }) {
   const [tab, setTab] = useState<Tab>("all");
+  const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [cart, setCart] = useState<ScaleCartLine[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCart, setShowCart] = useState(false);
@@ -111,10 +121,12 @@ export default function ScaleInventoryClient({
     }
   }, [tab, initialItems, lowStockItems, outOfStockItems, expiringItems]);
 
-  const filteredItems = useMemo(
-    () => tabFiltered.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase())),
-    [tabFiltered, searchQuery]
-  );
+  const filteredItems = useMemo(() => {
+    const byCategory = categoryId === "all" ? tabFiltered : tabFiltered.filter((item) => item.categoryId === categoryId);
+    return byCategory.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [tabFiltered, categoryId, searchQuery]);
+
+  const selectedCategoryName = categoryId === "all" ? null : categories.find((c) => c.id === categoryId)?.name ?? null;
 
   const total = cart.reduce((sum, line) => sum + line.price * line.baseQty, 0);
   const cartCount = cart.length;
@@ -331,6 +343,26 @@ export default function ScaleInventoryClient({
             </button>
           ))}
         </div>
+
+        {/* Category Filter Dropdown — populated from owner-created categories */}
+        {categories.length > 0 && (
+          <div className="relative">
+            <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none z-10" />
+            <select
+              value={categoryId === "all" ? "all" : String(categoryId)}
+              onChange={(e) => setCategoryId(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="w-full appearance-none bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-8 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-blue-500 transition-colors"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.itemCount})
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          </div>
+        )}
       </div>
 
       {/* Title */}
@@ -348,6 +380,7 @@ export default function ScaleInventoryClient({
             <ScaleIcon size={36} className="mx-auto mb-3 text-slate-300 dark:text-slate-700" />
             <p className="text-slate-500 text-sm">
               {searchQuery ? `No items match "${searchQuery}"` : tab === "expiring" ? "No items expiring soon." : `No items in ${tab.replace("-", " ")}`}
+              {selectedCategoryName && ` (Category: ${selectedCategoryName})`}
             </p>
           </div>
         ) : (

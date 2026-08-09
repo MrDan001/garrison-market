@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Flame, Hash, Clock } from "lucide-react";
+import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Flame, Hash, Clock, Tag } from "lucide-react";
 import Link from "next/link";
 import { getExpiryStatus } from "@/lib/expiry-status";
 
@@ -13,6 +13,7 @@ interface InventoryItem {
   price: number;
   costPrice: number | null;
   category: string | null; // legacy string — used only if categoryName isn't set
+  categoryId?: number | null; // from the real ProductCategory model
   categoryName?: string | null; // from the real ProductCategory model
   sku?: string | null;
   trackExpiry?: boolean;
@@ -22,10 +23,17 @@ interface InventoryItem {
   salesCount?: number; // Added to handle Top Selling logic
 }
 
+interface ProductCategoryOption {
+  id: number;
+  name: string;
+  itemCount: number;
+}
+
 type Tab = "all" | "low-stock" | "out-of-stock" | "expiring" | "top-selling";
 
-export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
+export default function InventoryGrid({ items, categories = [] }: { items: InventoryItem[]; categories?: ProductCategoryOption[] }) {
   const [tab, setTab] = useState<Tab>("all");
+  const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [isTotalsOpen, setIsTotalsOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -83,9 +91,16 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
     }
   }, [tab, items, lowStockItems, outOfStockItems, expiringItems, topSellingItems]);
 
+  const categoryFiltered = useMemo(() => {
+    if (categoryId === "all") return tabFiltered;
+    return tabFiltered.filter((i) => i.categoryId === categoryId);
+  }, [tabFiltered, categoryId]);
+
   const visibleItems = searchQuery.trim()
-    ? tabFiltered.filter((i) => i.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-    : tabFiltered;
+    ? categoryFiltered.filter((i) => i.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : categoryFiltered;
+
+  const selectedCategoryName = categoryId === "all" ? null : categories.find((c) => c.id === categoryId)?.name ?? null;
 
   const { totalCost, totalSelling, totalProfit } = useMemo(() => {
     let cost = 0;
@@ -187,6 +202,26 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
             className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-slate-500 focus:outline-none focus:border-blue-600 transition-colors"
           />
         </div>
+
+        {/* Category Filter Dropdown — populated from owner-created categories */}
+        {categories.length > 0 && (
+          <div className="relative mb-2">
+            <Tag size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none z-10" />
+            <select
+              value={categoryId === "all" ? "all" : String(categoryId)}
+              onChange={(e) => setCategoryId(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="w-full appearance-none bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-8 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-blue-600 transition-colors"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.itemCount})
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          </div>
+        )}
 
         {/* Tab Selection Row (Horizontal Scroll on Mobile) */}
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 -mx-1 px-1">
@@ -341,6 +376,7 @@ export default function InventoryGrid({ items }: { items: InventoryItem[] }) {
               : tab === "top-selling"
               ? "No top-selling history found."
               : "No inventory items found. Add your first product to get started."}
+            {selectedCategoryName && ` (Category: ${selectedCategoryName})`}
           </p>
         </div>
       )}
