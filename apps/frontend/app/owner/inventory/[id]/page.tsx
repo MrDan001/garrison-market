@@ -14,6 +14,7 @@ interface PageProps {
   searchParams: Promise<{ type?: string }>;
 }
 
+
 export default async function ProductDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const itemId = parseInt(id, 10);
