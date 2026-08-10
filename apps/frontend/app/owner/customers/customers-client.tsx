@@ -9,7 +9,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Users, Trophy, Phone, Receipt, HandCoins, ChevronDown, User, Package, Clock } from "lucide-react";
+import { ArrowLeft, Users, Trophy, Phone, Receipt, HandCoins, ChevronDown, User, Package, Clock, Crown } from "lucide-react";
 import { getCustomersForOwner } from "@/lib/customer.actions";
 import { getOpenDebtsForOwner } from "@/lib/debt.actions";
 
@@ -188,7 +188,17 @@ export default function CustomersClient({
   const [data, setData] = useState<CustomersData>(initial);
   const [debts, setDebts] = useState<DebtType[]>(initialDebts);
   const [isPending, startTransition] = useTransition();
-  const [tab, setTab] = useState<"customers" | "debts">("customers");
+  const [tab, setTab] = useState<"customers" | "debts" | "year">("customers");
+
+  // "Year Champion" tab — always the whole-year ranking (month forced to
+  // null), kept in its own state so switching to it never disturbs whatever
+  // month/year the Ranking tab has selected. Loaded lazily on first visit,
+  // then re-fetched only when the year dropdown here changes.
+  const [yearData, setYearData] = useState<CustomersData | null>(
+    initial.month === null ? initial : null
+  );
+  const [yearRankYear, setYearRankYear] = useState<number>(initial.year);
+  const [yearPending, startYearTransition] = useTransition();
 
   function refetch(year: number, month: number | null) {
     startTransition(async () => {
@@ -199,6 +209,19 @@ export default function CustomersClient({
       setData(customersResult);
       setDebts(debtsResult as unknown as DebtType[]);
     });
+  }
+
+  function fetchYearRanking(year: number) {
+    setYearRankYear(year);
+    startYearTransition(async () => {
+      const result = await getCustomersForOwner({ year, month: null });
+      setYearData(result);
+    });
+  }
+
+  function openYearTab() {
+    setTab("year");
+    if (!yearData) fetchYearRanking(yearRankYear);
   }
 
   const owedByCustomer = new Map<number, number>();
@@ -241,10 +264,19 @@ export default function CustomersClient({
               </span>
             )}
           </button>
+          <button
+            onClick={openYearTab}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+              tab === "year" ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm" : "text-slate-500"
+            }`}
+          >
+            <Crown size={14} className={tab === "year" ? "text-amber-400" : ""} /> Year Champion
+          </button>
         </div>
 
         {tab === "customers" ? (
           <>
+
             <div className="flex items-center justify-end gap-2 mb-5">
               <select
                 value={data.month ?? ""}
@@ -336,7 +368,7 @@ export default function CustomersClient({
               </div>
             )}
           </>
-        ) : (
+        ) : tab === "debts" ? (
           <div className={`transition-opacity ${isPending ? "opacity-50" : ""}`}>
             {debts.length > 0 && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-5 flex items-center justify-between">
@@ -363,6 +395,116 @@ export default function CustomersClient({
                 ))}
               </div>
             )}
+          </div>
+        ) : (
+          <div>
+            <div className="flex items-center justify-end gap-2 mb-5">
+              <select
+                value={yearRankYear}
+                onChange={(e) => fetchYearRanking(parseInt(e.target.value, 10))}
+                className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm font-medium text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
+              >
+                {data.years.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className={`transition-opacity ${yearPending ? "opacity-50" : ""}`}>
+              {!yearData || yearData.customers.length === 0 ? (
+                <div className="p-12 text-center text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-[var(--bg-surface)]/30">
+                  <Crown className="mx-auto mb-3 text-slate-300 dark:text-slate-700" size={32} />
+                  No customers recorded yet in {yearRankYear}.
+                </div>
+              ) : (
+                <>
+                  {/* Champion spotlight — the single top spender for the
+                      whole year, called out separately from the list below
+                      so "who's #1 this year" is answerable at a glance. */}
+                  {(() => {
+                    const champion = yearData.customers[0];
+                    const owed = owedByCustomer.get(champion.id);
+                    return (
+                      <div className="bg-gradient-to-br from-amber-500/15 to-amber-500/5 border border-amber-500/30 rounded-2xl p-5 mb-5 flex items-center gap-4">
+                        <div className="h-14 w-14 rounded-2xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                          <Crown size={26} className="text-amber-400" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-amber-500">
+                            {yearRankYear} Customer of the Year
+                          </p>
+                          <p className="font-bold text-[var(--text-primary)] text-lg truncate">{champion.name}</p>
+                          <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                            <Phone size={10} /> {champion.phone}
+                            <span className="mx-1">·</span>
+                            <Receipt size={10} /> {champion.orderCount} orders
+                          </p>
+                          {owed != null && owed > 0 && (
+                            <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-1.5">
+                              <HandCoins size={9} /> Owes {NAIRA.format(owed)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xl font-bold text-emerald-500 text-right shrink-0">
+                          {NAIRA.format(champion.totalSpent)}
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl overflow-hidden">
+                    <div className="hidden sm:grid grid-cols-[2.5rem_1fr_auto_auto] gap-4 px-4 py-3 border-b border-slate-200/60 dark:border-slate-800/60 text-[10px] uppercase tracking-wider font-bold text-slate-500">
+                      <span>#</span>
+                      <span>Customer</span>
+                      <span className="text-right">Orders</span>
+                      <span className="text-right">Total Spent ({yearRankYear})</span>
+                    </div>
+
+                    <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                      {yearData.customers.map((c, idx) => {
+                        const owed = owedByCustomer.get(c.id);
+                        return (
+                          <div
+                            key={c.id}
+                            className="grid grid-cols-[2.5rem_1fr_auto] sm:grid-cols-[2.5rem_1fr_auto_auto] gap-4 px-4 py-3.5 items-center"
+                          >
+                            <span className="flex items-center justify-center">
+                              {idx === 0 ? (
+                                <Trophy size={16} className="text-amber-400" />
+                              ) : (
+                                <span className="text-xs font-bold text-slate-400 w-4 text-center">{idx + 1}</span>
+                              )}
+                            </span>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-semibold text-[var(--text-primary)] text-sm truncate">{c.name}</p>
+                                {owed != null && owed > 0 && (
+                                  <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                                    <HandCoins size={9} /> Owes {NAIRA.format(owed)}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Phone size={10} /> {c.phone}
+                              </p>
+                            </div>
+
+                            <span className="hidden sm:flex items-center gap-1 text-xs text-slate-500 justify-end">
+                              <Receipt size={12} /> {c.orderCount}
+                            </span>
+
+                            <span className="text-sm font-bold text-emerald-500 text-right">
+                              {NAIRA.format(c.totalSpent)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>
