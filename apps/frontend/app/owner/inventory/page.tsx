@@ -33,6 +33,7 @@ export default async function OwnerInventoryPage() {
         price: true,
         costPrice: true,
         category: true,
+        categoryId: true,
         categoryRef: { select: { name: true } },
         sku: true,
         trackExpiry: true,
@@ -63,6 +64,7 @@ export default async function OwnerInventoryPage() {
       price: Number(item.price),
       costPrice: item.costPrice != null ? Number(item.costPrice) : null,
       category: item.category,
+      categoryId: item.categoryId,
       categoryName: item.categoryRef?.name ?? null,
       sku: item.sku,
       trackExpiry: item.trackExpiry,
@@ -72,9 +74,11 @@ export default async function OwnerInventoryPage() {
       salesCount: scaleSalesMap.get(item.id) ?? 0,
     }));
 
+    const scaleStoreCategories = await getProductCategories();
+
     return (
       <Suspense fallback={<div className="min-h-screen bg-[var(--bg-app)]" />}>
-        <ScaleInventoryGrid items={serialized} categories={await getProductCategories()} />
+        <ScaleInventoryGrid items={serialized} categories={scaleStoreCategories} />
       </Suspense>
     );
   }
@@ -91,6 +95,7 @@ export default async function OwnerInventoryPage() {
       price: true,
       costPrice: true,
       category: true,
+      categoryId: true,
       categoryRef: { select: { name: true } },
       sku: true,
       trackExpiry: true,
@@ -127,6 +132,7 @@ export default async function OwnerInventoryPage() {
     price: Number(item.price),
     costPrice: item.costPrice != null ? Number(item.costPrice) : null,
     category: item.category,
+    categoryId: item.categoryId,
     categoryName: item.categoryRef?.name ?? null,
     sku: item.sku,
     trackExpiry: item.trackExpiry,
@@ -148,7 +154,7 @@ export default async function OwnerInventoryPage() {
   });
 
   if (owner?.scaleConsignmentEnabled) {
-    const [scaleItems, staff, scaleSalesCounts, staffStockSummary] = await Promise.all([
+    const [scaleItems, staff, scaleSalesCounts, staffStockSummary, modeSwitcherCategories] = await Promise.all([
       prisma.scaleInventory.findMany({
         where: { ownerId: session.id, storeId },
         select: {
@@ -159,6 +165,7 @@ export default async function OwnerInventoryPage() {
           price: true,
           costPrice: true,
           category: true,
+          categoryId: true,
           categoryRef: { select: { name: true } },
           sku: true,
           trackExpiry: true,
@@ -175,6 +182,7 @@ export default async function OwnerInventoryPage() {
         _sum: { quantityInBaseUnit: true },
       }),
       getStaffScaleStockSummary(),
+      getProductCategories(),
     ]);
 
     const scaleSalesMap = new Map<number, number>();
@@ -190,6 +198,7 @@ export default async function OwnerInventoryPage() {
       price: Number(i.price),
       costPrice: i.costPrice != null ? Number(i.costPrice) : null,
       category: i.category,
+      categoryId: i.categoryId,
       categoryName: i.categoryRef?.name ?? null,
       sku: i.sku,
       trackExpiry: i.trackExpiry,
@@ -206,15 +215,17 @@ export default async function OwnerInventoryPage() {
           scaleItems={serializedScaleItems}
           staff={staff}
           staffStock={staffStockSummary}
-          categories={await getProductCategories()}
+          categories={modeSwitcherCategories}
         />
       </Suspense>
     );
   }
 
+  const categories = await getProductCategories();
+
   return (
     <Suspense fallback={<div className="min-h-screen bg-[var(--bg-app)]" />}>
-      <InventoryGrid items={serialized} categories={await getProductCategories()} />
+      <InventoryGrid items={serialized} categories={categories} />
     </Suspense>
   );
 }

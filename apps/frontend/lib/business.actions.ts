@@ -12,6 +12,7 @@ import { resolveOrCreateCustomer } from "./customer.actions";
 import { getActiveStoreId } from "./store-context";
 import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
 import { awardXp } from "./rush.actions";
+import { consumeStockBatchesFifo } from "./stock-batch.helpers";
 
 // Deep sterilization helper to turn Decimals and Dates into safe primitives
 function serializeData<T>(data: T): T {
@@ -502,6 +503,27 @@ export async function addItemAction(
     },
   });
 
+  // A brand-new product's starting quantity is functionally its first
+  // restock — give it a StockBatch immediately so the item's whole
+  // lifetime is batch-tracked from day one, not just restocks going
+  // forward. Skipped for a zero-quantity product (nothing was actually
+  // added yet); the first real "Add Stock" will create batch #1 instead.
+  if (quantity > 0) {
+    await prisma.stockBatch.create({
+      data: {
+        inventoryId: newItem.id,
+        ownerId: session.id,
+        storeId: storeId ?? undefined,
+        originalQty: quantity,
+        remainingQty: quantity,
+        costPrice: isNaN(costPrice) ? null : costPrice,
+        sellingPriceAtTime: price,
+        expiryDate,
+        createdById: session.id,
+      },
+    });
+  }
+
   await createNotification({
     ownerId: session.id,
     recipientId: null,
@@ -526,6 +548,91 @@ export async function addItemAction(
       link: "/staff/inventory",
     });
   }
+
+  revalidatePath("/owner/inventory");
+  return { success: true };
+}
+
+// Restocking an existing product — the "+ Add Stock" action. Unlike
+// updateItemAction's quantity field (a raw override, for corrections),
+// this always *adds* to what's there: it creates a new StockBatch dated
+// today and increments Inventory.quantity by the same amount, so the
+// item's total never drifts out of sync with the sum of its batches.
+//
+// costPrice/sellingPrice/expiryDate/paymentMethod are all optional and
+// batch-specific — a restock priced differently from the last one (e.g.
+// a supplier cost increase) doesn't touch older batches' snapshots, and
+// omitting sellingPrice just carries the product's current price forward.
+export async function addStockToInventoryAction(
+  formData: FormData
+): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  try {
+    await assertSubscriptionActive(session.id);
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Your trial or subscription has ended." };
+  }
+
+  const inventoryId = parseInt(formData.get("inventoryId") as string, 10);
+  const quantity = parseInt(formData.get("quantity") as string, 10);
+  if (isNaN(inventoryId) || isNaN(quantity) || quantity <= 0) {
+    return { success: false, error: "Enter a valid quantity to add." };
+  }
+
+  const item = await prisma.inventory.findFirst({
+    where: { id: inventoryId, ownerId: session.id },
+  });
+  if (!item) return { success: false, error: "Product not found." };
+
+  const costPriceRaw = formData.get("costPrice") as string;
+  const costPrice = costPriceRaw ? parseFloat(costPriceRaw) : null;
+
+  const sellingPriceRaw = formData.get("sellingPrice") as string;
+  const sellingPrice = sellingPriceRaw ? parseFloat(sellingPriceRaw) : Number(item.price);
+
+  const expiryDateRaw = formData.get("expiryDate") as string;
+  const expiryDate = expiryDateRaw ? new Date(expiryDateRaw) : null;
+
+  const paymentMethod = (formData.get("paymentMethod") as string) || null;
+
+  const [, updatedItem] = await prisma.$transaction([
+    prisma.stockBatch.create({
+      data: {
+        inventoryId: item.id,
+        ownerId: session.id,
+        storeId: item.storeId ?? undefined,
+        originalQty: quantity,
+        remainingQty: quantity,
+        costPrice: costPrice != null && !isNaN(costPrice) ? costPrice : undefined,
+        sellingPriceAtTime: sellingPrice,
+        expiryDate,
+        paymentMethod,
+        createdById: session.id,
+      },
+    }),
+    prisma.inventory.update({
+      where: { id: item.id },
+      data: {
+        quantity: { increment: quantity },
+        // A restock at a new price becomes the product's current
+        // headline price/cost going forward — older batches keep their
+        // own snapshot regardless.
+        ...(sellingPriceRaw ? { price: sellingPrice } : {}),
+        ...(costPrice != null && !isNaN(costPrice) ? { costPrice } : {}),
+      },
+    }),
+  ]);
+
+  await createNotification({
+    ownerId: session.id,
+    recipientId: null,
+    storeId: item.storeId ?? null,
+    type: "restock",
+    message: `${updatedItem.name} was restocked (+${quantity}, ${updatedItem.quantity} now available).`,
+    link: "/staff/inventory",
+  });
 
   revalidatePath("/owner/inventory");
   return { success: true };
@@ -737,23 +844,32 @@ export async function processSaleAction(
         staffId: session.id,
         storeId: saleStoreId,
         customerId,
-        items: {
-          create: cartItems.map((item: any) => ({
-            inventoryId: item.id,
-            quantity: item.qty,
-            priceAtTime: Number(item.price),
-            ...(item.discountValue
-              ? {
-                  originalPrice: Number(item.originalPrice),
-                  discountValue: Number(item.discountValue),
-                  discountType: item.discountType ?? null,
-                  discountReason: item.discountReason ?? null,
-                }
-              : {}),
-          }))
-        }
       }
     });
+
+    // Created one at a time (rather than the nested items: { create: [...] }
+    // shorthand used before) so we have each OrderItem's own id in hand to
+    // link it to the batch(es) it drew from below.
+    const createdOrderItems = [];
+    for (const item of cartItems) {
+      const orderItem = await tx.orderItem.create({
+        data: {
+          orderId: order.id,
+          inventoryId: item.id,
+          quantity: item.qty,
+          priceAtTime: Number(item.price),
+          ...(item.discountValue
+            ? {
+                originalPrice: Number(item.originalPrice),
+                discountValue: Number(item.discountValue),
+                discountType: item.discountType ?? null,
+                discountReason: item.discountReason ?? null,
+              }
+            : {}),
+        },
+      });
+      createdOrderItems.push(orderItem);
+    }
 
     if (isPartial) {
       const debt = await tx.debt.create({
@@ -789,6 +905,21 @@ export async function processSaleAction(
       });
       if (updateResult.count === 0) {
         throw new Error(`${row.name} was just sold by another request — please try again.`);
+      }
+
+      // FIFO batch attribution — best-effort, never blocks the sale (see
+      // consumeStockBatchesFifo). The Inventory decrement above is what
+      // actually gates whether the sale can happen at all.
+      const orderItem = createdOrderItems.find((oi) => oi.inventoryId === item.id)!;
+      const consumed = await consumeStockBatchesFifo(tx, item.id, item.qty);
+      if (consumed.length > 0) {
+        await tx.orderItemBatch.createMany({
+          data: consumed.map((c) => ({
+            orderItemId: orderItem.id,
+            stockBatchId: c.stockBatchId,
+            quantity: c.quantity,
+          })),
+        });
       }
     }
 

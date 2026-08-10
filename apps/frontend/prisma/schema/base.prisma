@@ -211,6 +211,22 @@ model User {
   scaleWastageSubmitted ScaleWastage[]   @relation("ScaleWastageStaff")
   scaleWastageReviewed  ScaleWastage[]   @relation("ScaleWastageReviewer")
 
+  // --- Standard-inventory stock batches ---
+  stockBatchesOwned   StockBatch[] @relation("StockBatchOwner")
+  stockBatchesCreated StockBatch[] @relation("StockBatchCreatedBy")
+  stockLossesOwned    StockLoss[]  @relation("StockLossOwner")
+  stockLossesRecorded StockLoss[]  @relation("StockLossRecordedBy")
+  stockReturnsOwned   StockReturn[] @relation("StockReturnOwner")
+  stockReturnsRecorded StockReturn[] @relation("StockReturnRecordedBy")
+
+  // --- Scale-inventory stock batches (Stage 5) ---
+  scaleStockBatchesOwned   ScaleStockBatch[] @relation("ScaleStockBatchOwner")
+  scaleStockBatchesCreated ScaleStockBatch[] @relation("ScaleStockBatchCreatedBy")
+  scaleStockLossesOwned    ScaleStockLoss[]  @relation("ScaleStockLossOwner")
+  scaleStockLossesRecorded ScaleStockLoss[]  @relation("ScaleStockLossRecordedBy")
+  scaleStockReturnsOwned   ScaleStockReturn[] @relation("ScaleStockReturnOwner")
+  scaleStockReturnsRecorded ScaleStockReturn[] @relation("ScaleStockReturnRecordedBy")
+
   @@index([ownerId])
   @@index([staffStoreId])
   @@index([role, status])
@@ -248,6 +264,12 @@ model Store {
   scaleInventory ScaleInventory[]
   scaleWastage   ScaleWastage[]
   expenses       Expense[]
+  stockBatches   StockBatch[]
+  stockLosses    StockLoss[]
+  stockReturns   StockReturn[]
+  scaleStockBatches ScaleStockBatch[]
+  scaleStockLosses  ScaleStockLoss[]
+  scaleStockReturns ScaleStockReturn[]
 
   @@index([ownerId])
 }
@@ -329,10 +351,126 @@ model Inventory {
   orderItems   OrderItem[]
   reportItems  ReportItem[]
   consignmentItems ConsignmentItem[]
+  stockBatches StockBatch[]
+  stockLosses  StockLoss[]
+  stockReturns StockReturn[]
 
   @@index([ownerId, storeId])
   @@index([storeId])
   @@index([categoryId])
+}
+
+// Batch tracking — Stage 1 of the standard-inventory batch feature.
+//
+// Every time stock is added to a product (initial creation, or a later
+// restock), it becomes its own StockBatch row instead of just bumping
+// Inventory.quantity in place. Inventory.quantity is kept as the live,
+// denormalized total (sum of each batch's remainingQty) so every existing
+// read path (stock lists, low-stock checks, sale validation) keeps working
+// unchanged — batches are additive, not a replacement.
+//
+// remainingQty starts equal to originalQty and is untouched by this stage;
+// later stages wire sale/loss/return consumption to decrement it (FIFO,
+// oldest batch first) and link OrderItems back to the batch(es) they drew
+// from. costPrice/sellingPriceAtTime are snapshotted per batch so a
+// product's margin history stays accurate even after its current price
+// changes — the batch remembers what it actually cost/sold for when it
+// was added, independent of Inventory.costPrice/price today.
+model StockBatch {
+  id                 Int       @id @default(autoincrement())
+  inventoryId        Int
+  ownerId            Int
+  storeId            Int?
+
+  originalQty        Int       // immutable — the amount added in this restock
+  remainingQty       Int       // decremented by future sale/loss/return stages
+
+  costPrice          Decimal?  // this batch's cost per unit, snapshotted at add time
+  sellingPriceAtTime Decimal   // this batch's selling price, snapshotted at add time
+
+  expiryDate         DateTime?
+  paymentMethod      String?   // "cash" | "transfer" — how this restock was paid for, if recorded
+
+  addedAt            DateTime  @default(now())
+  // Nullable + SetNull, same convention as Order.staffId: losing the user
+  // who added a batch shouldn't delete the batch or its stock history.
+  createdById        Int?
+
+  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  owner       User      @relation("StockBatchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store       Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy   User?     @relation("StockBatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  orderLines  OrderItemBatch[]
+  losses      StockLoss[]
+  returns     StockReturn[]
+
+  @@index([inventoryId])
+  @@index([ownerId, storeId])
+}
+
+// Stage 4 — recording damaged/expired/stolen/spilled stock against a
+// specific batch (the owner records this from that batch's own detail
+// screen, so there's no FIFO to resolve — it always targets the exact
+// batch shown). Decrements that batch's remainingQty and the product's
+// Inventory.quantity together, in the same transaction, the same way a
+// sale does.
+model StockLoss {
+  id           Int      @id @default(autoincrement())
+  inventoryId  Int
+  stockBatchId Int
+  ownerId      Int
+  storeId      Int?
+
+  quantity     Int
+  reason       String   // "Damaged" | "Expired" | "Theft" | "Spillage" | "Other"
+  note         String?
+
+  createdAt    DateTime @default(now())
+  // Nullable + SetNull — same convention as StockBatch.createdById.
+  recordedById Int?
+
+  inventory  Inventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  stockBatch StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
+  owner      User       @relation("StockLossOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store      Store?     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recordedBy User?      @relation("StockLossRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([inventoryId])
+  @@index([stockBatchId])
+  @@index([ownerId, storeId])
+}
+
+// Stage 4 — sending unsold stock from a batch back to the supplier
+// (short-dated stock, a bad delivery, etc). Same mechanics as StockLoss:
+// targets one specific batch directly, decrements remainingQty and
+// Inventory.quantity together. refundAmount is optional/informational —
+// it doesn't move any money in the app, just records what the supplier
+// credited back, if anything.
+model StockReturn {
+  id           Int      @id @default(autoincrement())
+  inventoryId  Int
+  stockBatchId Int
+  ownerId      Int
+  storeId      Int?
+
+  quantity     Int
+  supplierName String?
+  reason       String?
+  refundAmount Decimal?
+  note         String?
+
+  createdAt    DateTime @default(now())
+  recordedById Int?
+
+  inventory  Inventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  stockBatch StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
+  owner      User       @relation("StockReturnOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store      Store?     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recordedBy User?      @relation("StockReturnRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([inventoryId])
+  @@index([stockBatchId])
+  @@index([ownerId, storeId])
 }
 
 model Order {
@@ -389,9 +527,38 @@ model OrderItem {
   discountReason String?
   inventory     Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  batchLines    OrderItemBatch[]
 
   @@index([orderId])
   @@index([inventoryId])
+}
+
+// Records which StockBatch(es) an OrderItem's sale actually drew stock
+// from — a single sale can span more than one batch (e.g. the oldest
+// batch only has 5 left but the sale is for 12, so it draws 5 from batch
+// A and 7 from batch B). This is what lets a batch's own "Sales" and
+// "Customers" tabs show only the orders that came out of that specific
+// batch, instead of every sale of the product.
+//
+// Deliberately best-effort: a sale is validated and allowed against
+// Inventory.quantity (the authoritative total) regardless of whether
+// batch bookkeeping can fully account for it — e.g. a pre-batch-tracking
+// item that hasn't been through the backfill script yet. If FIFO
+// consumption runs out of batches before the sale quantity is covered,
+// the sale still goes through; only the coverable portion gets a
+// OrderItemBatch row, and the shortfall is simply unattributed to a
+// batch rather than blocking the sale.
+model OrderItemBatch {
+  id          Int @id @default(autoincrement())
+  orderItemId Int
+  stockBatchId Int
+  quantity    Int // how much of the OrderItem's sale came from this batch
+
+  orderItem  OrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  stockBatch StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
+
+  @@index([orderItemId])
+  @@index([stockBatchId])
 }
 
 // A per-store customer profile — the thing the owner's Customers page ranks

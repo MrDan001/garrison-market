@@ -52,6 +52,9 @@ model ScaleInventory {
   reportItems      ScaleReportItem[]
   consignmentItems ScaleConsignmentItem[]
   wastageEntries   ScaleWastage[]
+  stockBatches     ScaleStockBatch[]
+  stockLosses      ScaleStockLoss[]
+  stockReturns     ScaleStockReturn[]
 
   @@index([ownerId, storeId])
   @@index([storeId])
@@ -82,6 +85,7 @@ model ScaleOrderItem {
 
   order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  batchLines       ScaleOrderItemBatch[]
 
   @@index([orderId])
   @@index([scaleInventoryId])
@@ -122,6 +126,13 @@ model ScaleConsignmentItem {
   consignment      Consignment    @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
   scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
   wastageEntries   ScaleWastage[]
+  // Stage 6 (batch tracking): which ScaleStockBatch(es) this sign-out's
+  // stock actually came from, allocated FIFO at sign-out time. Individual
+  // staff sales against this consignment item later draw down these
+  // allocations (oldest first) rather than re-querying the master batch
+  // pool, since the stock already left the pool the moment it was signed
+  // out — see consumeConsignmentItemBatchesFifo in stock-batch.helpers.ts.
+  batchAllocations ScaleConsignmentItemBatch[]
 
   @@index([consignmentId])
   @@index([scaleInventoryId])
@@ -168,4 +179,132 @@ model ScaleWastage {
   @@index([storeId, status])
   @@index([storeId, createdAt])
   @@index([staffId])
+}
+
+// ============================================================================
+// SCALE BATCH TRACKING — mirrors StockBatch/OrderItemBatch/StockLoss/
+// StockReturn in base.prisma exactly, for ScaleInventory products. The only
+// structural difference is quantity fields are Decimal here (weight/volume)
+// instead of Int, matching ScaleInventory.quantity itself. Deliberately
+// separate from ScaleWastage above — that's the staff-submitted, owner-
+// approved wastage-during-consignment workflow; this is the owner's own
+// batch-level restock/loss/return system, same as standard inventory's.
+// ============================================================================
+
+model ScaleStockBatch {
+  id                 Int       @id @default(autoincrement())
+  scaleInventoryId   Int
+  ownerId            Int
+  storeId            Int?
+
+  originalQty        Decimal   // immutable — the amount added in this restock, in base unit
+  remainingQty       Decimal   // decremented by sale/loss/return consumption
+
+  costPrice          Decimal?  // this batch's cost per base unit, snapshotted at add time
+  sellingPriceAtTime Decimal   // this batch's selling price per base unit, snapshotted at add time
+
+  expiryDate         DateTime?
+  paymentMethod      String?   // "cash" | "transfer"
+
+  addedAt            DateTime  @default(now())
+  createdById        Int?
+
+  scaleInventory ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  owner          User           @relation("ScaleStockBatchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store          Store?         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy      User?          @relation("ScaleStockBatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  orderLines     ScaleOrderItemBatch[]
+  losses         ScaleStockLoss[]
+  returns        ScaleStockReturn[]
+  consignmentAllocations ScaleConsignmentItemBatch[]
+
+  @@index([scaleInventoryId])
+  @@index([ownerId, storeId])
+}
+
+// Stage 6 — the allocation record created when ownerSignOutScaleToStaffAction
+// signs stock out to a staff member: FIFO-consumes the master ScaleStockBatch
+// pool for the signed-out quantity and remembers the breakdown here, so a
+// later individual sale against that ScaleConsignmentItem can attribute
+// itself back to the correct originating batch(es) — see
+// consumeConsignmentItemBatchesFifo in stock-batch.helpers.ts. remainingQty
+// decrements as sales draw against this allocation; quantity is the
+// original, immutable amount allocated from this batch.
+model ScaleConsignmentItemBatch {
+  id                Int     @id @default(autoincrement())
+  consignmentItemId Int
+  scaleStockBatchId Int
+  quantity          Decimal
+  remainingQty      Decimal
+
+  consignmentItem ScaleConsignmentItem @relation(fields: [consignmentItemId], references: [id], onDelete: Cascade)
+  scaleStockBatch ScaleStockBatch      @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
+
+  @@index([consignmentItemId])
+  @@index([scaleStockBatchId])
+}
+
+model ScaleOrderItemBatch {
+  id                Int     @id @default(autoincrement())
+  scaleOrderItemId  Int
+  scaleStockBatchId Int
+  quantity          Decimal // how much of this sale (in base unit) came from this batch
+
+  scaleOrderItem  ScaleOrderItem  @relation(fields: [scaleOrderItemId], references: [id], onDelete: Cascade)
+  scaleStockBatch ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
+
+  @@index([scaleOrderItemId])
+  @@index([scaleStockBatchId])
+}
+
+model ScaleStockLoss {
+  id                Int      @id @default(autoincrement())
+  scaleInventoryId  Int
+  scaleStockBatchId Int
+  ownerId           Int
+  storeId           Int?
+
+  quantity Decimal // base unit
+  reason   String  // "Damaged" | "Expired" | "Theft" | "Spillage" | "Other"
+  note     String?
+
+  createdAt    DateTime @default(now())
+  recordedById Int?
+
+  scaleInventory  ScaleInventory  @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  scaleStockBatch ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
+  owner           User            @relation("ScaleStockLossOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store           Store?          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recordedBy      User?           @relation("ScaleStockLossRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([scaleInventoryId])
+  @@index([scaleStockBatchId])
+  @@index([ownerId, storeId])
+}
+
+model ScaleStockReturn {
+  id                Int      @id @default(autoincrement())
+  scaleInventoryId  Int
+  scaleStockBatchId Int
+  ownerId           Int
+  storeId           Int?
+
+  quantity     Decimal // base unit
+  supplierName String?
+  reason       String?
+  refundAmount Decimal?
+  note         String?
+
+  createdAt    DateTime @default(now())
+  recordedById Int?
+
+  scaleInventory  ScaleInventory  @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  scaleStockBatch ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
+  owner           User            @relation("ScaleStockReturnOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store           Store?          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recordedBy      User?           @relation("ScaleStockReturnRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([scaleInventoryId])
+  @@index([scaleStockBatchId])
+  @@index([ownerId, storeId])
 }

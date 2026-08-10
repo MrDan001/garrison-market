@@ -11,6 +11,7 @@ import { getActiveStore } from "./store-context";
 import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
 import { convertToBaseUnit } from "./scale-units";
 import { awardXp } from "./rush.actions";
+import { consumeScaleStockBatchesFifo } from "./stock-batch.helpers";
 
 // ============================================================================
 // Unit conversion — see lib/scale-units.ts. A ScaleInventory product is
@@ -118,6 +119,25 @@ export async function addScaleItemAction(
     },
   });
 
+  // Same as standard inventory's addItemAction — a brand-new product's
+  // starting quantity is its first batch, so the item is batch-tracked
+  // from day one rather than only from its first restock onward.
+  if (quantity > 0) {
+    await prisma.scaleStockBatch.create({
+      data: {
+        scaleInventoryId: newItem.id,
+        ownerId: session.id,
+        storeId: activeStore.id,
+        originalQty: quantity,
+        remainingQty: quantity,
+        costPrice: isNaN(costPrice) ? null : costPrice,
+        sellingPriceAtTime: price,
+        expiryDate,
+        createdById: session.id,
+      },
+    });
+  }
+
   await createNotification({
     ownerId: session.id,
     recipientId: null,
@@ -140,6 +160,80 @@ export async function addScaleItemAction(
       link: "/staff/inventory",
     });
   }
+
+  revalidatePath("/owner/inventory");
+  return { success: true };
+}
+
+// Restocking an existing scale product — mirrors business.actions.ts'
+// addStockToInventoryAction exactly, just Decimal-quantity and unit-aware.
+export async function addStockToScaleInventoryAction(
+  formData: FormData
+): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") throw new Error("Unauthorized");
+
+  try {
+    await assertSubscriptionActive(session.id);
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Your trial or subscription has ended." };
+  }
+
+  const scaleInventoryId = parseInt(formData.get("scaleInventoryId") as string, 10);
+  const quantity = parseFloat(formData.get("quantity") as string);
+  if (isNaN(scaleInventoryId) || isNaN(quantity) || quantity <= 0) {
+    return { success: false, error: "Enter a valid quantity to add." };
+  }
+
+  const item = await prisma.scaleInventory.findFirst({
+    where: { id: scaleInventoryId, ownerId: session.id },
+  });
+  if (!item) return { success: false, error: "Product not found." };
+
+  const costPriceRaw = formData.get("costPrice") as string;
+  const costPrice = costPriceRaw ? parseFloat(costPriceRaw) : null;
+
+  const sellingPriceRaw = formData.get("sellingPrice") as string;
+  const sellingPrice = sellingPriceRaw ? parseFloat(sellingPriceRaw) : Number(item.price);
+
+  const expiryDateRaw = formData.get("expiryDate") as string;
+  const expiryDate = expiryDateRaw ? new Date(expiryDateRaw) : null;
+
+  const paymentMethod = (formData.get("paymentMethod") as string) || null;
+
+  const [, updatedItem] = await prisma.$transaction([
+    prisma.scaleStockBatch.create({
+      data: {
+        scaleInventoryId: item.id,
+        ownerId: session.id,
+        storeId: item.storeId ?? undefined,
+        originalQty: quantity,
+        remainingQty: quantity,
+        costPrice: costPrice != null && !isNaN(costPrice) ? costPrice : undefined,
+        sellingPriceAtTime: sellingPrice,
+        expiryDate,
+        paymentMethod,
+        createdById: session.id,
+      },
+    }),
+    prisma.scaleInventory.update({
+      where: { id: item.id },
+      data: {
+        quantity: { increment: quantity },
+        ...(sellingPriceRaw ? { price: sellingPrice } : {}),
+        ...(costPrice != null && !isNaN(costPrice) ? { costPrice } : {}),
+      },
+    }),
+  ]);
+
+  await createNotification({
+    ownerId: session.id,
+    recipientId: null,
+    storeId: item.storeId ?? null,
+    type: "restock",
+    message: `${updatedItem.name} was restocked (+${quantity}${updatedItem.unit}, ${Number(updatedItem.quantity)}${updatedItem.unit} now available).`,
+    link: "/staff/inventory",
+  });
 
   revalidatePath("/owner/inventory");
   return { success: true };
@@ -457,28 +551,51 @@ export async function processScaleSaleAction(
         staffId: session.id,
         storeId: saleStoreId,
         customerId,
-        scaleItems: {
-          create: resolved.map(({ item, baseQty, inventory }) => ({
-            scaleInventoryId: item.id,
-            quantity: item.enteredQty,
-            unit: item.enteredUnit,
-            quantityInBaseUnit: baseQty,
-            // ✅ FIXED: priceAtTime now strictly stores the unit price per base unit, 
-            // matching standard inventory behavior. Total calculation happens in memory 
-            // or via dedicated fields where needed.
-            priceAtTime: item.price,
-            ...(item.discountValue
-              ? {
-                  originalPrice: item.originalPrice ?? item.price,
-                  discountValue: item.discountValue,
-                  discountType: item.discountType ?? null,
-                  discountReason: item.discountReason ?? null,
-                }
-              : {}),
-          })),
-        },
       },
     });
+
+    // Created individually (rather than the nested scaleItems: { create:
+    // [...] } shorthand used before) so we have each ScaleOrderItem's own
+    // id in hand to link it to the ScaleStockBatch(es) it drew from below
+    // — same restructuring as processSaleAction in business.actions.ts.
+    for (const { item, baseQty, inventory } of resolved) {
+      const orderItem = await tx.scaleOrderItem.create({
+        data: {
+          orderId: order.id,
+          scaleInventoryId: item.id,
+          quantity: item.enteredQty,
+          unit: item.enteredUnit,
+          quantityInBaseUnit: baseQty,
+          // ✅ FIXED: priceAtTime now strictly stores the unit price per base unit, 
+          // matching standard inventory behavior. Total calculation happens in memory 
+          // or via dedicated fields where needed.
+          priceAtTime: item.price,
+          ...(item.discountValue
+            ? {
+                originalPrice: item.originalPrice ?? item.price,
+                discountValue: item.discountValue,
+                discountType: item.discountType ?? null,
+                discountReason: item.discountReason ?? null,
+              }
+            : {}),
+        },
+      });
+
+      // FIFO batch attribution — best-effort, never blocks the sale (see
+      // consumeScaleStockBatchesFifo). ScaleInventory.quantity is what
+      // actually gates whether the sale can happen; this is purely for
+      // batch-level Sales/Customers/Activity attribution.
+      const consumed = await consumeScaleStockBatchesFifo(tx, item.id, baseQty);
+      if (consumed.length > 0) {
+        await tx.scaleOrderItemBatch.createMany({
+          data: consumed.map((c) => ({
+            scaleOrderItemId: orderItem.id,
+            scaleStockBatchId: c.stockBatchId,
+            quantity: c.quantity,
+          })),
+        });
+      }
+    }
 
     if (isPartial) {
       const debt = await tx.debt.create({

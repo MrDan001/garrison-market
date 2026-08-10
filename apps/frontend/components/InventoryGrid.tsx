@@ -256,7 +256,7 @@ export default function InventoryGrid({ items, categories = [] }: { items: Inven
           return (
             <Link
               key={item.id}
-              href={`/owner/inventory/${item.id}/edit`}
+              href={`/owner/inventory/${item.id}`}
               className="bg-[var(--bg-surface)] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 transition-all flex flex-col relative group"
             >
               <div className="aspect-square bg-slate-50 dark:bg-slate-950 relative overflow-hidden">

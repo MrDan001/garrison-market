@@ -12,6 +12,11 @@ import { assertSubscriptionActive, hasFeatureAccess } from "./subscription-guard
 import { sendConsignmentSettlementEmail } from "./email";
 import { convertToBaseUnit } from "./scale-units";
 import { awardXp } from "./rush.actions";
+import {
+  consumeStockBatchesFifo,
+  consumeScaleStockBatchesFifo,
+  consumeConsignmentItemBatchesFifo,
+} from "./stock-batch.helpers";
 
 type SignOutItem = { inventoryId: number; quantityOut: number };
 type SignOutScaleItem = { scaleInventoryId: number; enteredQty: number; enteredUnit: string };
@@ -834,16 +839,32 @@ export async function ownerSignOutScaleToStaffAction(params: {
       }
     }
 
+    // Batch attribution (Stage 6): FIFO-consume the master ScaleStockBatch
+    // pool for each item being signed out, so batch Sales/Customers/
+    // Activity tabs stay accurate once staff actually sell this stock.
+    // Best-effort — see consumeScaleStockBatchesFifo — never blocks the
+    // sign-out itself even if a product has no batches yet.
+    const batchConsumptionByItemId = new Map<number, { stockBatchId: number; quantity: number }[]>();
+    for (const { item, baseQty } of resolved) {
+      const consumed = await consumeScaleStockBatchesFifo(tx, item.scaleInventoryId, baseQty);
+      batchConsumptionByItemId.set(item.scaleInventoryId, consumed);
+    }
+
+    const consignmentItemIdByInventoryId = new Map<number, number>();
+    let resultConsignment: any;
+
     if (existing) {
       for (const { item, baseQty, inv } of resolved) {
         const existingLine = existing.scaleItems.find((si) => si.scaleInventoryId === item.scaleInventoryId);
+        let consignmentItemId: number;
         if (existingLine) {
           await tx.scaleConsignmentItem.update({
             where: { id: existingLine.id },
             data: { quantityOut: { increment: baseQty } },
           });
+          consignmentItemId = existingLine.id;
         } else {
-          await tx.scaleConsignmentItem.create({
+          const created = await tx.scaleConsignmentItem.create({
             data: {
               consignmentId: existing.id,
               scaleInventoryId: item.scaleInventoryId,
@@ -852,30 +873,60 @@ export async function ownerSignOutScaleToStaffAction(params: {
               priceAtTime: inv.price,
             },
           });
+          consignmentItemId = created.id;
         }
+        consignmentItemIdByInventoryId.set(item.scaleInventoryId, consignmentItemId);
       }
-      return existing;
-    }
+      resultConsignment = existing;
+    } else {
+      const created = await tx.consignment.create({
+        data: {
+          ownerId: session.id,
+          staffId: isAllStaff ? null : staff!.id,
+          storeId: activeStore.id,
+          recipientName: isAllStaff ? "All Staff" : staff!.fullName || "Staff",
+          recipientPhone: isAllStaff ? "" : staff!.phoneNumber || "",
+          recipientNote: isAllStaff ? "Daily scale consignment sign-out (shared)" : "Daily scale consignment sign-out",
+          status: "out",
+        },
+      });
 
-    return tx.consignment.create({
-      data: {
-        ownerId: session.id,
-        staffId: isAllStaff ? null : staff!.id,
-        storeId: activeStore.id,
-        recipientName: isAllStaff ? "All Staff" : staff!.fullName || "Staff",
-        recipientPhone: isAllStaff ? "" : staff!.phoneNumber || "",
-        recipientNote: isAllStaff ? "Daily scale consignment sign-out (shared)" : "Daily scale consignment sign-out",
-        status: "out",
-        scaleItems: {
-          create: resolved.map(({ item, baseQty, inv }) => ({
+      // Created individually (rather than the nested scaleItems: { create:
+      // [...] } shorthand used before) so we have each ScaleConsignmentItem's
+      // own id in hand to attach its batch allocation below.
+      for (const { item, baseQty, inv } of resolved) {
+        const createdItem = await tx.scaleConsignmentItem.create({
+          data: {
+            consignmentId: created.id,
             scaleInventoryId: item.scaleInventoryId,
             quantityOut: baseQty,
             unit: inv.unit,
             priceAtTime: inv.price,
+          },
+        });
+        consignmentItemIdByInventoryId.set(item.scaleInventoryId, createdItem.id);
+      }
+      resultConsignment = created;
+    }
+
+    // Write the batch allocation now that every ScaleConsignmentItem has a
+    // real id, whichever branch created/updated it.
+    for (const { item } of resolved) {
+      const consignmentItemId = consignmentItemIdByInventoryId.get(item.scaleInventoryId);
+      const consumed = batchConsumptionByItemId.get(item.scaleInventoryId) ?? [];
+      if (consignmentItemId && consumed.length > 0) {
+        await tx.scaleConsignmentItemBatch.createMany({
+          data: consumed.map((c) => ({
+            consignmentItemId,
+            scaleStockBatchId: c.stockBatchId,
+            quantity: c.quantity,
+            remainingQty: c.quantity,
           })),
-        },
-      },
-    });
+        });
+      }
+    }
+
+    return resultConsignment;
   });
 
   await createNotification({
@@ -992,7 +1043,7 @@ export async function sellFromScaleConsignmentAction(
       customerId = customer.id;
     }
 
-    await tx.order.create({
+    const order = await tx.order.create({
       data: {
         total,
         paymentMethod,
@@ -1002,17 +1053,40 @@ export async function sellFromScaleConsignmentAction(
         staffId: session.id,
         storeId: saleStoreId,
         customerId,
-        scaleItems: {
-          create: resolved.map(({ cart, baseQty, row }) => ({
-            scaleInventoryId: row.scaleInventoryId,
-            quantity: cart.enteredQty,
-            unit: cart.enteredUnit,
-            quantityInBaseUnit: baseQty,
-            priceAtTime: cart.price * baseQty,
-          })),
-        },
       },
     });
+
+    // Created individually (rather than the nested scaleItems: { create:
+    // [...] } shorthand used before) so we have each ScaleOrderItem's own
+    // id in hand to link it to the batch(es) it drew from below — same
+    // restructuring as processScaleSaleAction and processSaleAction.
+    for (const { cart, baseQty, row } of resolved) {
+      const orderItem = await tx.scaleOrderItem.create({
+        data: {
+          scaleInventoryId: row.scaleInventoryId,
+          orderId: order.id,
+          quantity: cart.enteredQty,
+          unit: cart.enteredUnit,
+          quantityInBaseUnit: baseQty,
+          priceAtTime: cart.price * baseQty,
+        },
+      });
+
+      // Batch attribution (Stage 6): draw down THIS consignment item's own
+      // batch allocation (recorded at sign-out time), not the master
+      // ScaleStockBatch pool directly — the stock already left the pool
+      // when it was signed out. Best-effort, never blocks the sale.
+      const consumed = await consumeConsignmentItemBatchesFifo(tx, row.id, baseQty);
+      if (consumed.length > 0) {
+        await tx.scaleOrderItemBatch.createMany({
+          data: consumed.map((c) => ({
+            scaleOrderItemId: orderItem.id,
+            scaleStockBatchId: c.stockBatchId,
+            quantity: c.quantity,
+          })),
+        });
+      }
+    }
 
     for (const { baseQty, row } of resolved) {
       // Re-check remaining stock atomically inside the transaction via an
@@ -1217,40 +1291,77 @@ export async function processMergedSaleAction(
         staffId: session.id,
         storeId: saleStoreId,
         customerId,
-        items: {
-          create: resolvedList.map(({ cart }) => ({
-            inventoryId: cart.id,
-            quantity: cart.qty,
-            priceAtTime: cart.price,
-            ...(cart.discountValue
-              ? {
-                  originalPrice: cart.originalPrice,
-                  discountValue: cart.discountValue,
-                  discountType: cart.discountType ?? null,
-                  discountReason: cart.discountReason ?? null,
-                }
-              : {}),
-          })),
-        },
-        scaleItems: {
-          create: resolvedScale.map(({ cart, baseQty, row }) => ({
-            scaleInventoryId: row.scaleInventoryId,
-            quantity: cart.enteredQty,
-            unit: cart.enteredUnit,
-            quantityInBaseUnit: baseQty,
-            priceAtTime: cart.price * baseQty,
-            ...(cart.discountValue
-              ? {
-                  originalPrice: (cart.originalPrice ?? cart.price) * baseQty,
-                  discountValue: cart.discountValue,
-                  discountType: cart.discountType ?? null,
-                  discountReason: cart.discountReason ?? null,
-                }
-              : {}),
-          })),
-        },
       },
     });
+
+    // Both sides created individually (rather than the nested items/
+    // scaleItems: { create: [...] } shorthand used before) so we have each
+    // line's own id in hand to link it to the batch(es) it drew from below
+    // — same restructuring as processSaleAction, processScaleSaleAction,
+    // and sellFromScaleConsignmentAction.
+    for (const { cart, row } of resolvedList) {
+      const orderItem = await tx.orderItem.create({
+        data: {
+          orderId: order.id,
+          inventoryId: cart.id,
+          quantity: cart.qty,
+          priceAtTime: cart.price,
+          ...(cart.discountValue
+            ? {
+                originalPrice: cart.originalPrice,
+                discountValue: cart.discountValue,
+                discountType: cart.discountType ?? null,
+                discountReason: cart.discountReason ?? null,
+              }
+            : {}),
+        },
+      });
+
+      const consumed = await consumeStockBatchesFifo(tx, cart.id, cart.qty);
+      if (consumed.length > 0) {
+        await tx.orderItemBatch.createMany({
+          data: consumed.map((c) => ({
+            orderItemId: orderItem.id,
+            stockBatchId: c.stockBatchId,
+            quantity: c.quantity,
+          })),
+        });
+      }
+    }
+
+    for (const { cart, baseQty, row } of resolvedScale) {
+      const scaleOrderItem = await tx.scaleOrderItem.create({
+        data: {
+          orderId: order.id,
+          scaleInventoryId: row.scaleInventoryId,
+          quantity: cart.enteredQty,
+          unit: cart.enteredUnit,
+          quantityInBaseUnit: baseQty,
+          priceAtTime: cart.price * baseQty,
+          ...(cart.discountValue
+            ? {
+                originalPrice: (cart.originalPrice ?? cart.price) * baseQty,
+                discountValue: cart.discountValue,
+                discountType: cart.discountType ?? null,
+                discountReason: cart.discountReason ?? null,
+              }
+            : {}),
+        },
+      });
+
+      // Same as sellFromScaleConsignmentAction — draws down THIS
+      // consignment item's own batch allocation, not the master pool.
+      const consumed = await consumeConsignmentItemBatchesFifo(tx, row.id, baseQty);
+      if (consumed.length > 0) {
+        await tx.scaleOrderItemBatch.createMany({
+          data: consumed.map((c) => ({
+            scaleOrderItemId: scaleOrderItem.id,
+            scaleStockBatchId: c.stockBatchId,
+            quantity: c.quantity,
+          })),
+        });
+      }
+    }
 
     if (isPartial) {
       const debt = await tx.debt.create({
