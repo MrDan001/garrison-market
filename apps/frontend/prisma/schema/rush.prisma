@@ -1,0 +1,88 @@
+// FILE: apps/frontend/prisma/schema/rush.prisma (UPDATED — Stage 5 adds RewardSpin + its back-relation on RushProfile. Everything else unchanged from Stage 3.)
+
+model RushProfile {
+  id       Int @id @default(autoincrement())
+
+  userId   Int
+  storeId  Int
+
+  level        Int      @default(1)
+  totalXp      Int      @default(0)
+  xpIntoLevel  Int      @default(0)
+
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  lastActiveDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  xpEvents       XpEvent[]
+  questProgress  QuestProgress[]
+  rewardSpins    RewardSpin[]
+
+  @@unique([userId, storeId])
+  @@index([storeId])
+  @@index([userId])
+}
+
+model XpEvent {
+  id     Int @id @default(autoincrement())
+
+  rushProfileId Int
+  rushProfile   RushProfile @relation(fields: [rushProfileId], references: [id], onDelete: Cascade)
+
+  type   String
+  amount Int
+
+  meta   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([rushProfileId, createdAt])
+  @@index([type])
+}
+
+model QuestProgress {
+  id     Int @id @default(autoincrement())
+
+  rushProfileId Int
+  rushProfile   RushProfile @relation(fields: [rushProfileId], references: [id], onDelete: Cascade)
+
+  type      String
+  questDate DateTime
+
+  progress  Int     @default(0)
+  target    Int     @default(5)
+  completed Boolean @default(false)
+  completedAt DateTime?
+
+  verifiedInventoryIds Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([rushProfileId, type, questDate])
+  @@index([rushProfileId])
+}
+
+// Stage 5 addition — one row per (profile, calendar day). A spin becomes
+// claimable once that day's quest is completed (checked in application
+// code, not here) and stays claimed permanently once used, so the same
+// day can never be spun twice.
+model RewardSpin {
+  id Int @id @default(autoincrement())
+
+  rushProfileId Int
+  rushProfile   RushProfile @relation(fields: [rushProfileId], references: [id], onDelete: Cascade)
+
+  spinDate   DateTime // local calendar day this spin belongs to
+  claimed    Boolean  @default(false)
+  prizeLabel String?
+  claimedAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([rushProfileId, spinDate])
+  @@index([rushProfileId])
+}

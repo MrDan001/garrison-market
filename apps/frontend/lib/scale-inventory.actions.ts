@@ -10,6 +10,7 @@ import { resolveOrCreateCustomer } from "./customer.actions";
 import { getActiveStore } from "./store-context";
 import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
 import { convertToBaseUnit } from "./scale-units";
+import { awardXp } from "./rush.actions";
 
 // ============================================================================
 // Unit conversion — see lib/scale-units.ts. A ScaleInventory product is
@@ -562,6 +563,10 @@ export async function processScaleSaleAction(
       });
     }
   }
+
+  // Rush XP — fire-and-forget, never allowed to affect the real sale.
+  // awardXp() already catches its own errors internally.
+  await awardXp(session.id, saleStoreId, "SALE_COMPLETED", { orderId: createdOrder.id });
 
   revalidatePath("/staff/inventory");
   revalidatePath("/owner/inventory");

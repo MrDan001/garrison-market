@@ -11,6 +11,7 @@ import { getActiveStoreId, getActiveStore } from "./store-context";
 import { assertSubscriptionActive, hasFeatureAccess } from "./subscription-guard";
 import { sendConsignmentSettlementEmail } from "./email";
 import { convertToBaseUnit } from "./scale-units";
+import { awardXp } from "./rush.actions";
 
 type SignOutItem = { inventoryId: number; quantityOut: number };
 type SignOutScaleItem = { scaleInventoryId: number; enteredQty: number; enteredUnit: string };
@@ -296,6 +297,12 @@ export async function settleConsignment(
       }
     }
   });
+
+  // Rush XP — settling a consignment is the closest thing this app has to
+  // "closing out" a shift's stock, and the sold+returned=out validation
+  // above already guarantees it balances. Fire-and-forget; awardXp()
+  // catches its own errors and can never block the real settlement.
+  await awardXp(session.id, consignment.storeId!, "REGISTER_CLEAN", { consignmentId });
 
   // Same broadcast bug as the other notifications above: recipientId: null
   // meant the staff member who just settled this (and every other staff
@@ -623,6 +630,9 @@ export async function settleScaleConsignment(
       }
     }
   });
+
+  // Rush XP — same reasoning as the standard settleConsignment above.
+  await awardXp(session.id, consignment.storeId!, "REGISTER_CLEAN", { consignmentId });
 
   // Same broadcast bug as the other notifications above: recipientId: null
   // meant the staff member who just settled this (and every other staff

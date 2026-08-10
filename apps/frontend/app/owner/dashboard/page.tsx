@@ -1,3 +1,10 @@
+// FILE: apps/frontend/app/owner/dashboard/page.tsx (UPDATED)
+//
+// Only two lines changed from the original: the RushCard import, and one
+// <RushCard role="owner" /> render placed after the stat cards grid.
+// Everything else — queries, activity feed, quick access panel, mobile
+// nav — is untouched.
+
 import { LayoutDashboard, Package, ShoppingCart, Settings, Activity, LogOut, TrendingUp, Store, Plus, Banknote } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -8,6 +15,7 @@ import { TrialBanner, PremiumFeatureLock } from "@/components/TrialBanner";
 import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
 import { getActiveStoreId } from "@/lib/store-context";
+import RushCard from "@/components/RushCard";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -313,6 +321,12 @@ export default async function OwnerDashboardPage() {
             <StatCard title="Active Products" value={totalProducts.toString()} sub="In inventory" icon={<Package size={17} />} accent="violet" />
             <StatCard title="90-Day Revenue" value={`₦${totalSales.toLocaleString()}`} sub="Last 90 days gross" icon={<ShoppingCart size={17} />} accent="blue" />
           </div>
+
+          {/* Rush entry point — sits as one more card in the stack, styled
+              deliberately outside the app's normal palette so it reads as
+              a doorway rather than another utility widget. Renders nothing
+              if Rush data can't be resolved. */}
+          <RushCard role="owner" />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">

@@ -200,7 +200,12 @@ export async function runDevAssistantScreenshot(threadId: number, messageId: num
   }
   files = await mergeWithProjectFiles(session.id, files);
 
-  const outcome = await captureAppScreenshot(files);
+  let outcome;
+  try {
+    outcome = await captureAppScreenshot(files);
+  } catch (error: any) {
+    outcome = { success: false as const, log: `Screenshot sandbox error: ${error?.message ?? error}\n` };
+  }
 
   let summary: string;
   if (outcome.success) {

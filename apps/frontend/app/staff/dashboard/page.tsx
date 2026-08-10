@@ -1,3 +1,11 @@
+// FILE: apps/frontend/app/staff/dashboard/page.tsx (UPDATED)
+//
+// Only two lines changed from the original: the RushCard import, and one
+// <RushCard role="staff" /> render placed after the 2-stat grid, before
+// Quick Actions. Everything else is untouched, including the locked-out
+// billing screen (which intentionally does NOT get a RushCard — no game
+// access while the store itself is locked).
+
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
@@ -14,6 +22,7 @@ import { TrialBanner } from "@/components/TrialBanner";
 // an owner is still trialing, causing staff to see the wrong day count.
 import { getBillingStatus } from "@/lib/subscription-guard";
 import { getActiveStore } from "@/lib/store-context";
+import RushCard from "@/components/RushCard";
 
 type ActivityItem =
   | { type: "sale"; id: string; date: Date; amount: number }
@@ -272,6 +281,15 @@ export default async function StaffDashboard() {
                 <p className="text-xl font-bold text-[var(--text-primary)]">{todayOrders}</p>
               </div>
             </div>
+          </div>
+
+          {/* Rush entry point — sits between the stat grid and Quick
+              Actions, styled deliberately outside the app's normal
+              palette so it reads as a doorway rather than another
+              utility widget. Renders nothing if Rush data can't be
+              resolved. */}
+          <div className="px-5 mb-6">
+            <RushCard role="staff" />
           </div>
 
           <div className="px-5 mb-6">

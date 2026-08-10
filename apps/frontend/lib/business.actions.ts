@@ -11,6 +11,7 @@ import { createNotification } from "./notification.actions";
 import { resolveOrCreateCustomer } from "./customer.actions";
 import { getActiveStoreId } from "./store-context";
 import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
+import { awardXp } from "./rush.actions";
 
 // Deep sterilization helper to turn Decimals and Dates into safe primitives
 function serializeData<T>(data: T): T {
@@ -843,6 +844,12 @@ export async function processSaleAction(
     }
   }
 
+  // Rush XP — fire-and-forget, never allowed to affect the real sale.
+  // awardXp() already catches its own errors internally.
+  if (!saleStoreId) {
+    throw new Error("saleStoreId is required");
+  }
+  await awardXp(session.id, saleStoreId, "SALE_COMPLETED", { orderId: createdOrder.id });
   revalidatePath("/staff/inventory");
   revalidatePath("/owner/dashboard");
   revalidatePath("/owner/customers");
