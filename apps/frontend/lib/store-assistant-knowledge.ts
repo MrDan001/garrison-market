@@ -17,6 +17,16 @@
  * approve/decline workflow in the app is Wastage Requests (see below).
  * Update this note the moment Order Management actually ships.
  *
+ * Rush section (added — Stage 4 of the Rush guide project): mirrors
+ * lib/rush-guide-content.ts, condensed for chat rather than the full
+ * accordion text. If a Rush mechanic changes, update BOTH files — this
+ * one and rush-guide-content.ts — they're meant to stay in agreement
+ * since one backs the in-app "How to Play" guide and the other backs
+ * this assistant. The in-app guide itself is deep-linked from here
+ * ([How to Play](/staff/rush/guide) / [How to Play](/owner/rush/guide))
+ * as the "full detail" fallback for anything this condensed version
+ * doesn't cover.
+ *
  * Used by: lib/store-assistant.actions.ts, which injects the relevant
  * identity + knowledge for the asker's role, plus three kinds of live
  * data built at request time: a staff sales/performance snapshot (owners
@@ -296,6 +306,34 @@ enabled for their store, and whether staff can see wastage
 approve/decline status. Scale Consignment and Merged Cart are NOT in this
 list — see the note under Consignments above.
 
+## Rush — [Rush](/owner/rush)
+The shop's gamification system for staff (and yourself) — XP, levels,
+streaks, daily quests, and a spin-wheel with real, owner-managed prizes.
+Full plain-language walkthrough at [How to Play](/owner/rush/guide); this
+is the condensed version:
+- Staff earn XP from: a sale (+5), verifying a Restock Run item (+10),
+  settling a consignment (+20), finishing all 5 Restock Run items in a day
+  (+30 bonus), and clocking in on time (+15). Levels run 1–10 on a rising
+  XP-threshold curve; streaks reset after a full missed day (6-hour grace
+  past midnight) unless a Streak Shield prize has been won.
+- Shift start time: set on the Rush screen — this is what "on time"
+  clock-ins are measured against for staff XP. Defaults to 8:00 AM until
+  changed.
+- Restock Run: auto-picks 5 of the shop's most-neglected inventory items
+  daily for staff to verify. Sales Sprint shows staff their own sales plus
+  the store-wide target side by side; you see the store-wide number.
+- Reward Spin: unlocks for staff once Restock Run is done, once per day.
+  Manage the entire prize pool yourself at [Manage Prizes](/owner/rush/prizes)
+  — edit or turn off the default cosmetic prizes (XP boost, badge, streak
+  shield), or add your own cash/gift prizes with a custom odds weight.
+- Settlements: cash/gift prizes staff win are NOT paid out automatically —
+  they show as pending until you hand it over and confirm it at
+  [Settlements](/owner/rush/settlements). Staff track their own win
+  history at [My Wins](/staff/rush/wins) (their view, not yours).
+- Leaderboard: top 5 staff by XP in the last 7 days, this store only.
+  Shop health (0–100) reflects stock levels, sales trend vs yesterday, and
+  staff activity, and changes how the storefront visual looks.
+
 ## Support — reachable from the floating chat bubble on any owner page
 Message an individual staff member, message Garrison Market admin
 support directly, or ask this assistant (Ask Me) how-to questions. Admin
@@ -348,6 +386,36 @@ View this staff member's own sales/activity reporting.
 ## Profile — [Profile](/staff/profile) (edit at /staff/profile/edit)
 The staff member's own account details.
 
+## Rush — [Rush](/staff/rush)
+The shop's gamification system — earn XP, level up, keep a daily streak,
+and win spin-wheel prizes for staying active in the store. Full plain-
+language walkthrough at [How to Play](/staff/rush/guide); this is the
+condensed version:
+- Earn XP by: completing a sale (+5), verifying a Restock Run item (+10),
+  settling a consignment (+20), finishing all 5 Restock Run items in a day
+  (+30 bonus), and clocking in on time (+15, see below). There is no XP for
+  simply logging in — don't imply otherwise.
+- Levels: XP accumulates toward a single running total; crossing set
+  thresholds levels you up (Level 10 is currently the max).
+- Streak: any XP-earning action keeps your daily streak alive; missing a
+  full day resets it (there's a 6-hour grace window past midnight). Your
+  longest streak is saved separately and never drops.
+- Clock In / Clock Out: a card on the Rush screen. Clock in at or before
+  the store's shift start time (owner-set) to earn the on-time XP for the
+  day — clocking out just records your shift end, no XP attached.
+- Restock Run: 5 real, neglected inventory items to verify each day.
+- Sales Sprint: two trackers — "Your Sales" (only your own sales count)
+  and "Store Target" (everyone's sales, store-wide).
+- Reward Spin: unlocks once Restock Run is fully done, once per day.
+  Some prizes are cosmetic and apply instantly (XP boost, badge/title,
+  streak shield); the owner can also add real cash or gift prizes — those
+  show as "Pending" until the owner physically settles them and confirms
+  it, trackable at [My Wins](/staff/rush/wins).
+- Leaderboard: top 5 by XP earned in the last 7 days, this store only.
+- Shop health (0–100, shown on the storefront visual) is driven by stock
+  levels, sales trend, and staff activity — it's informational, not
+  something staff directly earn XP from.
+
 ## Getting help — the chat bubble
 Tap the chat bubble (bottom-right) on any staff page for three options:
 - Message the store owner directly — day-to-day questions (a shift, a
@@ -356,16 +424,19 @@ Tap the chat bubble (bottom-right) on any staff page for three options:
   or anything urgent the owner can't resolve.
 `;
 
+
 export const ASK_ME_STARTERS: Record<"owner" | "staff", string[]> = {
   owner: [
     "What are our best-selling products?",
     "Who's my top-selling staff this week?",
     "Which staff member needs the most support right now?",
     "How does this week's sales compare to last week?",
+    "How do I add a cash prize to the Rush spin wheel?",
     "Generate a marketing image for our best-seller",
   ],
   staff: [
     "What are our best-selling products?",
+    "How do I earn XP in Rush?",
     "How do I submit a wastage request?",
     "Where can I see today's invoices?",
     "How do I message my store owner?",

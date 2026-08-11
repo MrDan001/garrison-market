@@ -197,8 +197,50 @@ export type SalesSprintState = {
   isRecordPace: boolean;
 };
 
-// Purely a read over orders that already exist — nothing persisted here.
-// Staff see their own personal total; owners see the whole store's.
+// Shared math, parameterized by an optional extra Prisma where-clause so
+// the store-wide and personal reads below don't duplicate the aggregate
+// logic. Fix B: this replaces the old inline staffScope branch — that
+// branch mixed "which rows to sum" with "who's asking," which meant staff
+// could only ever see their own number and never the store's, even though
+// team context is useful too. Now both reads always exist; callers decide
+// which one(s) to show.
+async function computeSalesSprint(storeId: number, extraWhere: Record<string, unknown>): Promise<SalesSprintState> {
+  const todayStart = startOfToday();
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+  const [todayAgg, yesterdayAgg] = await Promise.all([
+    prisma.order.aggregate({
+      where: { storeId, date: { gte: todayStart }, ...extraWhere },
+      _sum: { total: true },
+    }),
+    prisma.order.aggregate({
+      where: { storeId, date: { gte: yesterdayStart, lt: todayStart }, ...extraWhere },
+      _sum: { total: true },
+    }),
+  ]);
+
+  const todayTotal = Number(todayAgg._sum.total ?? 0);
+  const yesterdayTotal = Number(yesterdayAgg._sum.total ?? 0);
+  // On a store's first day (or a quiet yesterday), fall back to a small
+  // default target so the bar has something meaningful to race toward
+  // instead of instantly reading "100%" the moment any sale happens.
+  const target = yesterdayTotal > 0 ? yesterdayTotal : 10000;
+
+  return {
+    todayTotal,
+    yesterdayTotal,
+    target,
+    percent: Math.min(100, Math.round((todayTotal / target) * 100)),
+    isRecordPace: yesterdayTotal > 0 && todayTotal > yesterdayTotal,
+  };
+}
+
+// Store-wide — every sale in the store, regardless of who made it. This is
+// the "general one that counts as store target": unchanged behavior for
+// owners, and now also shown to staff alongside their personal number
+// (see getPersonalSalesSprintState below) rather than being hidden from
+// them.
 export async function getSalesSprintState(): Promise<SalesSprintState | null> {
   try {
     const session = await getSessionUser();
@@ -207,39 +249,26 @@ export async function getSalesSprintState(): Promise<SalesSprintState | null> {
     const storeId = await getActiveStoreId();
     if (!storeId) return null;
 
-    const todayStart = startOfToday();
-    const yesterdayStart = new Date(todayStart);
-    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-
-    const staffScope = session.role === "staff" ? { staffId: session.id } : {};
-
-    const [todayAgg, yesterdayAgg] = await Promise.all([
-      prisma.order.aggregate({
-        where: { storeId, date: { gte: todayStart }, ...staffScope },
-        _sum: { total: true },
-      }),
-      prisma.order.aggregate({
-        where: { storeId, date: { gte: yesterdayStart, lt: todayStart }, ...staffScope },
-        _sum: { total: true },
-      }),
-    ]);
-
-    const todayTotal = Number(todayAgg._sum.total ?? 0);
-    const yesterdayTotal = Number(yesterdayAgg._sum.total ?? 0);
-    // On a store's first day (or a quiet yesterday), fall back to a small
-    // default target so the bar has something meaningful to race toward
-    // instead of instantly reading "100%" the moment any sale happens.
-    const target = yesterdayTotal > 0 ? yesterdayTotal : 10000;
-
-    return {
-      todayTotal,
-      yesterdayTotal,
-      target,
-      percent: Math.min(100, Math.round((todayTotal / target) * 100)),
-      isRecordPace: yesterdayTotal > 0 && todayTotal > yesterdayTotal,
-    };
+    return await computeSalesSprint(storeId, {});
   } catch (error) {
     console.error("getSalesSprintState failed:", error);
+    return null;
+  }
+}
+
+// Fix B addition — scoped to only the calling staff member's own sales.
+// Sales made by other staff never count toward this number.
+export async function getPersonalSalesSprintState(): Promise<SalesSprintState | null> {
+  try {
+    const session = await getSessionUser();
+    if (!session) return null;
+
+    const storeId = await getActiveStoreId();
+    if (!storeId) return null;
+
+    return await computeSalesSprint(storeId, { staffId: session.id });
+  } catch (error) {
+    console.error("getPersonalSalesSprintState failed:", error);
     return null;
   }
 }

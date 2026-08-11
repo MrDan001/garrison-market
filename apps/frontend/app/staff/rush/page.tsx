@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getRushDisplayStats } from "@/lib/rush.actions";
-import { getSalesSprintState } from "@/lib/rush-quests.actions";
+import { getSalesSprintState, getPersonalSalesSprintState } from "@/lib/rush-quests.actions";
 import { getShopHealth } from "@/lib/rush-shop-health.actions";
 import { getWeeklyLeaderboard } from "@/lib/rush-leaderboard.actions";
 import RushWorldView from "@/components/RushWorldView";
@@ -15,8 +15,9 @@ export default async function StaffRushPage() {
   const stats = await getRushDisplayStats();
   if (!stats) redirect("/staff/dashboard");
 
-  const [salesSprint, shopHealth, leaderboard] = await Promise.all([
+  const [salesSprint, personalSalesSprint, shopHealth, leaderboard] = await Promise.all([
     getSalesSprintState(),
+    getPersonalSalesSprintState(),
     getShopHealth(),
     getWeeklyLeaderboard(),
   ]);
@@ -24,10 +25,13 @@ export default async function StaffRushPage() {
   return (
     <RushWorldView
       backHref="/staff/dashboard"
+      role="staff"
       salesSprint={salesSprint}
+      personalSalesSprint={personalSalesSprint}
       shopHealth={shopHealth}
       leaderboard={leaderboard}
       storeComparison={null}
+      showClockCard
       {...stats}
     />
   );

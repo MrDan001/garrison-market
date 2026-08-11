@@ -1,28 +1,66 @@
-// FILE: apps/frontend/lib/rush-rewards.actions.ts (NEW FILE)
-//
-// Stage 5 — the spin-the-wheel reward. A spin becomes claimable once
-// today's Restock Run quest is completed (Stage 3), and stays claimed
-// permanently once used — one spin per profile per calendar day, ever.
-// Cosmetic-only by default (see SPIN_PRIZES in rush-config.ts); no real
-// value is granted unless an owner-funded reward pool is added later,
-// which would only mean editing the prize list, not this logic.
+// FILE: apps/frontend/lib/rush-rewards.actions.ts (UPDATED — Fix C2 rewrite. Prizes now come from the owner-managed SpinPrizeOption pool per store instead of a fixed cosmetic-only list, and winning one actually does something: XP boosts move the XP bar, badges/titles are saved to the profile, streak shields arm real protection, and cash/gift prizes are recorded as pending until the owner settles them.)
 
 "use server";
 
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { getOrCreateRushProfile } from "./rush.actions";
-import { pickPrize } from "./rush-config";
+import { getSessionUser } from "./auth.actions";
+import { getActiveStoreId } from "./store-context";
+import { getOrCreateRushProfile, awardCustomXp } from "./rush.actions";
+import { DEFAULT_SPIN_PRIZES, weightedPick } from "./rush-config";
 
 function startOfToday(): Date {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+// --- Prize pool: seed on first read, then always read from the DB --------
+
+// Idempotent-ish — if two requests race to seed the pool at the exact
+// same moment, the count-check narrows but doesn't fully close the
+// window. Worst case is a harmless duplicate default row the owner can
+// delete; not worth a distributed lock for how rarely a store's very
+// first spin coincides with a second simultaneous request.
+//
+// Exported (Fix C3) so the owner's prize management page can seed +
+// list ALL prizes (active and inactive), not just the active ones the
+// spin itself draws from.
+export async function ensurePrizePoolSeeded(storeId: number) {
+  const alreadyHasAny = await prisma.spinPrizeOption.count({ where: { storeId } });
+  if (alreadyHasAny === 0) {
+    await prisma.spinPrizeOption.createMany({
+      data: DEFAULT_SPIN_PRIZES.map((p) => ({
+        storeId,
+        label: p.label,
+        kind: p.kind,
+        xpAmount: p.xpAmount ?? null,
+        weight: p.weight,
+        isDefault: true,
+        active: true,
+      })),
+    });
+  }
+  // else: pool already exists (possibly fully deactivated on purpose by
+  // the owner) — never re-seed on top of an existing pool.
+}
+
+async function getActivePrizePool(storeId: number) {
+  await ensurePrizePoolSeeded(storeId);
+  return prisma.spinPrizeOption.findMany({
+    where: { storeId, active: true },
+    orderBy: { id: "asc" },
+  });
+}
+
+// --- Spin availability ----------------------------------------------------
+
 export type SpinState = {
   available: boolean;
   claimed: boolean;
   prizeLabel: string | null;
+  prizeKind: string | null;
+  requiresSettlement: boolean;
+  settled: boolean;
 };
 
 export async function getSpinAvailability(): Promise<SpinState | null> {
@@ -44,24 +82,55 @@ export async function getSpinAvailability(): Promise<SpinState | null> {
     const questCompletedToday = quest?.completed ?? false;
 
     if (spin?.claimed) {
-      return { available: false, claimed: true, prizeLabel: spin.prizeLabel };
+      return {
+        available: false,
+        claimed: true,
+        prizeLabel: spin.prizeLabel,
+        prizeKind: spin.prizeKind,
+        requiresSettlement: spin.requiresSettlement,
+        settled: spin.settled,
+      };
     }
 
-    return { available: questCompletedToday, claimed: false, prizeLabel: null };
+    return {
+      available: questCompletedToday,
+      claimed: false,
+      prizeLabel: null,
+      prizeKind: null,
+      requiresSettlement: false,
+      settled: false,
+    };
   } catch (error) {
     console.error("getSpinAvailability failed:", error);
     return null;
   }
 }
 
-export async function claimSpin(): Promise<{ success: boolean; prizeLabel?: string }> {
+// --- Claim spin -------------------------------------------------------------
+
+export async function claimSpin(): Promise<{
+  success: boolean;
+  prizeLabel?: string;
+  prizeKind?: string;
+  effectSummary?: string;
+  requiresSettlement?: boolean;
+}> {
   try {
+    const session = await getSessionUser();
+    if (!session) return { success: false };
+
+    const storeId = await getActiveStoreId();
+    if (!storeId) return { success: false };
+
     const profile = await getOrCreateRushProfile();
     if (!profile) return { success: false };
 
     const questDate = startOfToday();
 
-    const result = await prisma.$transaction(async (tx) => {
+    // Step 1: verify eligibility and reserve today's spin row. Kept as its
+    // own transaction (same shape as before Fix C2) so two rapid taps
+    // can't both pass the "not yet claimed" check.
+    const reserved = await prisma.$transaction(async (tx) => {
       const quest = await tx.questProgress.findUnique({
         where: { rushProfileId_type_questDate: { rushProfileId: profile.id, type: "RESTOCK_RUN", questDate } },
       });
@@ -70,25 +139,111 @@ export async function claimSpin(): Promise<{ success: boolean; prizeLabel?: stri
       const existingSpin = await tx.rewardSpin.findUnique({
         where: { rushProfileId_spinDate: { rushProfileId: profile.id, spinDate: questDate } },
       });
-      if (existingSpin?.claimed) return { blocked: true as const, prizeLabel: existingSpin.prizeLabel };
+      if (existingSpin?.claimed) {
+        return {
+          blocked: true as const,
+          prizeLabel: existingSpin.prizeLabel,
+          prizeKind: existingSpin.prizeKind,
+          requiresSettlement: existingSpin.requiresSettlement,
+        };
+      }
 
-      const prizeLabel = pickPrize();
-
+      // Placeholder row — locks in "claimed" before we know the prize, so
+      // a second concurrent tap sees claimed=true and bails above.
       await tx.rewardSpin.upsert({
         where: { rushProfileId_spinDate: { rushProfileId: profile.id, spinDate: questDate } },
-        update: { claimed: true, prizeLabel, claimedAt: new Date() },
-        create: { rushProfileId: profile.id, spinDate: questDate, claimed: true, prizeLabel, claimedAt: new Date() },
+        update: { claimed: true, claimedAt: new Date() },
+        create: { rushProfileId: profile.id, spinDate: questDate, claimed: true, claimedAt: new Date() },
       });
 
-      return { blocked: false as const, prizeLabel };
+      return { blocked: false as const };
     });
 
-    if (result.blocked || !result.prizeLabel) return { success: false };
+    if (reserved.blocked) {
+      if (!reserved.prizeLabel) return { success: false };
+      return {
+        success: false,
+        prizeLabel: reserved.prizeLabel,
+        prizeKind: reserved.prizeKind ?? undefined,
+        requiresSettlement: reserved.requiresSettlement,
+      };
+    }
+
+    // Step 2: pick the prize from the store's live pool and apply it.
+    const pool = await getActivePrizePool(storeId);
+    const prize = weightedPick(pool);
+
+    if (!prize) {
+      // Empty pool (owner deactivated everything) — undo the reservation
+      // rather than leaving a spin claimed with no prize.
+      await prisma.rewardSpin.delete({
+        where: { rushProfileId_spinDate: { rushProfileId: profile.id, spinDate: questDate } },
+      });
+      return { success: false };
+    }
+
+    let effectSummary = "";
+    const requiresSettlement = prize.kind === "cash" || prize.kind === "gift";
+
+    switch (prize.kind) {
+      case "xp_boost": {
+        const amount = prize.xpAmount ?? 0;
+        if (amount > 0) {
+          await awardCustomXp(session.id, storeId, amount, "SPIN_XP_BOOST", { prizeOptionId: prize.id });
+        }
+        effectSummary = `+${amount} XP added to your bar!`;
+        break;
+      }
+      case "streak_shield": {
+        await prisma.rushProfile.update({
+          where: { id: profile.id },
+          data: { streakShieldActive: true },
+        });
+        effectSummary = "Your streak is now protected — it'll survive your next missed day.";
+        break;
+      }
+      case "badge": {
+        const existingBadges = Array.isArray(profile.badges) ? (profile.badges as any[]) : [];
+        const updatedBadges = [...existingBadges, { label: prize.label, wonAt: new Date().toISOString() }];
+        await prisma.rushProfile.update({
+          where: { id: profile.id },
+          data: { badges: updatedBadges },
+        });
+        effectSummary = "Added to your badges.";
+        break;
+      }
+      case "cash": {
+        effectSummary = `₦${(prize.cashAmount ?? 0).toLocaleString()} — pending. Your owner will settle this with you.`;
+        break;
+      }
+      case "gift": {
+        effectSummary = `${prize.giftDescription ?? "A prize"} — pending. Your owner will settle this with you.`;
+        break;
+      }
+    }
+
+    await prisma.rewardSpin.update({
+      where: { rushProfileId_spinDate: { rushProfileId: profile.id, spinDate: questDate } },
+      data: {
+        prizeLabel: prize.label,
+        prizeOptionId: prize.id,
+        prizeKind: prize.kind,
+        requiresSettlement,
+      },
+    });
 
     revalidatePath("/staff/rush");
     revalidatePath("/owner/rush");
+    revalidatePath("/staff/rush/wins");
+    revalidatePath("/owner/rush/settlements");
 
-    return { success: true, prizeLabel: result.prizeLabel };
+    return {
+      success: true,
+      prizeLabel: prize.label,
+      prizeKind: prize.kind,
+      effectSummary,
+      requiresSettlement,
+    };
   } catch (error) {
     console.error("claimSpin failed:", error);
     return { success: false };

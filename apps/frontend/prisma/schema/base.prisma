@@ -253,6 +253,11 @@ model Store {
   // Existing stores default to "standard" and are unaffected.
   storeType    String   @default("standard") // "standard" | "scale"
 
+  // Rush clock-in — "HH:mm" 24-hour, store's own local wall-clock time.
+  // Owner-configurable (defaults to 8:00 AM); a staff clock-in at or
+  // before this time counts as on-time for the STAFF_ON_TIME XP award.
+  shiftStartTime String @default("08:00")
+
   inventory     Inventory[]
   orders        Order[]
   reports       Report[]

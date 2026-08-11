@@ -51,27 +51,43 @@ export const XP_AMOUNTS: Record<string, number> = {
     return { tier: match.tier, label: match.label };
   }
   
-  // --- Stage 5 addition: reward spin prize pool ----------------------------
-  
-  // Cosmetic-only by default — labels shown on the wheel and stored on the
-  // claimed RewardSpin row. Weight controls relative odds (higher = more
-  // common); they don't need to sum to any particular total. If real
-  // perks (airtime, discounts) are ever funded by an owner, add them here
-  // with a low weight — the picker logic doesn't change.
-  export const SPIN_PRIZES: { label: string; weight: number }[] = [
-    { label: "🏅 Solid Effort Badge", weight: 35 },
-    { label: "⭐ Bonus XP Boost", weight: 25 },
-    { label: "🎖️ Today's MVP Title", weight: 15 },
-    { label: "🔥 Streak Shield (1 day)", weight: 15 },
-    { label: "👑 Legendary Pull", weight: 10 },
+  // --- Fix C2: reward spin prize pool ---------------------------------------
+  //
+  // Prizes now live in the DB (SpinPrizeOption, per store), owner-managed —
+  // this file only holds the *default seed set* used the first time a
+  // store's pool is read, plus a generic weighted picker any list of
+  // {weight} items can use. See lib/rush-rewards.actions.ts for the
+  // seeding + picking logic.
+
+  export type SpinPrizeKind = "xp_boost" | "badge" | "streak_shield" | "cash" | "gift";
+
+  export type DefaultSpinPrizeSeed = {
+    label: string;
+    kind: SpinPrizeKind;
+    xpAmount?: number;
+    weight: number;
+  };
+
+  export const DEFAULT_SPIN_PRIZES: DefaultSpinPrizeSeed[] = [
+    { label: "🏅 Solid Effort Badge", kind: "badge", weight: 35 },
+    { label: "⭐ Bonus XP Boost", kind: "xp_boost", xpAmount: 25, weight: 25 },
+    { label: "🎖️ Today's MVP Title", kind: "badge", weight: 15 },
+    { label: "🔥 Streak Shield (1 day)", kind: "streak_shield", weight: 15 },
+    { label: "👑 Legendary Pull", kind: "badge", weight: 10 },
   ];
-  
-  export function pickPrize(): string {
-    const totalWeight = SPIN_PRIZES.reduce((sum, p) => sum + p.weight, 0);
+
+  // Generic weighted draw — works for the seeded defaults, owner-added
+  // custom prizes, or a mix of both. Weights don't need to sum to any
+  // particular total; a weight of 0 or less is simply never drawn.
+  export function weightedPick<T extends { weight: number }>(items: T[]): T | null {
+    if (items.length === 0) return null;
+    const totalWeight = items.reduce((sum, item) => sum + Math.max(0, item.weight), 0);
+    if (totalWeight <= 0) return items[0];
+
     let roll = Math.random() * totalWeight;
-    for (const prize of SPIN_PRIZES) {
-      roll -= prize.weight;
-      if (roll <= 0) return prize.label;
+    for (const item of items) {
+      roll -= Math.max(0, item.weight);
+      if (roll <= 0) return item;
     }
-    return SPIN_PRIZES[0].label; // unreachable in practice, satisfies TS
+    return items[items.length - 1]; // unreachable in practice, satisfies TS
   }

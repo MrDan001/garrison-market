@@ -129,57 +129,90 @@ export async function getRushDisplayStats(): Promise<RushDisplayStats | null> {
 
 // --- The hook every existing action calls --------------------------------
 
+// Shared core, extracted in Fix C2 so the reward spin's XP-boost prize
+// (a variable, owner/prize-defined amount) can reuse the exact same
+// profile-update + streak math as the fixed XP_AMOUNTS-driven awards,
+// instead of duplicating it.
+//
+// Along the way this fixes a real bug in the upsert's create branch: it
+// previously set `userId: storeId ? storeId : userId`, which would have
+// created a RushProfile under the wrong userId any time this ran before
+// getOrCreateRushProfile() had already created the row. In practice most
+// callers call getOrCreateRushProfile() first, which masked it — but it
+// was wrong and is now `userId`.
+async function applyXp(userId: number, storeId: number, amount: number, type: string, meta?: Record<string, any>) {
+  if (!amount) return;
+
+  const profile = await prisma.rushProfile.upsert({
+    where: { userId_storeId: { userId, storeId } },
+    update: {},
+    create: { userId, storeId },
+  });
+
+  const now = new Date();
+  const newTotalXp = profile.totalXp + amount;
+  const { level, xpIntoLevel } = await computeLevel(newTotalXp);
+
+  let currentStreak = profile.currentStreak;
+  let longestStreak = profile.longestStreak;
+
+  if (!profile.lastActiveDate) {
+    currentStreak = 1;
+  } else if (isSameCalendarDay(profile.lastActiveDate, now)) {
+    // same day — no change
+  } else if (isYesterday(profile.lastActiveDate, now)) {
+    currentStreak = profile.currentStreak + 1;
+  } else {
+    currentStreak = 1;
+  }
+  longestStreak = Math.max(longestStreak, currentStreak);
+
+  await prisma.$transaction([
+    prisma.rushProfile.update({
+      where: { id: profile.id },
+      data: {
+        totalXp: newTotalXp,
+        xpIntoLevel,
+        level,
+        currentStreak,
+        longestStreak,
+        lastActiveDate: now,
+      },
+    }),
+    prisma.xpEvent.create({
+      data: {
+        rushProfileId: profile.id,
+        type,
+        amount,
+        meta: meta ? JSON.parse(JSON.stringify(meta)) : undefined,
+      },
+    }),
+  ]);
+}
+
 export async function awardXp(userId: number, storeId: number, type: XpEventType, meta?: Record<string, any>) {
   try {
-    const amount = XP_AMOUNTS[type];
-    if (!amount) return;
-
-    const profile = await prisma.rushProfile.upsert({
-      where: { userId_storeId: { userId, storeId } },
-      update: {},
-      create: { userId: storeId ? storeId : userId, storeId },
-    });
-
-    const now = new Date();
-    const newTotalXp = profile.totalXp + amount;
-    const { level, xpIntoLevel } = await computeLevel(newTotalXp);
-
-    let currentStreak = profile.currentStreak;
-    let longestStreak = profile.longestStreak;
-
-    if (!profile.lastActiveDate) {
-      currentStreak = 1;
-    } else if (isSameCalendarDay(profile.lastActiveDate, now)) {
-      // same day — no change
-    } else if (isYesterday(profile.lastActiveDate, now)) {
-      currentStreak = profile.currentStreak + 1;
-    } else {
-      currentStreak = 1;
-    }
-    longestStreak = Math.max(longestStreak, currentStreak);
-
-    await prisma.$transaction([
-      prisma.rushProfile.update({
-        where: { id: profile.id },
-        data: {
-          totalXp: newTotalXp,
-          xpIntoLevel,
-          level,
-          currentStreak,
-          longestStreak,
-          lastActiveDate: now,
-        },
-      }),
-      prisma.xpEvent.create({
-        data: {
-          rushProfileId: profile.id,
-          type,
-          amount,
-          meta: meta ? JSON.parse(JSON.stringify(meta)) : undefined,
-        },
-      }),
-    ]);
+    await applyXp(userId, storeId, XP_AMOUNTS[type], type, meta);
   } catch (error) {
     console.error(`awardXp failed [type=${type}, userId=${userId}, storeId=${storeId}]:`, error);
+  }
+}
+
+// Fix C2 addition — for XP amounts that aren't one of the fixed
+// XP_AMOUNTS types, namely the spin wheel's owner/default-defined
+// "Bonus XP Boost" prize. `sourceType` is stored as the XpEvent's type
+// (e.g. "SPIN_XP_BOOST") so it's distinguishable in history from the
+// regular XP sources.
+export async function awardCustomXp(
+  userId: number,
+  storeId: number,
+  amount: number,
+  sourceType: string,
+  meta?: Record<string, any>,
+) {
+  try {
+    await applyXp(userId, storeId, amount, sourceType, meta);
+  } catch (error) {
+    console.error(`awardCustomXp failed [type=${sourceType}, userId=${userId}, storeId=${storeId}]:`, error);
   }
 }

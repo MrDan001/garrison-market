@@ -1,7 +1,7 @@
 // FILE: apps/frontend/components/RushWorldView.tsx (UPDATED — Stage 5 adds RewardSpinWheel, WeeklyLeaderboard, and StoreComparison, replacing the old "on the way" placeholder. Storefront / level / streak / Sales Sprint / Restock Run sections unchanged from Stage 4.)
 
 import Link from "next/link";
-import { ArrowLeft, Zap } from "lucide-react";
+import { ArrowLeft, Zap, ChevronRight, HelpCircle } from "lucide-react";
 import type { RushDisplayStats } from "@/lib/rush.actions";
 import type { SalesSprintState } from "@/lib/rush-quests.actions";
 import type { ShopHealthState } from "@/lib/rush-shop-health.actions";
@@ -11,17 +11,59 @@ import ShopStorefront from "./ShopStoreFront";
 import RewardSpinWheel from "./RewardSpinWheel";
 import WeeklyLeaderboard from "./WeeklyLeaderboard";
 import StoreComparison from "./StoreComparison";
+import ClockInOutCard from "./ClockInOutCard";
+import ShiftSettingsCard from "./ShiftSettingsCard";
 
 type RushWorldViewProps = RushDisplayStats & {
   backHref: string;
+  role: "staff" | "owner";
   salesSprint: SalesSprintState | null;
   shopHealth: ShopHealthState | null;
   leaderboard: LeaderboardEntry[];
   storeComparison: StoreComparisonEntry[] | null;
+  // Fix A — staff sees the clock-in card (role gate handled by whether
+  // this is passed at all); owner sees the shift-time setting instead.
+  showClockCard?: boolean;
+  shiftStartTime?: string;
+  // Fix B — only passed for staff. When present, salesSprint (store-wide)
+  // is shown alongside it as "Store Target" instead of alone as "Sales
+  // Sprint." Owner's view is untouched: salesSprint alone, same as before.
+  personalSalesSprint?: SalesSprintState | null;
+  // Fix C4 — owner only. Count of unsettled cash/gift wins, shown as a
+  // badge on the Settlements link so it's noticeable without a click.
+  pendingSettlementsCount?: number;
 };
+
+function SalesSprintCard({ state, title }: { state: SalesSprintState; title: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-sm font-bold text-white flex items-center gap-2">
+          <Zap size={16} className="text-fuchsia-300" /> {title}
+        </h2>
+        {state.isRecordPace && (
+          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/10 px-2 py-1 rounded-full">
+            Record pace 🔥
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-fuchsia-200/70 mb-4">
+        ₦{state.todayTotal.toLocaleString()} today vs ₦{state.target.toLocaleString()}
+        {state.yesterdayTotal > 0 ? " yesterday" : " target"}
+      </p>
+      <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-emerald-300 to-fuchsia-300 transition-all"
+          style={{ width: `${state.percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function RushWorldView({
   backHref,
+  role,
   displayName,
   level,
   totalXp,
@@ -35,6 +77,10 @@ export default function RushWorldView({
   shopHealth,
   leaderboard,
   storeComparison,
+  showClockCard,
+  shiftStartTime,
+  personalSalesSprint,
+  pendingSettlementsCount,
 }: RushWorldViewProps) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0f0b26] via-[#1e1b4b] to-[#0f0b26] text-white">
@@ -47,9 +93,17 @@ export default function RushWorldView({
       <main className="max-w-2xl mx-auto px-5 sm:px-8 py-10 sm:py-14 space-y-6">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-fuchsia-300 mb-2">Your shop's world</p>
-          <h1 className="text-3xl sm:text-4xl font-extrabold">
-            {displayName} <span className="text-fuchsia-300">Rush</span>
-          </h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="text-3xl sm:text-4xl font-extrabold">
+              {displayName} <span className="text-fuchsia-300">Rush</span>
+            </h1>
+            <Link
+              href={role === "staff" ? "/staff/rush/guide" : "/owner/rush/guide"}
+              className="shrink-0 mt-2 flex items-center gap-1.5 text-xs font-semibold text-fuchsia-200 bg-white/5 border border-white/10 rounded-full px-3 py-1.5 hover:bg-white/10 transition-colors"
+            >
+              <HelpCircle size={13} /> How to Play
+            </Link>
+          </div>
         </div>
 
         {/* Shop Tycoon storefront */}
@@ -107,37 +161,65 @@ export default function RushWorldView({
           </div>
         </div>
 
-        {/* Sales Sprint */}
+        {/* Sales Sprint — staff get their own number plus the store target
+            side by side; owner keeps just the one store-wide card, exactly
+            as before. */}
+        {personalSalesSprint && <SalesSprintCard state={personalSalesSprint} title="Your Sales" />}
         {salesSprint && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <Zap size={16} className="text-fuchsia-300" /> Sales Sprint
-              </h2>
-              {salesSprint.isRecordPace && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/10 px-2 py-1 rounded-full">
-                  Record pace 🔥
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-fuchsia-200/70 mb-4">
-              ₦{salesSprint.todayTotal.toLocaleString()} today vs ₦{salesSprint.target.toLocaleString()}
-              {salesSprint.yesterdayTotal > 0 ? " yesterday" : " target"}
-            </p>
-            <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-300 to-fuchsia-300 transition-all"
-                style={{ width: `${salesSprint.percent}%` }}
-              />
-            </div>
-          </div>
+          <SalesSprintCard state={salesSprint} title={personalSalesSprint ? "Store Target" : "Sales Sprint"} />
         )}
+
+        {/* Clock in/out — staff only */}
+        {showClockCard && <ClockInOutCard />}
+
+        {/* Shift start time setting — owner only */}
+        {shiftStartTime && <ShiftSettingsCard initialShiftStartTime={shiftStartTime} />}
 
         {/* Restock Run */}
         <RestockRunCard />
 
         {/* Reward spin — only renders itself if there's something to show */}
         <RewardSpinWheel />
+
+        {/* My Wins — staff only */}
+        {showClockCard && (
+          <Link
+            href="/staff/rush/wins"
+            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-4 text-sm font-semibold text-fuchsia-200 hover:bg-white/[0.06] transition-colors"
+          >
+            My Wins
+            <ChevronRight size={16} />
+          </Link>
+        )}
+
+        {/* Manage spin prizes / settlements — owner only. Uses the same
+            shiftStartTime prop presence as the owner-gate, since that's
+            already owner-only. */}
+        {shiftStartTime && (
+          <div className="grid grid-cols-2 gap-3">
+            <Link
+              href="/owner/rush/prizes"
+              className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-sm font-semibold text-fuchsia-200 hover:bg-white/[0.06] transition-colors"
+            >
+              Manage prizes
+              <ChevronRight size={16} />
+            </Link>
+            <Link
+              href="/owner/rush/settlements"
+              className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-sm font-semibold text-fuchsia-200 hover:bg-white/[0.06] transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                Settlements
+                {!!pendingSettlementsCount && (
+                  <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-amber-400 text-[11px] font-bold text-slate-900">
+                    {pendingSettlementsCount}
+                  </span>
+                )}
+              </span>
+              <ChevronRight size={16} />
+            </Link>
+          </div>
+        )}
 
         {/* Weekly leaderboard — only renders if there's activity to rank */}
         <WeeklyLeaderboard entries={leaderboard} />
