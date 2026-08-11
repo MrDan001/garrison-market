@@ -316,9 +316,9 @@ is the condensed version:
   (+30 bonus), and clocking in on time (+15). Levels run 1–10 on a rising
   XP-threshold curve; streaks reset after a full missed day (6-hour grace
   past midnight) unless a Streak Shield prize has been won.
-- Shift start time: set on the Rush screen — this is what "on time"
-  clock-ins are measured against for staff XP. Defaults to 8:00 AM until
-  changed.
+- Shift start time: set from [Manage Prizes](/owner/rush/prizes) — this is
+  what "on time" clock-ins are measured against for staff XP. Defaults to
+  8:00 AM until changed.
 - Restock Run: auto-picks 5 of the shop's most-neglected inventory items
   daily for staff to verify. Sales Sprint shows staff their own sales plus
   the store-wide target side by side; you see the store-wide number.

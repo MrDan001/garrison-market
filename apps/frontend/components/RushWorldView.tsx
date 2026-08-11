@@ -12,7 +12,6 @@ import RewardSpinWheel from "./RewardSpinWheel";
 import WeeklyLeaderboard from "./WeeklyLeaderboard";
 import StoreComparison from "./StoreComparison";
 import ClockInOutCard from "./ClockInOutCard";
-import ShiftSettingsCard from "./ShiftSettingsCard";
 
 type RushWorldViewProps = RushDisplayStats & {
   backHref: string;
@@ -22,9 +21,8 @@ type RushWorldViewProps = RushDisplayStats & {
   leaderboard: LeaderboardEntry[];
   storeComparison: StoreComparisonEntry[] | null;
   // Fix A — staff sees the clock-in card (role gate handled by whether
-  // this is passed at all); owner sees the shift-time setting instead.
+  // this is passed at all).
   showClockCard?: boolean;
-  shiftStartTime?: string;
   // Fix B — only passed for staff. When present, salesSprint (store-wide)
   // is shown alongside it as "Store Target" instead of alone as "Sales
   // Sprint." Owner's view is untouched: salesSprint alone, same as before.
@@ -78,7 +76,6 @@ export default function RushWorldView({
   leaderboard,
   storeComparison,
   showClockCard,
-  shiftStartTime,
   personalSalesSprint,
   pendingSettlementsCount,
 }: RushWorldViewProps) {
@@ -172,9 +169,6 @@ export default function RushWorldView({
         {/* Clock in/out — staff only */}
         {showClockCard && <ClockInOutCard />}
 
-        {/* Shift start time setting — owner only */}
-        {shiftStartTime && <ShiftSettingsCard initialShiftStartTime={shiftStartTime} />}
-
         {/* Restock Run */}
         <RestockRunCard />
 
@@ -192,10 +186,8 @@ export default function RushWorldView({
           </Link>
         )}
 
-        {/* Manage spin prizes / settlements — owner only. Uses the same
-            shiftStartTime prop presence as the owner-gate, since that's
-            already owner-only. */}
-        {shiftStartTime && (
+        {/* Manage spin prizes / settlements — owner only. */}
+        {role === "owner" && (
           <div className="grid grid-cols-2 gap-3">
             <Link
               href="/owner/rush/prizes"

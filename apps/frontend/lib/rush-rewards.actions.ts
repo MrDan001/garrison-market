@@ -59,9 +59,37 @@ export type SpinState = {
   claimed: boolean;
   prizeLabel: string | null;
   prizeKind: string | null;
+  // Links a claimed spin back to the exact prize option won, so the
+  // wheel UI can find its matching segment and land on it precisely —
+  // matching by label alone risks colliding with a renamed/duplicate
+  // label.
+  prizeOptionId: number | null;
   requiresSettlement: boolean;
   settled: boolean;
 };
+
+// The wheel's visual segments — everything currently on the wheel, in the
+// exact same order claimSpin() draws from (id ascending), so a segment's
+// position in this array always matches the index the server will report
+// as the winner. Deliberately minimal (id + label only): the wheel is a
+// display surface, not a place to leak cash amounts or gift descriptions
+// to everyone glancing at the screen before a spin resolves — the label
+// itself already carries whatever the owner wants shown (e.g. "₦2,000
+// Cash Prize").
+export type WheelPrize = { id: number; label: string };
+
+export async function getSpinWheelPrizes(): Promise<WheelPrize[] | null> {
+  try {
+    const storeId = await getActiveStoreId();
+    if (!storeId) return null;
+
+    const pool = await getActivePrizePool(storeId);
+    return pool.map((p) => ({ id: p.id, label: p.label }));
+  } catch (error) {
+    console.error("getSpinWheelPrizes failed:", error);
+    return null;
+  }
+}
 
 export async function getSpinAvailability(): Promise<SpinState | null> {
   try {
@@ -87,6 +115,7 @@ export async function getSpinAvailability(): Promise<SpinState | null> {
         claimed: true,
         prizeLabel: spin.prizeLabel,
         prizeKind: spin.prizeKind,
+        prizeOptionId: spin.prizeOptionId,
         requiresSettlement: spin.requiresSettlement,
         settled: spin.settled,
       };
@@ -97,6 +126,7 @@ export async function getSpinAvailability(): Promise<SpinState | null> {
       claimed: false,
       prizeLabel: null,
       prizeKind: null,
+      prizeOptionId: null,
       requiresSettlement: false,
       settled: false,
     };
@@ -112,6 +142,7 @@ export async function claimSpin(): Promise<{
   success: boolean;
   prizeLabel?: string;
   prizeKind?: string;
+  prizeOptionId?: number | null;
   effectSummary?: string;
   requiresSettlement?: boolean;
 }> {
@@ -144,6 +175,7 @@ export async function claimSpin(): Promise<{
           blocked: true as const,
           prizeLabel: existingSpin.prizeLabel,
           prizeKind: existingSpin.prizeKind,
+          prizeOptionId: existingSpin.prizeOptionId,
           requiresSettlement: existingSpin.requiresSettlement,
         };
       }
@@ -165,6 +197,7 @@ export async function claimSpin(): Promise<{
         success: false,
         prizeLabel: reserved.prizeLabel,
         prizeKind: reserved.prizeKind ?? undefined,
+        prizeOptionId: reserved.prizeOptionId,
         requiresSettlement: reserved.requiresSettlement,
       };
     }
@@ -241,6 +274,7 @@ export async function claimSpin(): Promise<{
       success: true,
       prizeLabel: prize.label,
       prizeKind: prize.kind,
+      prizeOptionId: prize.id,
       effectSummary,
       requiresSettlement,
     };

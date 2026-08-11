@@ -6,7 +6,6 @@ import { getRushDisplayStats } from "@/lib/rush.actions";
 import { getSalesSprintState } from "@/lib/rush-quests.actions";
 import { getShopHealth } from "@/lib/rush-shop-health.actions";
 import { getWeeklyLeaderboard, getStoreComparison } from "@/lib/rush-leaderboard.actions";
-import { getShiftStartTime } from "@/lib/rush-clock.actions";
 import { getPendingSettlementsCount } from "@/lib/rush-settlements.actions";
 import RushWorldView from "@/components/RushWorldView";
 
@@ -17,15 +16,13 @@ export default async function OwnerRushPage() {
   const stats = await getRushDisplayStats();
   if (!stats) redirect("/owner/dashboard");
 
-  const [salesSprint, shopHealth, leaderboard, storeComparison, shiftStartTime, pendingSettlementsCount] =
-    await Promise.all([
-      getSalesSprintState(),
-      getShopHealth(),
-      getWeeklyLeaderboard(),
-      getStoreComparison(),
-      getShiftStartTime(),
-      getPendingSettlementsCount(),
-    ]);
+  const [salesSprint, shopHealth, leaderboard, storeComparison, pendingSettlementsCount] = await Promise.all([
+    getSalesSprintState(),
+    getShopHealth(),
+    getWeeklyLeaderboard(),
+    getStoreComparison(),
+    getPendingSettlementsCount(),
+  ]);
 
   return (
     <RushWorldView
@@ -35,7 +32,6 @@ export default async function OwnerRushPage() {
       shopHealth={shopHealth}
       leaderboard={leaderboard}
       storeComparison={storeComparison}
-      shiftStartTime={shiftStartTime}
       pendingSettlementsCount={pendingSettlementsCount}
       {...stats}
     />
