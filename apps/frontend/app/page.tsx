@@ -250,17 +250,11 @@ export default function HomePage() {
             <div className="h-8 w-8 rounded-sm bg-[#F1EEE3] flex items-center justify-center transition-all duration-300 group-hover:bg-[#E55345] group-hover:rotate-12 group-hover:scale-110">
               <span className="text-[#0D1527] font-extrabold text-sm group-hover:text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>G</span>
             </div>
-            <span className="hidden sm:inline font-extrabold tracking-tight text-[var(--text-primary)] group-hover:text-[#E55345] transition-colors" style={{ fontFamily: "var(--font-display)" }}>
+            <span className="font-extrabold tracking-tight text-[var(--text-primary)] group-hover:text-[#E55345] transition-colors" style={{ fontFamily: "var(--font-display)" }}>
               GARRISON MARKET
             </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
-            <Link
-              href="/affiliate/register"
-              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#E55345] border border-[#E55345]/40 px-3 py-1.5 sm:px-4 sm:py-2 rounded-none hover:bg-[#E55345] hover:text-[var(--bg-app)] transition-all duration-300 whitespace-nowrap"
-            >
-              Become an affiliate
-            </Link>
             <Link href="/login" className="text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-all hover:scale-105">
               Sign in
             </Link>
@@ -269,6 +263,21 @@ export default function HomePage() {
               className="text-xs sm:text-sm font-black uppercase tracking-wider bg-[#F1EEE3] text-[#0D1527] px-4 py-2 rounded-none border border-transparent hover:border-[#E55345] hover:bg-transparent hover:text-[#E55345] shadow-[0_4px_12px_rgba(241,238,227,0.1)] hover:shadow-[0_4px_20px_rgba(229,83,69,0.3)] transition-all duration-300"
             >
               Get started
+            </Link>
+          </div>
+        </div>
+
+        {/* Affiliate strip — its own row so it never competes with the
+            logo/Sign in/Get started row on narrow screens. Short copy on
+            mobile (single line), full pitch on desktop. */}
+        <div className="border-t border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/60">
+          <div className="max-w-6xl mx-auto px-6 py-2 flex justify-center sm:justify-end">
+            <Link
+              href="/affiliate/register"
+              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#E55345] hover:underline underline-offset-4 transition-all whitespace-nowrap"
+            >
+              <span className="sm:hidden">Become an affiliate →</span>
+              <span className="hidden sm:inline">Become an affiliate — earn commission referring shop owners →</span>
             </Link>
           </div>
         </div>
