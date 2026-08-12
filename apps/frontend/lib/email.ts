@@ -355,7 +355,6 @@ export async function sendAdminBroadcastEmail(
     preheader: params.subject,
     badge: { label: "Message", color: "#4f46e5" },
     body: `
-      ${heading(params.subject)}
       ${paragraph(`Hi ${firstName},`)}
       ${paragraph(bodyHtml)}
       ${
