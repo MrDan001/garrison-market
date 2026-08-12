@@ -1,15 +1,17 @@
 // FILE: apps/frontend/app/staff/dashboard/page.tsx (UPDATED)
 //
-// Only two lines changed from the original: the RushCard import, and one
-// <RushCard role="staff" /> render placed after the 2-stat grid, before
-// Quick Actions. Everything else is untouched, including the locked-out
-// billing screen (which intentionally does NOT get a RushCard — no game
+// Two things changed from the original: the RushCard import/render (see
+// below), and a new badge chip in the header — pulls the most recent
+// entry from RushProfile.badges via getRushProfile() and renders it under
+// the staff's name, next to the "online" dot, only when one exists.
+// Everything else is untouched, including the locked-out billing screen
+// (which intentionally does NOT get a RushCard or badge chip — no game
 // access while the store itself is locked).
 
 import { getSessionUser } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck, Lock, Scale as ScaleIcon, HandCoins, CreditCard } from "lucide-react";
+import { Store, FileText, History, ShoppingBag, TrendingUp, Clock, LogOut, Package, UserCircle, ClipboardList, AlertTriangle, PackageCheck, ShoppingCart, Truck, Lock, Scale as ScaleIcon, HandCoins, CreditCard, Award } from "lucide-react";
 import Link from "next/link";
 import NotificationBell from "@/components/NotificationBell";
 import StaffSupportBubble from "@/components/StaffSupportBubble";
@@ -23,6 +25,7 @@ import { TrialBanner } from "@/components/TrialBanner";
 import { getBillingStatus } from "@/lib/subscription-guard";
 import { getActiveStore } from "@/lib/store-context";
 import RushCard from "@/components/RushCard";
+import { getRushProfile } from "@/lib/rush.actions";
 
 type ActivityItem =
   | { type: "sale"; id: string; date: Date; amount: number }
@@ -45,8 +48,17 @@ export default async function StaffDashboard() {
   if (!staff || userRole !== "staff") redirect("/login");
   if (userStatus === "suspended" || userStatus === "pending") redirect("/pending/staff");
 
-  const activeStore = await getActiveStore();
+  const [activeStore, rushProfile] = await Promise.all([getActiveStore(), getRushProfile()]);
   const isScaleStore = activeStore?.storeType === "scale";
+
+  // Header badge chip — most recent entry from RushProfile.badges (an
+  // append-only JSON array written in rush-rewards.actions.ts whenever a
+  // "badge"-kind spin prize is won). No profile yet, or a profile that's
+  // never won a badge, just means no chip — this never blocks the header.
+  const badgesWon = Array.isArray(rushProfile?.badges)
+    ? (rushProfile!.badges as { label: string; wonAt: string }[])
+    : [];
+  const latestBadge = badgesWon.length > 0 ? badgesWon[badgesWon.length - 1].label : null;
 
   // Stage 3: the Wastage tile below was hardcoded to native scale-only
   // stores. Merged stores (standard store + the admin-only
@@ -224,6 +236,14 @@ export default async function StaffDashboard() {
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                 </span>
               </div>
+              {latestBadge && (
+                <div className="flex items-center gap-1 mt-1">
+                  <Award size={10} className="text-amber-500 shrink-0" />
+                  <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400 truncate leading-none">
+                    {latestBadge}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

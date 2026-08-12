@@ -1,4 +1,4 @@
-// FILE: apps/frontend/lib/rush-clock.actions.ts (NEW FILE — Fix A)
+// FILE: apps/frontend/lib/rush-clock.actions.ts (UPDATED — adds getStaffClockRosterRange(days), a rolled-up attendance summary that powers the "7 Days" tab on StaffClockRosterCard. Takes a plain day count so a future 30/90-day view needs no new query. getStaffClockRoster() below is unchanged. Clock-in/clock-out logic further below is unchanged from Fix A.)
 //
 // Clock-in/clock-out for staff. This is the real trigger behind the
 // STAFF_ON_TIME XP award, which previously existed in XP_AMOUNTS but was
@@ -224,5 +224,162 @@ export async function setShiftStartTime(newTime: string): Promise<{ success: boo
   } catch (error) {
     console.error("setShiftStartTime failed:", error);
     return { success: false };
+  }
+}
+
+// --- Owner: today's clock roster across all staff ------------------------
+//
+// getTodayClockStatus() above only ever answers "is the logged-in person
+// clocked in" — there was previously no query that fans that out across a
+// whole store. This is that query: every approved staff member assigned
+// to the active store, joined against today's ClockEvent (if any). Staff
+// who haven't clocked in yet still appear, with clockedIn: false, so the
+// owner sees absences, not just a partial list.
+
+async function getApprovedStoreStaff(storeId: number) {
+  return prisma.user.findMany({
+    where: { staffStoreId: storeId, role: "staff", status: "approved" },
+    select: { id: true, fullName: true },
+  });
+}
+
+export type StaffClockRosterEntry = {
+  userId: number;
+  name: string;
+  clockedIn: boolean;
+  clockInAt: Date | null;
+  onTime: boolean | null;
+  clockedOut: boolean;
+  clockOutAt: Date | null;
+};
+
+export async function getStaffClockRoster(): Promise<StaffClockRosterEntry[]> {
+  try {
+    const session = await getSessionUser();
+    if (!session || session.role !== "owner") return [];
+
+    const storeId = await getActiveStoreId();
+    if (!storeId) return [];
+
+    const clockDate = startOfToday();
+
+    const [staff, events] = await Promise.all([
+      getApprovedStoreStaff(storeId),
+      prisma.clockEvent.findMany({
+        where: { storeId, clockDate },
+      }),
+    ]);
+    if (staff.length === 0) return [];
+
+    const eventByUserId = new Map(events.map((e) => [e.userId, e]));
+
+    const roster: StaffClockRosterEntry[] = staff.map((s) => {
+      const event = eventByUserId.get(s.id);
+      return {
+        userId: s.id,
+        name: s.fullName || "Team member",
+        clockedIn: !!event,
+        clockInAt: event?.clockInAt ?? null,
+        onTime: event?.onTime ?? null,
+        clockedOut: !!event?.clockOutAt,
+        clockOutAt: event?.clockOutAt ?? null,
+      };
+    });
+
+    // Clocked-in staff first (earliest arrival first, so late arrivals
+    // still sort above no-shows), then everyone who hasn't clocked in yet,
+    // alphabetically.
+    roster.sort((a, b) => {
+      if (a.clockedIn !== b.clockedIn) return a.clockedIn ? -1 : 1;
+      if (a.clockedIn && b.clockedIn) return a.clockInAt!.getTime() - b.clockInAt!.getTime();
+      return a.name.localeCompare(b.name);
+    });
+
+    return roster;
+  } catch (error) {
+    console.error("getStaffClockRoster failed:", error);
+    return [];
+  }
+}
+
+// --- Owner: attendance summary across a range of days ---------------------
+//
+// Same staff list as getStaffClockRoster() above, but rolled up over N
+// days instead of a live snapshot of today. Takes a plain day count
+// rather than named presets ("week" / "month") so this never needs to
+// change shape again — a future 1-month or 1-quarter view is just another
+// caller passing 30 or 90, no new query to write.
+
+export type StaffClockRangeSummary = {
+  userId: number;
+  name: string;
+  daysWorked: number;
+  daysOnTime: number;
+  daysLate: number;
+  totalHours: number;
+  lastClockInAt: Date | null;
+};
+
+export async function getStaffClockRosterRange(days: number): Promise<StaffClockRangeSummary[]> {
+  try {
+    const session = await getSessionUser();
+    if (!session || session.role !== "owner") return [];
+
+    const storeId = await getActiveStoreId();
+    if (!storeId) return [];
+
+    const rangeStart = startOfToday();
+    rangeStart.setDate(rangeStart.getDate() - (Math.max(1, days) - 1));
+
+    const [staff, events] = await Promise.all([
+      getApprovedStoreStaff(storeId),
+      prisma.clockEvent.findMany({
+        where: { storeId, clockDate: { gte: rangeStart } },
+      }),
+    ]);
+    if (staff.length === 0) return [];
+
+    const eventsByUserId = new Map<number, typeof events>();
+    for (const event of events) {
+      const existing = eventsByUserId.get(event.userId);
+      if (existing) existing.push(event);
+      else eventsByUserId.set(event.userId, [event]);
+    }
+
+    const summary: StaffClockRangeSummary[] = staff.map((s) => {
+      const userEvents = eventsByUserId.get(s.id) ?? [];
+      const daysOnTime = userEvents.filter((e) => e.onTime).length;
+      const totalHours = userEvents.reduce((sum, e) => {
+        if (!e.clockOutAt) return sum;
+        return sum + (e.clockOutAt.getTime() - e.clockInAt.getTime()) / 3_600_000;
+      }, 0);
+      const lastClockInAt = userEvents.reduce<Date | null>(
+        (latest, e) => (!latest || e.clockInAt > latest ? e.clockInAt : latest),
+        null
+      );
+
+      return {
+        userId: s.id,
+        name: s.fullName || "Team member",
+        daysWorked: userEvents.length,
+        daysOnTime,
+        daysLate: userEvents.length - daysOnTime,
+        totalHours: Math.round(totalHours * 10) / 10,
+        lastClockInAt,
+      };
+    });
+
+    // Most days worked first (so no-shows sink to the bottom), then
+    // alphabetical among ties — mirrors the "active first" ordering in
+    // getStaffClockRoster() above.
+    summary.sort((a, b) => {
+      if (a.daysWorked !== b.daysWorked) return b.daysWorked - a.daysWorked;
+      return a.name.localeCompare(b.name);
+    });
+
+    return summary;
+  } catch (error) {
+    console.error("getStaffClockRosterRange failed:", error);
+    return [];
   }
 }

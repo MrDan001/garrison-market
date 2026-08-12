@@ -1,4 +1,4 @@
-// FILE: apps/frontend/components/RushWorldView.tsx (UPDATED — Stage 5 adds RewardSpinWheel, WeeklyLeaderboard, and StoreComparison, replacing the old "on the way" placeholder. Storefront / level / streak / Sales Sprint / Restock Run sections unchanged from Stage 4.)
+// FILE: apps/frontend/components/RushWorldView.tsx (UPDATED — RewardSpinWheel is staff-only now, gated by role instead of rendering unconditionally. Staff Clock-Ins moved off this page: instead of the StaffClockRosterCard rendering inline, there's now a compact button linking to /owner/rush/attendance, same row style as "My Wins". Stage 5 additions — WeeklyLeaderboard, StoreComparison — unchanged.)
 
 import Link from "next/link";
 import { ArrowLeft, Zap, ChevronRight, HelpCircle } from "lucide-react";
@@ -12,6 +12,7 @@ import RewardSpinWheel from "./RewardSpinWheel";
 import WeeklyLeaderboard from "./WeeklyLeaderboard";
 import StoreComparison from "./StoreComparison";
 import ClockInOutCard from "./ClockInOutCard";
+import type { StaffClockRosterEntry } from "@/lib/rush-clock.actions";
 
 type RushWorldViewProps = RushDisplayStats & {
   backHref: string;
@@ -30,6 +31,9 @@ type RushWorldViewProps = RushDisplayStats & {
   // Fix C4 — owner only. Count of unsettled cash/gift wins, shown as a
   // badge on the Settlements link so it's noticeable without a click.
   pendingSettlementsCount?: number;
+  // Owner only — today's staff clock-in roster. Undefined on the staff
+  // page (that role has no business seeing everyone else's clock times).
+  staffRoster?: StaffClockRosterEntry[];
 };
 
 function SalesSprintCard({ state, title }: { state: SalesSprintState; title: string }) {
@@ -78,7 +82,10 @@ export default function RushWorldView({
   showClockCard,
   personalSalesSprint,
   pendingSettlementsCount,
+  staffRoster,
 }: RushWorldViewProps) {
+  const onShiftCount = staffRoster?.filter((e) => e.clockedIn && !e.clockedOut).length ?? 0;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0f0b26] via-[#1e1b4b] to-[#0f0b26] text-white">
       <header className="sticky top-0 z-10 bg-[#0f0b26]/70 backdrop-blur-xl border-b border-white/10 px-4 sm:px-8 py-4 flex items-center gap-3">
@@ -169,11 +176,34 @@ export default function RushWorldView({
         {/* Clock in/out — staff only */}
         {showClockCard && <ClockInOutCard />}
 
+        {/* Staff clock roster — owner only. Full list lives on its own
+            page now; this is just the entry point, badge shows who's
+            currently on shift so it's useful at a glance without a click. */}
+        {staffRoster && (
+          <Link
+            href="/owner/rush/attendance"
+            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-4 text-sm font-semibold text-fuchsia-200 hover:bg-white/[0.06] transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              Staff Clock-Ins
+              {onShiftCount > 0 && (
+                <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-emerald-400 text-[11px] font-bold text-slate-900">
+                  {onShiftCount}
+                </span>
+              )}
+            </span>
+            <ChevronRight size={16} />
+          </Link>
+        )}
+
         {/* Restock Run */}
         <RestockRunCard />
 
-        {/* Reward spin — only renders itself if there's something to show */}
-        <RewardSpinWheel />
+        {/* Reward spin — staff only. Owner never had a reason to spin their
+            own store's prize wheel; self-gating inside the component only
+            covered "is there a prize pool," not "should this role see it
+            at all," so the role check belongs here instead. */}
+        {role === "staff" && <RewardSpinWheel />}
 
         {/* My Wins — staff only */}
         {showClockCard && (
