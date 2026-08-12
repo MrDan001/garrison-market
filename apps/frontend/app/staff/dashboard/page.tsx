@@ -3,7 +3,9 @@
 // Two things changed from the original: the RushCard import/render (see
 // below), and a new badge chip in the header — pulls the most recent
 // entry from RushProfile.badges via getRushProfile() and renders it under
-// the staff's name, next to the "online" dot, only when one exists.
+// the staff's name, next to the "online" dot, only when one was won
+// today (it expires at midnight, same as the rest of Rush's daily
+// resets — see the comment above latestBadgeWonToday below).
 // Everything else is untouched, including the locked-out billing screen
 // (which intentionally does NOT get a RushCard or badge chip — no game
 // access while the store itself is locked).
@@ -55,10 +57,20 @@ export default async function StaffDashboard() {
   // append-only JSON array written in rush-rewards.actions.ts whenever a
   // "badge"-kind spin prize is won). No profile yet, or a profile that's
   // never won a badge, just means no chip — this never blocks the header.
+  //
+  // Expires at end of day: badges here are meant as daily flair ("Today's
+  // MVP Title" and the like), not a permanent trophy case, so the chip
+  // only shows if wonAt falls on today's calendar date. Same server
+  // local wall-clock assumption as every other daily reset in Rush (see
+  // startOfToday() in rush-clock.actions.ts) — no cron job needed, this
+  // just naturally stops matching once the date rolls over.
   const badgesWon = Array.isArray(rushProfile?.badges)
     ? (rushProfile!.badges as { label: string; wonAt: string }[])
     : [];
-  const latestBadge = badgesWon.length > 0 ? badgesWon[badgesWon.length - 1].label : null;
+  const latestBadgeEntry = badgesWon.length > 0 ? badgesWon[badgesWon.length - 1] : null;
+  const latestBadgeWonToday =
+    !!latestBadgeEntry && new Date(latestBadgeEntry.wonAt).toDateString() === new Date().toDateString();
+  const latestBadge = latestBadgeWonToday ? latestBadgeEntry!.label : null;
 
   // Stage 3: the Wastage tile below was hardcoded to native scale-only
   // stores. Merged stores (standard store + the admin-only
