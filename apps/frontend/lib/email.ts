@@ -353,7 +353,6 @@ export async function sendAdminBroadcastEmail(
 
   const html = layout({
     preheader: params.subject,
-    badge: { label: "Message", color: "#4f46e5" },
     body: `
       ${paragraph(`Hi ${firstName},`)}
       ${paragraph(bodyHtml)}
