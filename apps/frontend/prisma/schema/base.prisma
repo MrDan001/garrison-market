@@ -227,6 +227,11 @@ model User {
   scaleStockReturnsOwned   ScaleStockReturn[] @relation("ScaleStockReturnOwner")
   scaleStockReturnsRecorded ScaleStockReturn[] @relation("ScaleStockReturnRecordedBy")
 
+// --- Affiliate attribution (separate from the referral engine above) ---
+affiliateId         Int?
+affiliateReferredAt DateTime?
+referredByAffiliate Affiliate? @relation("AffiliateReferrals", fields: [affiliateId], references: [id], onDelete: SetNull)
+
   @@index([ownerId])
   @@index([staffStoreId])
   @@index([role, status])

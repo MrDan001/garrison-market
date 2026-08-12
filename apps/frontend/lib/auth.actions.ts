@@ -21,6 +21,7 @@ import { createAdminNotification } from "@/lib/admin-notification.actions";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { assertSubscriptionActive, checkPlanLimit } from "@/lib/subscription-guard";
 import { creditReferralReward } from "@/lib/referral.actions"; // 👇 Safely imported
+import { resolveAffiliateAttribution, markAffiliateClickConverted } from "@/lib/affiliate.actions";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -180,6 +181,10 @@ export async function registerOwnerAction(formData: FormData) {
 
     const targetStoreName = (data.storeName as string) || "";
     const cleanNewCodeForUser = await generateUniqueReferralCode(targetStoreName);
+    const affiliateAttribution = await resolveAffiliateAttribution(
+      (data.email as string).toLowerCase().trim(),
+      (data.affiliateCode as string) || null
+    );
 
     const newUser = await prisma.user.create({
       data: {
@@ -197,6 +202,8 @@ export async function registerOwnerAction(formData: FormData) {
         status: 'pending',
         referralCode: cleanNewCodeForUser,
         referredById: referrerId,
+        affiliateId: affiliateAttribution?.affiliateId ?? null,
+affiliateReferredAt: affiliateAttribution ? new Date() : null,
         hasTriggeredReferralReward: false, 
 
         stores: {
@@ -206,6 +213,9 @@ export async function registerOwnerAction(formData: FormData) {
         }
       }
     });
+    if (affiliateAttribution) {
+      await markAffiliateClickConverted(affiliateAttribution.clickId, newUser.id);
+    }
 
     const token = await signToken(newUser.id, newUser.role);
     const cookieStore = await cookies();

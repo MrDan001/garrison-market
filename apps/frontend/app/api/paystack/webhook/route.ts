@@ -6,6 +6,7 @@ import { verifyWebhookSignature, verifyTransaction } from "@/lib/paystack";
 import { BILLING_CYCLES, type BillingCycleId, type PlanId } from "@/lib/plans";
 import { createNotification } from "@/lib/notification.actions";
 import { creditReferralReward } from "@/lib/referral.actions"; // 👇 IMPORT YOUR REWARD UTILITY
+import { creditAffiliateCommission, reverseAffiliateCommission } from "@/lib/affiliate.actions";
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
@@ -21,6 +22,22 @@ export async function POST(request: NextRequest) {
     event = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ message: "Invalid payload." }, { status: 400 });
+  }
+
+  // Handle Refunds and Chargebacks (Reverses Affiliate Commission)
+  if (event.event === "charge.dispute.created" || event.event === "refund.processed") {
+    const reference: string = event.data?.reference;
+    if (reference) {
+      try {
+        const payment = await prisma.payment.findUnique({ where: { reference } });
+        if (payment) {
+          await reverseAffiliateCommission(payment.id);
+        }
+      } catch (revError) {
+        console.error("Error reversing affiliate commission:", revError);
+      }
+    }
+    return NextResponse.json({ received: true });
   }
 
   if (event.event !== "charge.success") {
@@ -89,6 +106,16 @@ export async function POST(request: NextRequest) {
     } catch (refError) {
       // Wrapped in a try/catch so referral process issues never disrupt the main payment lifecycle execution
       console.error("Referral process error (payment went through fine):", refError);
+    }
+    try {
+      await creditAffiliateCommission({
+        ownerId: payment.ownerId,
+        paymentId: payment.id,
+        amountNaira: Number(payment.amount),
+        monthsCovered: months, // `months` is already computed above from BILLING_CYCLES
+      });
+    } catch (affError) {
+      console.error("Affiliate commission error (payment went through fine):", affError);
     }
 
     await createNotification({

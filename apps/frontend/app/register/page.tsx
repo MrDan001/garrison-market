@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, ChangeEvent, FormEvent } from "react";
+import React, { useState, useEffect, ChangeEvent, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
@@ -61,6 +61,25 @@ export default function RegisterPage() {
   const [selectedState, setSelectedState] = useState("");
   const [selectedLga, setSelectedLga] = useState("");
   const [referralCode, setReferralCode] = useState(""); // NEW: Added local state tracking for referral input
+
+  // If the visitor arrived via an affiliate link (see
+  // app/ref/[code]/route.ts), pre-fill and lock the Referral Code field
+  // with their code so it's visibly confirmed — not editable, so it
+  // can't be swapped out by mistake. Attribution itself doesn't depend
+  // on this field either way: resolveAffiliateAttribution() in
+  // affiliate.actions.ts reads the same cookie independently,
+  // server-side, when the account is actually created.
+  const [affiliateLocked, setAffiliateLocked] = useState(false);
+  useEffect(() => {
+    const match = document.cookie.match(/(?:^|; )gm_aff_ref=([^;]*)/);
+    if (match) {
+      const [code] = decodeURIComponent(match[1]).split(":");
+      if (code) {
+        setReferralCode(code);
+        setAffiliateLocked(true);
+      }
+    }
+  }, []);
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -290,16 +309,25 @@ export default function RegisterPage() {
                 Referral Code <span className="text-[var(--text-primary)]/30 lowercase font-normal">(optional)</span>
               </label>
               <div className="relative">
-                <Tag size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-primary)]/30" />
+                <Tag size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${affiliateLocked ? "text-[#1F6D4C]" : "text-[var(--text-primary)]/30"}`} />
                 <input
                   type="text"
                   placeholder="e.g. GARRISON_STORE_9901"
                   value={referralCode}
                   onChange={(e) => setReferralCode(e.target.value)}
-                  className="w-full bg-[var(--bg-app)] text-sm text-[var(--text-primary)] pl-10 pr-4 py-3 rounded-sm border border-[var(--border-subtle)]/10 focus:outline-none focus:border-[#E55345] transition tracking-wide uppercase"
+                  readOnly={affiliateLocked}
+                  className={`w-full text-sm pl-10 pr-4 py-3 rounded-sm border transition tracking-wide uppercase focus:outline-none ${
+                    affiliateLocked
+                      ? "bg-[#E7F1EB] text-[#1F6D4C] border-[#1F6D4C]/30 font-bold cursor-default"
+                      : "bg-[var(--bg-app)] text-[var(--text-primary)] border-[var(--border-subtle)]/10 focus:border-[#E55345]"
+                  }`}
                 />
               </div>
-              <p className="text-[10px] text-[var(--text-primary)]/40">Enter a peer invite token to participate in affiliate program allocations.</p>
+              <p className={`text-[10px] ${affiliateLocked ? "text-[#1F6D4C]" : "text-[var(--text-primary)]/40"}`}>
+                {affiliateLocked
+                  ? "Picked up automatically from your referral link."
+                  : "Enter a peer invite token to participate in affiliate program allocations."}
+              </p>
             </div>
 
             <div className="space-y-2">

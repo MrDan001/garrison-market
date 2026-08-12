@@ -250,11 +250,17 @@ export default function HomePage() {
             <div className="h-8 w-8 rounded-sm bg-[#F1EEE3] flex items-center justify-center transition-all duration-300 group-hover:bg-[#E55345] group-hover:rotate-12 group-hover:scale-110">
               <span className="text-[#0D1527] font-extrabold text-sm group-hover:text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>G</span>
             </div>
-            <span className="font-extrabold tracking-tight text-[var(--text-primary)] group-hover:text-[#E55345] transition-colors" style={{ fontFamily: "var(--font-display)" }}>
+            <span className="hidden sm:inline font-extrabold tracking-tight text-[var(--text-primary)] group-hover:text-[#E55345] transition-colors" style={{ fontFamily: "var(--font-display)" }}>
               GARRISON MARKET
             </span>
           </div>
-          <div className="flex items-center gap-3 sm:gap-6">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link
+              href="/affiliate/register"
+              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#E55345] border border-[#E55345]/40 px-3 py-1.5 sm:px-4 sm:py-2 rounded-none hover:bg-[#E55345] hover:text-[var(--bg-app)] transition-all duration-300 whitespace-nowrap"
+            >
+              Become an affiliate
+            </Link>
             <Link href="/login" className="text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-all hover:scale-105">
               Sign in
             </Link>
@@ -669,6 +675,7 @@ export default function HomePage() {
               <li><Link href="/login" className="hover:text-[var(--text-primary)] transition">Sign in</Link></li>
               <li><Link href="/login?plan=standard" className="hover:text-[var(--text-primary)] transition">Standard plan</Link></li>
               <li><Link href="/login?plan=pro" className="hover:text-[var(--text-primary)] transition">Pro plan</Link></li>
+              <li><Link href="/affiliate/register" className="hover:text-[var(--text-primary)] transition">Become an affiliate</Link></li>
             </ul>
           </div>
           <div>

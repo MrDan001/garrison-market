@@ -13,6 +13,7 @@ import {
   X, 
   ShieldAlert,
   Code2, // <-- Dev Assistant icon
+  Handshake, // <-- Affiliates icon
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
@@ -33,6 +34,7 @@ export default function AdminLayout({
     { name: "Messages", href: "/admin/messages", icon: Mail },
     { name: "Broadcast", href: "/admin/broadcast", icon: Bell },
     { name: "Dev Assistant", href: "/admin/dev-assistant", icon: Code2 },
+    { name: "Affiliates", href: "/admin/affiliates", icon: Handshake },
   ];
 
   // Helper to determine active section name for the header
@@ -44,6 +46,7 @@ export default function AdminLayout({
     if (path === "/admin/messages") return "Owner Messages";
     if (path === "/admin/broadcast") return "Push Broadcast";
     if (path === "/admin/dev-assistant") return "Dev Assistant";
+    if (path === "/admin/affiliates") return "Affiliate Program";
     return "Admin Console";
   };
 
