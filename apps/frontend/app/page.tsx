@@ -242,7 +242,7 @@ export default function HomePage() {
       </div>
 
       {/* Navbar */}
-      <nav className="sticky top-0 w-full z-50 border-b border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/80 backdrop-blur-md">
+      <nav className="sticky top-0 w-full z-50 border-b border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/80 backdrop-blur-md relative">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 group cursor-pointer">
             <div className="h-8 w-8 rounded-sm bg-[#F1EEE3] flex items-center justify-center transition-all duration-300 group-hover:bg-[#E55345] group-hover:rotate-12 group-hover:scale-110">
@@ -289,9 +289,17 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Mobile menu panel */}
+        {/* Backdrop — tap outside the panel to close it */}
         {mobileMenuOpen && (
-          <div className="sm:hidden border-t border-[var(--border-subtle)]/10 bg-[var(--bg-app)]">
+          <div
+            className="sm:hidden fixed inset-0 bg-black/50"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+
+        {/* Mobile menu panel — floats over the page, capped at 40% viewport height */}
+        {mobileMenuOpen && (
+          <div className="sm:hidden absolute left-0 right-0 top-full max-h-[40vh] overflow-y-auto border-t border-b border-[var(--border-subtle)]/10 bg-[var(--bg-app)] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.6)]">
             <div className="px-6 py-4 flex flex-col gap-1">
               <Link
                 href="/login"
