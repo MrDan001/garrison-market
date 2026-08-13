@@ -716,6 +716,7 @@ export default function HomePage() {
               <li><Link href="/dpa" className="hover:text-[var(--text-primary)] transition">Data Processing Agreement</Link></li>
               <li><Link href="/refund-policy" className="hover:text-[var(--text-primary)] transition">Refund Policy</Link></li>
               <li><Link href="/msa" className="hover:text-[var(--text-primary)] transition">Master Service Agreement</Link></li>
+              <li><Link href="/security" className="hover:text-[var(--text-primary)] transition">Security</Link></li>
             </ul>
           </div>
         </div>
