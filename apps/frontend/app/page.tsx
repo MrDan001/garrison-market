@@ -20,7 +20,8 @@ import {
   Crown,
   Mail,
   Menu,
-  Scale,
+  ShieldCheck,
+  Handshake,
 } from "lucide-react";
 
 const display = Oswald({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
@@ -215,7 +216,14 @@ function ScrollUnfurl({ children, className = "" }: { children: (active: boolean
 
 export default function HomePage() {
   const [openPlan, setOpenPlan] = useState<PlanId | null>("premium");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
 
   return (
     <div
@@ -242,7 +250,7 @@ export default function HomePage() {
       </div>
 
       {/* Navbar */}
-      <nav className="sticky top-0 w-full z-50 border-b border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/80 backdrop-blur-md relative">
+      <nav className="sticky top-0 w-full z-50 border-b border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 group cursor-pointer">
             <div className="h-8 w-8 rounded-sm bg-[#F1EEE3] flex items-center justify-center transition-all duration-300 group-hover:bg-[#E55345] group-hover:rotate-12 group-hover:scale-110">
@@ -252,9 +260,22 @@ export default function HomePage() {
               GARRISON MARKET
             </span>
           </div>
-          {/* Desktop links */}
-          <div className="hidden sm:flex items-center gap-2 sm:gap-4">
-            <Link href="/login" className="text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-all hover:scale-105">
+          <div className="hidden lg:flex items-center gap-7">
+            <Link href="/login?plan=standard" className="text-sm font-semibold text-[var(--text-primary)]/70 hover:text-[var(--text-primary)] transition-colors">
+              Standard plan
+            </Link>
+            <Link href="/login?plan=pro" className="text-sm font-semibold text-[var(--text-primary)]/70 hover:text-[var(--text-primary)] transition-colors">
+              Pro plan
+            </Link>
+            <Link href="/affiliate/register" className="text-sm font-semibold text-[var(--text-primary)]/70 hover:text-[var(--text-primary)] transition-colors">
+              Become an affiliate
+            </Link>
+            <Link href="/security" className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)]/70 hover:text-[var(--text-primary)] transition-colors">
+              <ShieldCheck size={14} /> Security
+            </Link>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href="/login" className="hidden sm:inline text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-all hover:scale-105">
               Sign in
             </Link>
             <Link
@@ -263,76 +284,190 @@ export default function HomePage() {
             >
               Get started
             </Link>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              className="lg:hidden h-9 w-9 flex items-center justify-center border border-[var(--border-subtle)]/20 text-[var(--text-primary)] hover:border-[#E55345] hover:text-[#E55345] transition-colors"
+            >
+              <Menu size={18} strokeWidth={2.5} />
+            </button>
           </div>
-
-          {/* Mobile hamburger trigger */}
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen((v) => !v)}
-            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileMenuOpen}
-            className="sm:hidden flex items-center justify-center h-9 w-9 text-[var(--text-primary)] hover:text-[#E55345] transition-colors"
-          >
-            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
         </div>
 
-        {/* Become-an-affiliate sub-bar — desktop only, folded into hamburger on mobile */}
-        <div className="hidden sm:block border-t border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/60">
-          <div className="max-w-6xl mx-auto px-6 py-2 flex justify-end">
+        <div className="lg:hidden border-t border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/60">
+          <div className="max-w-6xl mx-auto px-6 py-2 flex justify-center sm:justify-end">
             <Link
               href="/affiliate/register"
-              className="text-xs font-bold uppercase tracking-wider text-[#E55345] hover:underline underline-offset-4 transition-all whitespace-nowrap"
+              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#E55345] hover:underline underline-offset-4 transition-all whitespace-nowrap"
             >
-              Become an affiliate — earn commission referring shop owners →
+              <span className="sm:hidden">Become an affiliate →</span>
+              <span className="hidden sm:inline">Become an affiliate — earn commission referring shop owners →</span>
             </Link>
           </div>
         </div>
-
-        {/* Backdrop — tap outside the panel to close it */}
-        {mobileMenuOpen && (
-          <div
-            className="sm:hidden fixed inset-0 bg-black/50"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-        )}
-
-        {/* Mobile menu panel — floats over the page, capped at 40% viewport height */}
-        {mobileMenuOpen && (
-          <div className="sm:hidden absolute left-0 right-0 top-full max-h-[40vh] overflow-y-auto border-t border-b border-[var(--border-subtle)]/10 bg-[var(--bg-app)] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.6)]">
-            <div className="px-6 py-4 flex flex-col gap-1">
-              <Link
-                href="/login"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-3 text-sm font-semibold text-[var(--text-primary)]/80 border-b border-[var(--border-subtle)]/10"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/register"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-3 text-sm font-black uppercase tracking-wider text-[#E55345] border-b border-[var(--border-subtle)]/10"
-              >
-                Get started — free trial
-              </Link>
-              <Link
-                href="/affiliate/register"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-3 text-sm font-bold text-[var(--text-primary)]/80 border-b border-[var(--border-subtle)]/10"
-              >
-                Become an affiliate
-              </Link>
-              <Link
-                href="/terms"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-3 text-sm font-semibold text-[var(--text-primary)]/60 flex items-center gap-2"
-              >
-                <Scale size={15} /> Legal
-              </Link>
-            </div>
-          </div>
-        )}
       </nav>
+
+      {/* Hamburger menu overlay + drawer */}
+      <div
+        className={`fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${
+          menuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => setMenuOpen(false)}
+        aria-hidden={!menuOpen}
+      />
+      <aside
+        className={`fixed top-0 right-0 z-[70] h-full w-[85%] max-w-sm bg-[var(--bg-app)] border-l border-[var(--border-subtle)]/10 shadow-2xl transition-transform duration-300 ease-out overflow-y-auto ${
+          menuOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Site menu"
+      >
+        <div className="flex items-center justify-between px-6 h-16 border-b border-[var(--border-subtle)]/10">
+          <span className="font-extrabold tracking-tight text-sm" style={{ fontFamily: "var(--font-display)" }}>
+            MENU
+          </span>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(false)}
+            aria-label="Close menu"
+            className="h-9 w-9 flex items-center justify-center border border-[var(--border-subtle)]/20 hover:border-[#E55345] hover:text-[#E55345] transition-colors"
+          >
+            <X size={18} strokeWidth={2.5} />
+          </button>
+        </div>
+
+        <nav className="px-6 py-8 space-y-10">
+          <div className="flex flex-col gap-3">
+            <Link
+              href="/register"
+              onClick={() => setMenuOpen(false)}
+              className="text-center text-sm font-black uppercase tracking-wider bg-[#F1EEE3] text-[#0D1527] px-4 py-3 hover:bg-[#E55345] hover:text-[var(--text-primary)] transition-colors"
+            >
+              Get started
+            </Link>
+            <Link
+              href="/login"
+              onClick={() => setMenuOpen(false)}
+              className="text-center text-sm font-bold uppercase tracking-wider border border-[var(--border-subtle)]/20 px-4 py-3 hover:border-[#E55345] hover:text-[#E55345] transition-colors"
+            >
+              Sign in
+            </Link>
+          </div>
+
+          <div>
+            <h4
+              className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]/40 mb-3"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              Plans
+            </h4>
+            <ul className="space-y-1">
+              <li>
+                <Link
+                  href="/login?plan=standard"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center justify-between py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[#E55345] transition-colors"
+                >
+                  Standard plan <ArrowUpRight size={14} />
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/login?plan=pro"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center justify-between py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[#E55345] transition-colors"
+                >
+                  Pro plan <ArrowUpRight size={14} />
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h4
+              className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]/40 mb-3"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              Partner with us
+            </h4>
+            <Link
+              href="/affiliate/register"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 py-2.5 text-sm font-bold text-[#E55345]"
+            >
+              <Handshake size={16} /> Become an affiliate
+            </Link>
+          </div>
+
+          <div>
+            <h4
+              className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]/40 mb-3"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              Trust &amp; legal
+            </h4>
+            <ul className="space-y-1">
+              <li>
+                <Link
+                  href="/security"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2 py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-colors"
+                >
+                  <ShieldCheck size={14} className="text-[var(--text-primary)]/40" /> Security
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/terms"
+                  onClick={() => setMenuOpen(false)}
+                  className="block py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/privacy"
+                  onClick={() => setMenuOpen(false)}
+                  className="block py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dpa"
+                  onClick={() => setMenuOpen(false)}
+                  className="block py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Data Processing Agreement
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/refund-policy"
+                  onClick={() => setMenuOpen(false)}
+                  className="block py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Refund Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/msa"
+                  onClick={() => setMenuOpen(false)}
+                  className="block py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Master Service Agreement
+                </Link>
+              </li>
+            </ul>
+          </div>
+        </nav>
+      </aside>
 
       {/* Main Content */}
       <main className="px-6 max-w-6xl mx-auto relative z-10">
