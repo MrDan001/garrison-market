@@ -38,6 +38,16 @@ export function isInternalLink(href: string): boolean {
   return href.startsWith("/");
 }
 
+// Only http/https survive as a real clickable external link — anything
+// else (javascript:, data:, vbscript:, etc.) gets treated as plain text
+// by every renderer below. The admin composer is the only place that
+// writes these hrefs, but validating the scheme here means a stray
+// "javascript:" typed (or pasted) into a broadcast never becomes a live,
+// clickable link anywhere it's shown.
+export function isSafeExternalLink(href: string): boolean {
+  return /^https?:\/\//i.test(href);
+}
+
 // List/preview surfaces truncate the raw body to ~120 chars — without this,
 // a link near the cut-off point shows as literal "[dashboa" bracket syntax.
 // Strips every [label](url) down to just its label so previews stay plain,
@@ -76,8 +86,15 @@ export function renderMessageBodyHtml(body: string, baseUrl: string): string {
   return segments
     .map((seg) => {
       if (seg.type === "text") return escapeHtml(seg.value).replace(/\n/g, "<br>");
-      const href = isInternalLink(seg.href) ? `${baseUrl.replace(/\/$/, "")}${seg.href}` : seg.href;
-      return `<a href="${escapeHtml(href)}" style="color:#4f46e5; font-weight:600;">${escapeHtml(seg.label)}</a>`;
+      if (isInternalLink(seg.href)) {
+        const href = `${baseUrl.replace(/\/$/, "")}${seg.href}`;
+        return `<a href="${escapeHtml(href)}" style="color:#4f46e5; font-weight:600;">${escapeHtml(seg.label)}</a>`;
+      }
+      if (isSafeExternalLink(seg.href)) {
+        return `<a href="${escapeHtml(seg.href)}" style="color:#4f46e5; font-weight:600;">${escapeHtml(seg.label)}</a>`;
+      }
+      // Unsafe scheme (javascript:, data:, etc.) — render as plain text, not a link.
+      return escapeHtml(seg.label);
     })
     .join("");
 }

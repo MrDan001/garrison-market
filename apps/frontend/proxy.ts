@@ -26,15 +26,18 @@ export async function proxy(request: NextRequest) {
 
   const role = payload.role?.toLowerCase();
 
-  if (pathname.startsWith('/admin') && role !== 'admin') {
+  const isUnderPrefix = (prefix: string) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`);
+
+  if (isUnderPrefix('/admin') && role !== 'admin') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (pathname.startsWith('/owner') && role !== 'owner') {
+  if (isUnderPrefix('/owner') && role !== 'owner') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (pathname.startsWith('/staff') && role !== 'staff') {
+  if (isUnderPrefix('/staff') && role !== 'staff') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

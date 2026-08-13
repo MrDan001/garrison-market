@@ -22,6 +22,7 @@ import { TRIAL_DAYS } from "@/lib/plans";
 import { assertSubscriptionActive, checkPlanLimit } from "@/lib/subscription-guard";
 import { creditReferralReward } from "@/lib/referral.actions"; // 👇 Safely imported
 import { resolveAffiliateAttribution, markAffiliateClickConverted } from "@/lib/affiliate.actions";
+import { checkRateLimit, resetRateLimit, getClientIp } from "@/lib/rate-limit";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -75,6 +76,20 @@ export async function loginAction(formData: FormData) {
 
   if (!email || !password) return { error: "Email and password are required." };
 
+  // Two buckets: a tight one per email (stops someone grinding one
+  // account's password) and a looser one per IP (stops one source
+  // spraying attempts across many emails). Either one tripping blocks
+  // the attempt.
+  const ip = await getClientIp();
+  const emailLimit = await checkRateLimit(`login:email:${email}`, { max: 6, windowMs: 10 * 60 * 1000 });
+  if (!emailLimit.allowed) {
+    return { error: `Too many attempts for this account. Try again in ${Math.ceil(emailLimit.retryAfterSeconds / 60)} min.` };
+  }
+  const ipLimit = await checkRateLimit(`login:ip:${ip}`, { max: 25, windowMs: 10 * 60 * 1000 });
+  if (!ipLimit.allowed) {
+    return { error: `Too many attempts from this connection. Try again in ${Math.ceil(ipLimit.retryAfterSeconds / 60)} min.` };
+  }
+
   let redirectUrl: string | null = null;
 
   try {
@@ -83,6 +98,10 @@ export async function loginAction(formData: FormData) {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return { error: "Invalid email or password." };
     }
+
+    // Successful password check — clear this email's counter so a couple
+    // of earlier typos don't leave the account sitting near the limit.
+    await resetRateLimit(`login:email:${email}`);
 
     const userRole = user.role.toLowerCase().trim();
     const userStatus = user.status.toUpperCase().trim();
@@ -283,6 +302,14 @@ export async function requestPasswordResetAction(formData: FormData) {
     success: true,
     message: "If an account exists for that email, a reset link has been sent.",
   };
+
+  // Rate-limited silently — still returns genericSuccess so this can't be
+  // used to probe whether an email exists or to tell a spammer their
+  // requests are being throttled. It just stops sending more emails.
+  const ip = await getClientIp();
+  const emailLimit = await checkRateLimit(`reset:email:${email}`, { max: 3, windowMs: 60 * 60 * 1000 });
+  const ipLimit = await checkRateLimit(`reset:ip:${ip}`, { max: 10, windowMs: 60 * 60 * 1000 });
+  if (!emailLimit.allowed || !ipLimit.allowed) return genericSuccess;
 
   try {
     const user = await prisma.user.findUnique({ where: { email } });

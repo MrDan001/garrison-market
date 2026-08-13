@@ -1,12 +1,21 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 // NOTE: unlike /api/blob/upload, this route runs BEFORE a session exists —
 // registration happens pre-auth, so there's no owner session yet to check.
-// The only guardrails here are content type and file size. If this becomes
-// a target for abuse (random uploads hitting this endpoint), add a rate
-// limit or CAPTCHA on top of this later.
+// Guardrails: content type, file size, and (added after a pentest flagged
+// this as an open abuse vector) a per-IP rate limit below.
 export async function POST(request: Request): Promise<NextResponse> {
+  const ip = await getClientIp();
+  const limit = await checkRateLimit(`blob-register:ip:${ip}`, { max: 20, windowMs: 60 * 60 * 1000 });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many uploads from this connection. Please try again later." },
+      { status: 429 }
+    );
+  }
+
   const body = (await request.json()) as HandleUploadBody;
 
   try {

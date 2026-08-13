@@ -1,7 +1,7 @@
 // FILE: apps/frontend/components/MessageBody.tsx
 
 import Link from "next/link";
-import { parseMessageBody, isInternalLink } from "@/lib/message-links";
+import { parseMessageBody, isInternalLink, isSafeExternalLink } from "@/lib/message-links";
 
 // Renders an admin message body with inline [label](url) links turned into
 // real, clickable links — internal app paths ("/owner/billing") navigate
@@ -28,7 +28,7 @@ export default function MessageBody({ text }: { text: string }) {
           >
             {seg.label}
           </Link>
-        ) : (
+        ) : isSafeExternalLink(seg.href) ? (
           <a
             key={i}
             href={seg.href}
@@ -38,6 +38,10 @@ export default function MessageBody({ text }: { text: string }) {
           >
             {seg.label}
           </a>
+        ) : (
+          // Unsafe scheme (javascript:, data:, etc.) — show the label as
+          // plain text rather than a clickable link.
+          <span key={i}>{seg.label}</span>
         )
       )}
     </>

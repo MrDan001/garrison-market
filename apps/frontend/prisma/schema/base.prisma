@@ -1143,3 +1143,19 @@ model AdminMessageThreadStatus {
   @@index([messageId])
   @@index([ownerId])
 }
+
+// Backs lib/rate-limit.ts. DB-backed (not in-memory) on purpose — the app
+// runs on Vercel's serverless platform across many short-lived instances,
+// so an in-memory counter would reset constantly and never actually catch
+// a distributed brute-force attempt. One row per rate-limited "bucket"
+// (e.g. "login:email:someone@x.com" or "login:ip:1.2.3.4"); the window
+// resets itself once `windowStart` is older than the caller's window.
+model RateLimitBucket {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  count       Int      @default(1)
+  windowStart DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([windowStart])
+}

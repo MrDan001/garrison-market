@@ -266,7 +266,7 @@ export default async function OwnerDashboardPage() {
 
     return (
       <div className="min-h-screen bg-[var(--bg-app)] text-slate-800 dark:text-slate-200 pb-20 lg:pb-0">
-        <header className="sticky top-0 z-10 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-40 bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
               <Store size={15} className="text-[var(--text-primary)]" />
