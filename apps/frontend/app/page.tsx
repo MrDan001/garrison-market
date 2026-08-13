@@ -19,6 +19,8 @@ import {
   ChevronDown,
   Crown,
   Mail,
+  Menu,
+  Scale,
 } from "lucide-react";
 
 const display = Oswald({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
@@ -213,6 +215,7 @@ function ScrollUnfurl({ children, className = "" }: { children: (active: boolean
 
 export default function HomePage() {
   const [openPlan, setOpenPlan] = useState<PlanId | null>("premium");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div
@@ -249,7 +252,8 @@ export default function HomePage() {
               GARRISON MARKET
             </span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
+          {/* Desktop links */}
+          <div className="hidden sm:flex items-center gap-2 sm:gap-4">
             <Link href="/login" className="text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-all hover:scale-105">
               Sign in
             </Link>
@@ -260,19 +264,66 @@ export default function HomePage() {
               Get started
             </Link>
           </div>
+
+          {/* Mobile hamburger trigger */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
+            className="sm:hidden flex items-center justify-center h-9 w-9 text-[var(--text-primary)] hover:text-[#E55345] transition-colors"
+          >
+            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
         </div>
 
-        <div className="border-t border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/60">
-          <div className="max-w-6xl mx-auto px-6 py-2 flex justify-center sm:justify-end">
+        {/* Become-an-affiliate sub-bar — desktop only, folded into hamburger on mobile */}
+        <div className="hidden sm:block border-t border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/60">
+          <div className="max-w-6xl mx-auto px-6 py-2 flex justify-end">
             <Link
               href="/affiliate/register"
-              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#E55345] hover:underline underline-offset-4 transition-all whitespace-nowrap"
+              className="text-xs font-bold uppercase tracking-wider text-[#E55345] hover:underline underline-offset-4 transition-all whitespace-nowrap"
             >
-              <span className="sm:hidden">Become an affiliate →</span>
-              <span className="hidden sm:inline">Become an affiliate — earn commission referring shop owners →</span>
+              Become an affiliate — earn commission referring shop owners →
             </Link>
           </div>
         </div>
+
+        {/* Mobile menu panel */}
+        {mobileMenuOpen && (
+          <div className="sm:hidden border-t border-[var(--border-subtle)]/10 bg-[var(--bg-app)]">
+            <div className="px-6 py-4 flex flex-col gap-1">
+              <Link
+                href="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="py-3 text-sm font-semibold text-[var(--text-primary)]/80 border-b border-[var(--border-subtle)]/10"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/register"
+                onClick={() => setMobileMenuOpen(false)}
+                className="py-3 text-sm font-black uppercase tracking-wider text-[#E55345] border-b border-[var(--border-subtle)]/10"
+              >
+                Get started — free trial
+              </Link>
+              <Link
+                href="/affiliate/register"
+                onClick={() => setMobileMenuOpen(false)}
+                className="py-3 text-sm font-bold text-[var(--text-primary)]/80 border-b border-[var(--border-subtle)]/10"
+              >
+                Become an affiliate
+              </Link>
+              <Link
+                href="/terms"
+                onClick={() => setMobileMenuOpen(false)}
+                className="py-3 text-sm font-semibold text-[var(--text-primary)]/60 flex items-center gap-2"
+              >
+                <Scale size={15} /> Legal
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Main Content */}
