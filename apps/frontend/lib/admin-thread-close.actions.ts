@@ -13,7 +13,7 @@ const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || "";
 
 // ⚠️ Adjust to whatever "from" address you already use elsewhere for
 // admin/support emails (e.g. the same one sendAdminReplyAction uses).
-const FROM_EMAIL = process.env.ADMIN_MESSAGE_FROM_EMAIL || "Garrison Market <support@garrisonmarket.com>";
+const FROM_EMAIL = process.env.ADMIN_MESSAGE_FROM_EMAIL || "Garrison Market <support@gmstock.coisonmarket.com>";
 
 export async function getThreadStatusAction(messageId: number, ownerId: number): Promise<"open" | "closed"> {
   const row = await prisma.adminMessageThreadStatus.findUnique({

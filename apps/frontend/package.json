@@ -10,7 +10,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@vercel/blob": "^2.5.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "bcrypt": "^6.0.0",
     "jose": "^6.2.3",
     "lucide-react": "^0.454.0",

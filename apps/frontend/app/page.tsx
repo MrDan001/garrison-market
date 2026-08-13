@@ -100,11 +100,6 @@ const steps = [
 
 const displayLimit = (n: number) => (n === Infinity ? "Unlimited" : n);
 
-// Same generator as /owner/billing's getGoodies — reads live from PLANS so
-// the marketing page can never advertise something the app doesn't
-// actually gate that way. No price math here (unlike the billing page's
-// version) since there's no public/static price to show — see the CTA
-// copy below instead.
 function getGoodies(planId: PlanId): { supersetOf: string | null; items: string[] } {
   const plan = PLANS[planId];
   const items: string[] = [];
@@ -154,12 +149,8 @@ function Typewriter({ text, speed = 15, active = false }: { text: string; speed?
   const [currentText, setCurrentText] = useState("");
 
   useEffect(() => {
-    if (!active) {
-      // Clear text when inactive so it can re-type next time
-      setCurrentText("");
-      return;
-    }
-    
+    if (!active) return;
+
     let i = 0;
     setCurrentText("");
     const timer = setInterval(() => {
@@ -182,20 +173,24 @@ function Typewriter({ text, speed = 15, active = false }: { text: string; speed?
   );
 }
 
-// --- 2. Scroll-driven Unfurl Wrapper with Repeatability ---
+// --- 2. Scroll-driven Unfurl Wrapper (One-Shot Trigger) ---
 function ScrollUnfurl({ children, className = "" }: { children: (active: boolean) => React.ReactNode; className?: string }) {
   const [hasEntered, setHasEntered] = useState(false);
   const elementRef = useRef<HTMLDivElement>(null);
+  const hasFiredRef = useRef(false);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // Sets active to true when entering viewport, and false when it rolls completely out
-        setHasEntered(entry.isIntersecting);
+        // Trigger unroll ONCE when entering viewport and stick
+        if (entry.isIntersecting && !hasFiredRef.current) {
+          hasFiredRef.current = true;
+          setHasEntered(true);
+        }
       },
       {
         threshold: 0.1, 
-        rootMargin: "0px 0px -10% 0px", // Trigger when 10% of the element is within view
+        rootMargin: "0px 0px -10% 0px",
       }
     );
 
@@ -267,9 +262,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Affiliate strip — its own row so it never competes with the
-            logo/Sign in/Get started row on narrow screens. Short copy on
-            mobile (single line), full pitch on desktop. */}
         <div className="border-t border-[var(--border-subtle)]/10 bg-[var(--bg-app)]/60">
           <div className="max-w-6xl mx-auto px-6 py-2 flex justify-center sm:justify-end">
             <Link
@@ -283,7 +275,7 @@ export default function HomePage() {
         </div>
       </nav>
 
-      {/* Main Content with Scroll-driven Unfurl Wrappers */}
+      {/* Main Content */}
       <main className="px-6 max-w-6xl mx-auto relative z-10">
         
         {/* Section 1: Hero */}
@@ -369,7 +361,7 @@ export default function HomePage() {
           )}
         </ScrollUnfurl>
 
-        {/* Section 2: Agitation (Problem vs Solution) */}
+        {/* Section 2: Agitation */}
         <ScrollUnfurl>
           {(active) => (
             <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10 relative">
@@ -509,106 +501,106 @@ export default function HomePage() {
           )}
         </ScrollUnfurl>
 
-{/* Section 5: Pricing */}
-<ScrollUnfurl>
-  {() => (
-    <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10">
-      <div className="border border-[var(--border-subtle)]/15 rounded-none p-8 md:p-16 bg-[var(--bg-surface)] shadow-2xl relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#E55345]/5 via-transparent to-transparent pointer-events-none" />
-        <h2
-          className="text-4xl sm:text-5xl font-black text-[var(--text-primary)] mb-4 text-center tracking-tight uppercase"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          Stop losing money guessing.
-        </h2>
-        <p className="text-center text-[var(--text-primary)]/50 mb-14 text-sm font-semibold uppercase tracking-wider">
-          Cancel anytime. No card required to start.
-        </p>
+        {/* Section 5: Pricing */}
+        <ScrollUnfurl>
+          {() => (
+            <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10">
+              <div className="border border-[var(--border-subtle)]/15 rounded-none p-8 md:p-16 bg-[var(--bg-surface)] shadow-2xl relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#E55345]/5 via-transparent to-transparent pointer-events-none" />
+                <h2
+                  className="text-4xl sm:text-5xl font-black text-[var(--text-primary)] mb-4 text-center tracking-tight uppercase"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Stop losing money guessing.
+                </h2>
+                <p className="text-center text-[var(--text-primary)]/50 mb-14 text-sm font-semibold uppercase tracking-wider">
+                  Cancel anytime. No card required to start.
+                </p>
 
-        <div className="max-w-2xl mx-auto space-y-6">
-          {(["basic", "premium", "max"] as PlanId[]).map((planId) => {
-            const plan = PLANS[planId];
-            const goodies = getGoodies(planId);
-            const isMax = planId === "max";
-            const isPopular = planId === "premium";
-            const accentBorder = isPopular
-              ? "border-[#E55345]"
-              : isMax
-              ? "border-amber-500/40"
-              : "border-[var(--border-subtle)]/15";
-            const accentText = isPopular
-              ? "text-[#E55345]"
-              : isMax
-              ? "text-amber-400"
-              : "text-[var(--text-primary)]/70";
+                <div className="max-w-2xl mx-auto space-y-6">
+                  {(["basic", "premium", "max"] as PlanId[]).map((planId) => {
+                    const plan = PLANS[planId];
+                    const goodies = getGoodies(planId);
+                    const isMax = planId === "max";
+                    const isPopular = planId === "premium";
+                    const accentBorder = isPopular
+                      ? "border-[#E55345]"
+                      : isMax
+                      ? "border-amber-500/40"
+                      : "border-[var(--border-subtle)]/15";
+                    const accentText = isPopular
+                      ? "text-[#E55345]"
+                      : isMax
+                      ? "text-amber-400"
+                      : "text-[var(--text-primary)]/70";
 
-            return (
-              <div
-                key={planId}
-                className={`bg-[var(--bg-app)] border ${accentBorder} rounded-none relative p-6 sm:p-8 transition-colors duration-300`}
-              >
-                {isPopular && (
-                  <span className="absolute -top-3 left-6 bg-[#E55345] text-[#F1EEE3] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md">
-                    Popular Choice
-                  </span>
-                )}
-                {isMax && (
-                  <span className="absolute -top-3 left-6 bg-amber-500 text-[#0D1527] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md flex items-center gap-1">
-                    <Crown size={11} /> Unlimited
-                  </span>
-                )}
+                    return (
+                      <div
+                        key={planId}
+                        className={`bg-[var(--bg-app)] border ${accentBorder} rounded-none relative p-6 sm:p-8 transition-colors duration-300`}
+                      >
+                        {isPopular && (
+                          <span className="absolute -top-3 left-6 bg-[#E55345] text-[#F1EEE3] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md">
+                            Popular Choice
+                          </span>
+                        )}
+                        {isMax && (
+                          <span className="absolute -top-3 left-6 bg-amber-500 text-[#0D1527] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm shadow-md flex items-center gap-1">
+                            <Crown size={11} /> Unlimited
+                          </span>
+                        )}
 
-                <div className="mb-6">
-                  <div className="text-xl font-black uppercase tracking-widest text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
-                    {plan.name}
-                  </div>
+                        <div className="mb-6">
+                          <div className="text-xl font-black uppercase tracking-widest text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
+                            {plan.name}
+                          </div>
+                        </div>
+
+                        {goodies.supersetOf && (
+                          <p
+                            className={`text-[11px] font-black uppercase tracking-widest mb-3 ${accentText}`}
+                            style={{ fontFamily: "var(--font-mono)" }}
+                          >
+                            Everything in {goodies.supersetOf}, plus:
+                          </p>
+                        )}
+
+                        <ul className="space-y-3 mb-6">
+                          {goodies.items.map((item, idx) => (
+                            <li key={idx} className="flex items-start gap-3 text-sm text-[var(--text-primary)]/75">
+                              <Check size={15} className={`mt-0.5 shrink-0 ${accentText}`} />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+
+                        {isMax ? (
+                          <a
+                            href="mailto:support@garrison.com"
+                            className="w-full flex items-center justify-center gap-2 py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 bg-amber-500 text-[#0D1527] hover:bg-amber-400"
+                          >
+                            <Mail size={14} /> Contact Us
+                          </a>
+                        ) : (
+                          <Link
+                            href={`/register?plan=${planId}`}
+                            className={`w-full flex items-center justify-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 ${
+                              isPopular
+                                ? "bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] shadow-[0_4px_15px_rgba(229,83,69,0.3)]"
+                                : "bg-[#F1EEE3] text-[#0D1527] hover:bg-[#E2DDD0]"
+                            }`}
+                          >
+                            Choose {plan.name}
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-
-                {goodies.supersetOf && (
-                  <p
-                    className={`text-[11px] font-black uppercase tracking-widest mb-3 ${accentText}`}
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  >
-                    Everything in {goodies.supersetOf}, plus:
-                  </p>
-                )}
-
-                <ul className="space-y-3 mb-6">
-                  {goodies.items.map((item, idx) => (
-                    <li key={idx} className="flex items-start gap-3 text-sm text-[var(--text-primary)]/75">
-                      <Check size={15} className={`mt-0.5 shrink-0 ${accentText}`} />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                {isMax ? (
-                  <a
-                    href="mailto:support@garrison.com"
-                    className="w-full flex items-center justify-center gap-2 py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 bg-amber-500 text-[#0D1527] hover:bg-amber-400"
-                  >
-                    <Mail size={14} /> Contact Us
-                  </a>
-                ) : (
-                  <Link
-                    href={`/register?plan=${planId}`}
-                    className={`w-full flex items-center justify-center py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 ${
-                      isPopular
-                        ? "bg-[#E55345] text-[#F1EEE3] hover:bg-[#c94337] shadow-[0_4px_15px_rgba(229,83,69,0.3)]"
-                        : "bg-[#F1EEE3] text-[#0D1527] hover:bg-[#E2DDD0]"
-                    }`}
-                  >
-                    Choose {plan.name}
-                  </Link>
-                )}
               </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  )}
-</ScrollUnfurl>
+            </section>
+          )}
+        </ScrollUnfurl>
 
         {/* Section 6: FAQ */}
         <ScrollUnfurl>
@@ -664,7 +656,7 @@ export default function HomePage() {
       </main>
 
       <footer className="border-t border-[var(--border-subtle)]/10 py-16 px-6 bg-[var(--bg-app)] relative z-20">
-        <div className="max-w-6xl mx-auto grid sm:grid-cols-3 gap-10 mb-12 text-sm">
+        <div className="max-w-6xl mx-auto grid sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-12 text-sm">
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="h-6 w-6 rounded-sm bg-[#F1EEE3] flex items-center justify-center">
@@ -712,6 +704,18 @@ export default function HomePage() {
                 Igwuruta, Port Harcourt,<br />
                 Rivers State, Nigeria
               </li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)]/40 mb-4" style={{ fontFamily: "var(--font-mono)" }}>
+              Legal
+            </h4>
+            <ul className="space-y-3 text-[var(--text-primary)]/60 font-semibold text-xs">
+              <li><Link href="/terms" className="hover:text-[var(--text-primary)] transition">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="hover:text-[var(--text-primary)] transition">Privacy Policy</Link></li>
+              <li><Link href="/dpa" className="hover:text-[var(--text-primary)] transition">Data Processing Agreement</Link></li>
+              <li><Link href="/refund-policy" className="hover:text-[var(--text-primary)] transition">Refund Policy</Link></li>
+              <li><Link href="/msa" className="hover:text-[var(--text-primary)] transition">Master Service Agreement</Link></li>
             </ul>
           </div>
         </div>
@@ -768,7 +772,6 @@ export default function HomePage() {
           perspective-origin: 50% 10%;
         }
 
-        /* Scroll-triggered unrolling physics */
         .scroll-unfurl-element {
           transform-origin: top center;
           transition: transform 1.6s cubic-bezier(0.12, 0.9, 0.28, 1.01), 
@@ -777,14 +780,12 @@ export default function HomePage() {
           will-change: transform, opacity, filter;
         }
 
-        /* Rolled State (Curled up inside the screen) */
         .scroll-unfurl-element.rolled {
           opacity: 0;
           transform: rotateX(-85deg) translateY(-60px) scaleY(0.4);
           filter: blur(6px) brightness(0.4);
         }
 
-        /* Unrolled State (Drapes flat downwards) */
         .scroll-unfurl-element.unrolled {
           opacity: 1;
           transform: rotateX(0deg) translateY(0px) scaleY(1);

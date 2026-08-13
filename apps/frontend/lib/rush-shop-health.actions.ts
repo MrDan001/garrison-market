@@ -1,4 +1,4 @@
-// FILE: apps/frontend/lib/rush-shop-health.actions.ts (UPDATED — Stage 5 extracts the scoring logic into an exported, store-parameterized function so getStoreComparison can reuse it without duplicating the math. Behavior of getShopHealth() is unchanged.)
+// FILE: apps/frontend/lib/rush-shop-health.actions.ts (UPDATED — fixes a status-filter bug: the assignedStaff count checked status "approved", a value staff rows never have, so it was always 0 and staffActivity silently always scored 100/100 regardless of real activity. Now filters "active", matching how staff status actually works. Stage 5 extraction of computeHealthForStore() is otherwise unchanged.)
 //
 // Shop health is computed live, never stored — it's a derived read over
 // data you already have (inventory, orders, staff), not a new fact about
@@ -61,7 +61,11 @@ export async function computeHealthForStore(storeId: number, ownerId: number): P
       _sum: { total: true },
     }),
     prisma.user.count({
-      where: { staffStoreId: storeId, role: "staff", status: "approved" },
+      // Same status-filter bug as rush-clock.actions.ts had: staff rows
+      // are never "approved" — only "active" or "suspended" — so this
+      // count was silently always 0, which forced staffActivity to 100
+      // below regardless of real activity. Fixed to "active".
+      where: { staffStoreId: storeId, role: "staff", status: "active" },
     }),
     prisma.order.findMany({
       where: { storeId, date: { gte: todayStart }, staffId: { not: null } },

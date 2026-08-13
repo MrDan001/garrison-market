@@ -1,4 +1,4 @@
-// FILE: apps/frontend/lib/admin-message.actions.ts
+// FILE: apps/frontend/lib/admin-message.actions.ts (UPDATED — fixes a status-filter bug: two staff-recipient queries checked status "approved", a value staff rows never have (they're "active"/"suspended", no approval step). This meant every "all staff" broadcast resolved to zero recipients and failed with "No matching staff member(s) found to send to," and the staff read-count stat was always 0. Both now filter "active". Owner-side "approved" checks elsewhere in this file are untouched — that status is real for owners.)
 
 "use server";
 
@@ -83,7 +83,11 @@ async function sendAdminMessage(
         : params.audience === "single_staff"
         ? { id: params.targetStaffId, role: "staff" }
         : isStaffSend
-        ? { role: "staff", status: "approved" }
+        // Staff rows never have status "approved" — only "active" or
+        // "suspended" (owners create staff directly, no approval step).
+        // Filtering on "approved" here meant every all-staff broadcast
+        // resolved to zero recipients and failed outright.
+        ? { role: "staff", status: "active" }
         : { role: "owner", status: "approved" },
     select: { id: true, email: true, fullName: true, ownerId: true },
   });
@@ -251,7 +255,9 @@ export async function getSentAdminMessages() {
   // label, so a fresh count of currently-approved accounts is close enough
   // even though the exact original audience could've shrunk/grown since.
   const approvedOwnerCount = await prisma.user.count({ where: { role: "owner", status: "approved" } });
-  const approvedStaffCount = await prisma.user.count({ where: { role: "staff", status: "approved" } });
+  // Same fix as the send-side resolver above — staff use "active", not
+  // "approved".
+  const approvedStaffCount = await prisma.user.count({ where: { role: "staff", status: "active" } });
 
   // Pull every reply for these messages in one query, then reduce down to
   // "how many distinct owner-threads on this message are waiting on an

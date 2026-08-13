@@ -72,8 +72,8 @@ export default async function PendingPage() {
         text: (
           <>
             Your access has been restricted. Please contact support at 
-            <a href="mailto:support@garrison.com" className="text-rose-500 hover:underline ml-1 font-semibold">
-              support@garrison.com 
+            <a href="mailto:officialsafebase@gmail.com" className="text-rose-500 hover:underline ml-1 font-semibold">
+              officialsafebase@gmail.com 
             </a>{" "}
             to resolve this matter.
           </>

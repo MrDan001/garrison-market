@@ -1,4 +1,4 @@
-// FILE: apps/frontend/lib/rush-clock.actions.ts (UPDATED — adds getStaffClockRosterRange(days), a rolled-up attendance summary that powers the "7 Days" tab on StaffClockRosterCard. Takes a plain day count so a future 30/90-day view needs no new query. getStaffClockRoster() below is unchanged. Clock-in/clock-out logic further below is unchanged from Fix A.)
+// FILE: apps/frontend/lib/rush-clock.actions.ts (UPDATED — fixes a status-filter bug in getApprovedStoreStaff/getStaffClockRoster/getStaffClockRosterRange: staff accounts use status "active"/"suspended", never "approved", so the roster always came back empty. Renamed the helper to getActiveStoreStaff to match reality. Also adds getStaffClockRosterRange(days), a rolled-up attendance summary that powers the "7 Days" tab on StaffClockRosterCard. Takes a plain day count so a future 30/90-day view needs no new query. getStaffClockRoster() below is otherwise unchanged. Clock-in/clock-out logic further below is unchanged from Fix A.)
 //
 // Clock-in/clock-out for staff. This is the real trigger behind the
 // STAFF_ON_TIME XP award, which previously existed in XP_AMOUNTS but was
@@ -231,14 +231,21 @@ export async function setShiftStartTime(newTime: string): Promise<{ success: boo
 //
 // getTodayClockStatus() above only ever answers "is the logged-in person
 // clocked in" — there was previously no query that fans that out across a
-// whole store. This is that query: every approved staff member assigned
-// to the active store, joined against today's ClockEvent (if any). Staff
+// whole store. This is that query: every active staff member assigned to
+// the active store, joined against today's ClockEvent (if any). Staff
 // who haven't clocked in yet still appear, with clockedIn: false, so the
 // owner sees absences, not just a partial list.
+//
+// Status filter is "active", not "approved" — staff accounts don't go
+// through an approval step in this app. The owner creates them directly
+// in registerStaffAction() with status: "active", and toggleStaffStatus()
+// only ever flips between "active" and "suspended". "approved" isn't a
+// status a staff row can have, so filtering on it always returned zero
+// rows.
 
-async function getApprovedStoreStaff(storeId: number) {
+async function getActiveStoreStaff(storeId: number) {
   return prisma.user.findMany({
-    where: { staffStoreId: storeId, role: "staff", status: "approved" },
+    where: { staffStoreId: storeId, role: "staff", status: "active" },
     select: { id: true, fullName: true },
   });
 }
@@ -264,7 +271,7 @@ export async function getStaffClockRoster(): Promise<StaffClockRosterEntry[]> {
     const clockDate = startOfToday();
 
     const [staff, events] = await Promise.all([
-      getApprovedStoreStaff(storeId),
+      getActiveStoreStaff(storeId),
       prisma.clockEvent.findMany({
         where: { storeId, clockDate },
       }),
@@ -332,7 +339,7 @@ export async function getStaffClockRosterRange(days: number): Promise<StaffClock
     rangeStart.setDate(rangeStart.getDate() - (Math.max(1, days) - 1));
 
     const [staff, events] = await Promise.all([
-      getApprovedStoreStaff(storeId),
+      getActiveStoreStaff(storeId),
       prisma.clockEvent.findMany({
         where: { storeId, clockDate: { gte: rangeStart } },
       }),
