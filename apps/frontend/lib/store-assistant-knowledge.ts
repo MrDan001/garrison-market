@@ -234,7 +234,7 @@ Profile & Settings below, Scale Consignment and Merged Cart are NOT
 something an owner can switch on themselves — they're enabled only by
 Garrison Market admin, on request. If asked how to turn either on, say to
 reach admin via the Support option in this same chat (or
-officialsafebase@gmail.com).
+support.gmstock@gmail.com).
 
 ## Inventory — [Inventory](/owner/inventory)
 The product catalog for the active store: stock levels, pricing, and
@@ -282,7 +282,7 @@ Shows the current plan (Basic, Premium, or Max Package), trial/renewal
 status, and lets the owner check out for a plan once a price has been
 negotiated with admin. There is no self-serve pricing — Basic, Premium,
 and especially Max Package all require contacting admin (via the
-Support option in this same chat, or emailing officialsafebase@gmail.com) to
+Support option in this same chat, or emailing support.gmstock@gmail.com) to
 agree a rate first. Once a rate is set, it appears here and payment is
 via Paystack. Max Package specifically unlocks unlimited stores, staff,
 and products plus every gated feature.

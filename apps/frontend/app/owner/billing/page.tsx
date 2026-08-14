@@ -370,7 +370,7 @@ export default function BillingPage() {
                 <MessageCircle size={17} /> Contact admin about {PLANS[selectedPlan].name}
               </Link>
              {/* <p className="text-center text-[11px] text-white/40">
-                Or email <a href="mailto:officialsafebase@gmail.com" className="underline text-white/60">officialsafebase@gmail.com</a>
+                Or email <a href="mailto:support.gmstock@gmail.com" className="underline text-white/60">support.gmstock@gmail.com</a>
               </p> */}
             </div>
           ) : (

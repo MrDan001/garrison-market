@@ -118,8 +118,8 @@ export default function PrivacyPage() {
       <LegalSection title="8. How to request deletion or exercise your rights">
         <p>
           Email{" "}
-          <a href="mailto:officialsafebase@gmail.com" className="underline underline-offset-2">
-            officialsafebase@gmail.com
+          <a href="mailto:support.gmstock@gmail.com" className="underline underline-offset-2">
+            support.gmstock@gmail.com
           </a>{" "}
           with the subject line "Data request," tell us which right you're exercising, and confirm the
           email/account the request relates to. We may ask for identity verification before acting on the
@@ -166,8 +166,8 @@ export default function PrivacyPage() {
           MifiTech, No. 24 School Road, Igwuruta-Ali, Igwuruta, Port Harcourt, Rivers State, Nigeria.
           <br />
           Email:{" "}
-          <a href="mailto:officialsafebase@gmail.com" className="underline underline-offset-2">
-            officialsafebase@gmail.com
+          <a href="mailto:support.gmstock@gmail.com" className="underline underline-offset-2">
+            support.gmstock@gmail.com
           </a>
           <br />
           WhatsApp:{" "}

@@ -186,11 +186,11 @@ export default function SecurityPage() {
             don't publicly disclose an issue before we've had a chance to address it.
           </p>
           <a
-            href="mailto:officialsafebase@gmail.com?subject=Security%20report%20—%20Garrison%20Market"
+            href="mailto:support.gmstock@gmail.com?subject=Security%20report%20—%20Garrison%20Market"
             className="inline-flex items-center gap-2 text-sm font-bold bg-[var(--text-primary)] text-[var(--bg-app)] px-5 py-2.5 rounded-lg hover:opacity-90 transition"
           >
             <Mail className="h-4 w-4" strokeWidth={2.5} />
-            officialsafebase@gmail.com
+            support.gmstock@gmail.com
             <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
           </a>
         </div>

@@ -79,8 +79,8 @@ export default function RefundPolicyPage() {
       <LegalSection title="6. How to request a refund">
         <p>
           Email{" "}
-          <a href="mailto:officialsafebase@gmail.com" className="underline underline-offset-2">
-            officialsafebase@gmail.com
+          <a href="mailto:support.gmstock@gmail.com" className="underline underline-offset-2">
+            support.gmstock@gmail.com
           </a>{" "}
           with your account email and the reason for the request. We aim to respond within 3 business days.
         </p>

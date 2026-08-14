@@ -28,7 +28,7 @@ export default async function StaffPendingPage() {
     });
     ownerEmail = owner?.email ?? null;
   }
-  const contactEmail = ownerEmail || "officialsafebase@gmail.com";
+  const contactEmail = ownerEmail || "support.gmstock@gmail.com";
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] flex flex-col items-center justify-center p-4">

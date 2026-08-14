@@ -144,8 +144,8 @@ export default function MsaPage() {
           MifiTech, No. 24 School Road, Igwuruta-Ali, Igwuruta, Port Harcourt, Rivers State, Nigeria.
           <br />
           Email:{" "}
-          <a href="mailto:officialsafebase@gmail.com" className="underline underline-offset-2">
-            officialsafebase@gmail.com
+          <a href="mailto:support.gmstock@gmail.com" className="underline underline-offset-2">
+            support.gmstock@gmail.com
           </a>
         </p>
       </LegalSection>
