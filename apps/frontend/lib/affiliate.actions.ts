@@ -5,9 +5,8 @@
 import prisma from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import { cookies } from "next/headers";
-import { setAffiliateSessionCookie, clearAffiliateSessionCookie } from "@/lib/affiliate-auth";
-import { AFFILIATE_COOKIE_NAME, AFFILIATE_COOKIE_MAX_AGE } from "@/lib/affiliate-constants";
+import { setAffiliateSessionCookie, clearAffiliateSessionCookie, getAffiliateSession } from "@/lib/affiliate-auth";
+import { getSessionUser } from "@/lib/auth.actions";
 
 // Cookie set by app/ref/[code]/route.ts when someone clicks an affiliate
 // link. Read here at owner-registration time to attribute the signup.
@@ -122,190 +121,23 @@ export async function logoutAffiliateAction() {
 // then pass the result into the User.create() data.
 //
 // Also accepts an optional manually-typed code (the "offline
-// registration" path from the spec — someone hands a shop owner a
-// printed code instead of a link) as a fallback when there's no cookie.
-export async function resolveAffiliateAttribution(
-  newOwnerEmail: string,
-  manualCodeInput?: string | null
-): Promise<{ affiliateId: number; clickId: number | null } | null> {
-  try {
-    let affiliateCode: string | null = null;
-    let clickId: number | null = null;
-
-    const cookieStore = await cookies();
-    const raw = cookieStore.get(AFFILIATE_COOKIE_NAME)?.value;
-    if (raw) {
-      // Cookie value is "CODE:clickId"
-      const [code, clickIdStr] = raw.split(":");
-      affiliateCode = code || null;
-      clickId = clickIdStr ? parseInt(clickIdStr, 10) : null;
-    }
-
-    if (!affiliateCode && manualCodeInput && manualCodeInput.trim() !== "") {
-      affiliateCode = sanitizeToReferralToken(manualCodeInput.trim());
-    }
-
-    if (!affiliateCode) return null;
-
-    const affiliate = await prisma.affiliate.findUnique({
-      where: { referralCode: affiliateCode },
-      select: { id: true, email: true, status: true },
-    });
-
-    if (!affiliate || affiliate.status === "suspended") return null;
-
-    // Self-referral block: affiliate cannot earn commission by signing
-    // their own shop up under their own link.
-    if (affiliate.email.toLowerCase() === newOwnerEmail.toLowerCase()) {
-      console.warn(`Blocked self-referral attempt: affiliate ${affiliate.id} tried to refer own email.`);
-      return null;
-    }
-
-    // Defense-in-depth on the 30-day window: the cookie itself expires
-    // after 30 days (see AFFILIATE_COOKIE_MAX_AGE), so this should rarely
-    // trigger, but a click row lets us double-check server-side too.
-    if (clickId) {
-      const click = await prisma.affiliateClick.findUnique({ where: { id: clickId } });
-      if (click) {
-        const ageMs = Date.now() - click.clickedAt.getTime();
-        if (ageMs > AFFILIATE_COOKIE_MAX_AGE * 1000) return null;
-      }
-    }
-
-    return { affiliateId: affiliate.id, clickId };
-  } catch (error) {
-    console.error("resolveAffiliateAttribution error:", error);
-    return null;
-  }
-}
-
-// Called right after a new owner row is created, if attribution resolved.
-// Marks the originating click as converted (for the Promote-page
-// conversion stat) — best-effort, never blocks registration.
-export async function markAffiliateClickConverted(clickId: number | null, newOwnerId: number) {
-  if (!clickId) return;
-  try {
-    await prisma.affiliateClick.update({
-      where: { id: clickId },
-      data: { converted: true, convertedOwnerId: newOwnerId },
-    });
-  } catch (error) {
-    console.error("markAffiliateClickConverted error:", error);
-  }
-}
-
-// --- COMMISSION (called from the Paystack webhook) ---
-
-// Resolves the 50%/30% rate for a given "referral month" of a referred
-// owner's subscription (month 1-3 = 50%, month 4+ = 30%), per the
-// commission structure you locked in.
-function rateForMonth(monthNumber: number): number {
-  return monthNumber <= 3 ? 50 : 30;
-}
-
-// Creates commission for a successful subscription payment by a referred
-// owner. Your billing is upfront in multi-month blocks (quarterly/
-// biannual/annual — see lib/plans.ts), not literally monthly, so this
-// prorates: it works out which "referral month" each month of the block
-// falls on (based on how many months have already been commissioned for
-// this owner) and creates one ledger row per month, applying that
-// month's own rate. A quarterly payment landing on months 2-4 correctly
-// splits into two months at 50% and one at 30%.
-//
-// Wrap every call to this in a try/catch, same as creditReferralReward —
-// a commission-calculation problem must never block a real payment from
-// completing.
-export async function creditAffiliateCommission(params: {
-  ownerId: number;
-  paymentId: number;
-  amountNaira: number; // total amount paid for this billing block
-  monthsCovered: number; // how many months this payment's block covers
-}) {
-  const { ownerId, paymentId, amountNaira, monthsCovered } = params;
-
-  const owner = await prisma.user.findUnique({
-    where: { id: ownerId },
-    select: { id: true, affiliateId: true },
-  });
-
-  if (!owner || !owner.affiliateId) {
-    return { success: false, reason: "Owner has no attributed affiliate." };
-  }
-
-  // Guard against double-crediting if the webhook somehow fires twice for
-  // the same payment (Paystack can retry webhooks).
-  const alreadyCredited = await prisma.affiliateCommission.findFirst({
-    where: { paymentId },
-    select: { id: true },
-  });
-  if (alreadyCredited) {
-    return { success: false, reason: "Already credited for this payment." };
-  }
-
-  const monthsAlreadyCommissioned = await prisma.affiliateCommission.count({
-    where: { affiliateId: owner.affiliateId, ownerId, kind: "earned" },
-  });
-
-  const perMonthValue = amountNaira / monthsCovered;
-
-  const rows = Array.from({ length: monthsCovered }, (_, i) => {
-    const monthNumber = monthsAlreadyCommissioned + i + 1;
-    const ratePercent = rateForMonth(monthNumber);
-    return {
-      affiliateId: owner.affiliateId as number,
-      ownerId,
-      paymentId,
-      monthNumber,
-      ratePercent,
-      amountNaira: Math.round(perMonthValue * (ratePercent / 100)),
-      kind: "earned",
-      status: "unpaid",
-    };
-  });
-
-  await prisma.affiliateCommission.createMany({ data: rows });
-
-  return { success: true, monthsCredited: monthsCovered };
-}
-
-// Called when an owner's payment is refunded/charged back. Creates
-// reversal rows (negative amount) for whatever commission that payment
-// generated, rather than deleting the original rows — keeps the ledger
-// an honest audit trail. Deduct-next-month happens naturally: an unpaid
-// reversal row just nets against future unpaid commission when payouts
-// are totaled.
-export async function reverseAffiliateCommission(paymentId: number) {
-  try {
-    const original = await prisma.affiliateCommission.findMany({
-      where: { paymentId, kind: "earned" },
-    });
-    if (original.length === 0) return { success: false, reason: "No commission found for this payment." };
-
-    await prisma.affiliateCommission.createMany({
-      data: original.map((row) => ({
-        affiliateId: row.affiliateId,
-        ownerId: row.ownerId,
-        paymentId: row.paymentId,
-        monthNumber: row.monthNumber,
-        ratePercent: row.ratePercent,
-        // row.amountNaira comes back as a Prisma.Decimal — .negated() flips
-        // its sign without the float-precision risk of casting to Number.
-        amountNaira: row.amountNaira.negated(),
-        kind: "reversal",
-        status: "unpaid",
-      })),
-    });
-
-    return { success: true };
-  } catch (error) {
-    console.error("reverseAffiliateCommission error:", error);
-    return { success: false, reason: "Internal error." };
-  }
-}
+// resolveAffiliateAttribution, markAffiliateClickConverted,
+// creditAffiliateCommission, and reverseAffiliateCommission moved to
+// lib/affiliate-internal.ts (security fix — see that file's header
+// comment). This file has a file-level "use server" directive, which
+// makes every export in it a public, directly-callable Server Action;
+// those four are only ever meant to be called from other server code
+// (the Paystack webhook, the registration action), never from client
+// UI, so they don't belong in a "use server" file at all.
 
 // Single query surface for the Overview page — one call instead of the
 // page assembling several itself.
 export async function getAffiliateDashboardData(affiliateId: number) {
+  const session = await getAffiliateSession();
+  if (!session || session.id !== affiliateId) {
+    throw new Error("Unauthorized");
+  }
+
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -365,6 +197,11 @@ export async function getAffiliateDashboardData(affiliateId: number) {
 }
 
 export async function requestPayoutAction(affiliateId: number) {
+  const session = await getAffiliateSession();
+  if (!session || session.id !== affiliateId) {
+    return { error: "Unauthorized" };
+  }
+
   try {
     const unpaid = await prisma.affiliateCommission.aggregate({
       where: { affiliateId, status: "unpaid" },
@@ -409,6 +246,11 @@ export async function requestPayoutAction(affiliateId: number) {
 }
 
 export async function getAffiliatePayoutData(affiliateId: number) {
+  const session = await getAffiliateSession();
+  if (!session || session.id !== affiliateId) {
+    throw new Error("Unauthorized");
+  }
+
   const [unpaidAgg, paidAgg, payouts] = await Promise.all([
     prisma.affiliateCommission.aggregate({
       where: { affiliateId, status: "unpaid" },
@@ -433,6 +275,11 @@ export async function getAffiliatePayoutData(affiliateId: number) {
 }
 
 export async function updateAffiliateSettingsAction(affiliateId: number, formData: FormData) {
+  const session = await getAffiliateSession();
+  if (!session || session.id !== affiliateId) {
+    return { error: "Unauthorized" };
+  }
+
   try {
     await prisma.affiliate.update({
       where: { id: affiliateId },
@@ -451,6 +298,11 @@ export async function updateAffiliateSettingsAction(affiliateId: number, formDat
 }
 
 export async function getAffiliateReferrals(affiliateId: number) {
+  const session = await getAffiliateSession();
+  if (!session || session.id !== affiliateId) {
+    throw new Error("Unauthorized");
+  }
+
   const owners = await prisma.user.findMany({
     where: { affiliateId },
     select: {
@@ -479,11 +331,20 @@ export async function getAffiliateReferrals(affiliateId: number) {
 }
 
 // --- ADMIN-SIDE MANAGEMENT ---
-// Every function below assumes the caller has already checked
-// session.role === "admin" (same guard pattern as every other
-// app/admin/*/page.tsx in this codebase) — these do not re-check.
+// SECURITY FIX: this comment used to say every function below assumes
+// the caller already checked session.role === "admin" on the page and
+// doesn't re-check here. That assumption is wrong — this file has a
+// file-level "use server" directive, so every export is a public,
+// directly-invokable Server Action regardless of what any page does
+// before rendering a button that calls it. Each function below now
+// verifies admin status itself.
 
 export async function listAffiliatesForAdmin() {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") {
+    throw new Error("Unauthorized");
+  }
+
   const affiliates = await prisma.affiliate.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -510,6 +371,11 @@ export async function listAffiliatesForAdmin() {
 }
 
 export async function updateAffiliateStatusAction(affiliateId: number, status: "active" | "suspended") {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") {
+    return { error: "Unauthorized" };
+  }
+
   try {
     await prisma.affiliate.update({ where: { id: affiliateId }, data: { status } });
     return { success: true };
@@ -520,6 +386,11 @@ export async function updateAffiliateStatusAction(affiliateId: number, status: "
 }
 
 export async function listPayoutRequestsForAdmin() {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") {
+    throw new Error("Unauthorized");
+  }
+
   const payouts = await prisma.affiliatePayout.findMany({
     where: { status: { in: ["requested", "approved"] } },
     orderBy: { requestedAt: "asc" }, // oldest first — first come, first sent
@@ -532,7 +403,19 @@ export async function listPayoutRequestsForAdmin() {
 // it here. Flips the payout to "paid" and marks every unpaid commission
 // row this affiliate had at request time as "paid" too, so the ledger
 // and the payout total stay in sync.
-export async function markPayoutPaidAction(payoutId: number, adminEmail: string) {
+//
+// SECURITY FIX: the `adminEmail` parameter is still accepted (so the
+// existing client component doesn't need to change) but is no longer
+// trusted or written to the audit trail — it's client-supplied and was
+// previously stored verbatim as `processedBy` with no verification it
+// was even a real admin's email. `processedBy` now comes from the
+// verified session instead.
+export async function markPayoutPaidAction(payoutId: number, _adminEmail: string) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") {
+    return { error: "Unauthorized" };
+  }
+
   try {
     const payout = await prisma.affiliatePayout.findUnique({ where: { id: payoutId } });
     if (!payout) return { error: "Payout not found." };
@@ -540,7 +423,7 @@ export async function markPayoutPaidAction(payoutId: number, adminEmail: string)
     await prisma.$transaction([
       prisma.affiliatePayout.update({
         where: { id: payoutId },
-        data: { status: "paid", processedAt: new Date(), processedBy: adminEmail },
+        data: { status: "paid", processedAt: new Date(), processedBy: session.email },
       }),
       prisma.affiliateCommission.updateMany({
         where: { affiliateId: payout.affiliateId, status: "unpaid" },
@@ -555,11 +438,18 @@ export async function markPayoutPaidAction(payoutId: number, adminEmail: string)
   }
 }
 
-export async function rejectPayoutAction(payoutId: number, adminEmail: string, note: string) {
+// SECURITY FIX: same as markPayoutPaidAction above — `adminEmail` is
+// accepted but ignored; `processedBy` comes from the verified session.
+export async function rejectPayoutAction(payoutId: number, _adminEmail: string, note: string) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") {
+    return { error: "Unauthorized" };
+  }
+
   try {
     await prisma.affiliatePayout.update({
       where: { id: payoutId },
-      data: { status: "rejected", processedAt: new Date(), processedBy: adminEmail, note },
+      data: { status: "rejected", processedAt: new Date(), processedBy: session.email, note },
     });
     return { success: true };
   } catch (error) {
@@ -570,6 +460,11 @@ export async function rejectPayoutAction(payoutId: number, adminEmail: string, n
 
 // Last-6-months earnings series for the Overview chart.
 export async function getAffiliateEarningsSeries(affiliateId: number) {
+  const session = await getAffiliateSession();
+  if (!session || session.id !== affiliateId) {
+    throw new Error("Unauthorized");
+  }
+
   const months: { label: string; total: number }[] = [];
   const now = new Date();
 

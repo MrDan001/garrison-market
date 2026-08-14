@@ -6,7 +6,7 @@ import { verifyWebhookSignature, verifyTransaction } from "@/lib/paystack";
 import { BILLING_CYCLES, type BillingCycleId, type PlanId } from "@/lib/plans";
 import { createNotification } from "@/lib/notification.actions";
 import { creditReferralReward } from "@/lib/referral.actions"; // 👇 IMPORT YOUR REWARD UTILITY
-import { creditAffiliateCommission, reverseAffiliateCommission } from "@/lib/affiliate.actions";
+import { creditAffiliateCommission, reverseAffiliateCommission } from "@/lib/affiliate-internal";
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();

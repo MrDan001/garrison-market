@@ -1,4 +1,16 @@
-"use server";
+// FILE: apps/frontend/lib/referral.actions.ts
+//
+// SECURITY FIX: this file previously had a "use server" directive even
+// though creditReferralReward() is only ever called from other
+// server-side code (the Paystack webhook, lib/auth.actions.ts,
+// lib/billing.actions.ts) — never from a client component or form.
+// A file-level "use server" directive makes every export a public,
+// directly-invokable Server Action regardless of whether any UI
+// actually calls it, so this was reachable by anyone who found its
+// action ID in the client bundle, with an arbitrary newOwnerId, letting
+// them repeatedly grant free subscription extensions to referrers.
+// Removing the directive keeps this callable from other server files
+// exactly as before, just no longer exposed as a public RPC endpoint.
 
 import prisma from "@/lib/prisma";
 

@@ -1562,9 +1562,20 @@ export async function ownerReconcileScaleConsignmentAction(consignmentId: number
 // which is itself only reachable via the CRON_SECRET-protected route at
 // app/api/cron/scale-consignment-reset/route.ts. There's no user session at
 // midnight, so this can't check a session the way ownerReconcileScaleConsignmentAction
-// does; the narrow name and scope (vs. the old generic autoSettleScaleConsignment)
-// make it much harder to accidentally reach from anywhere else.
-export async function autoSettleScaleConsignmentForCron(consignmentId: number) {
+// does.
+//
+// SECURITY FIX: the comment here used to argue that a narrow name/scope
+// makes this "much harder to accidentally reach from anywhere else" —
+// that's not actually a defense. This file has a file-level "use server"
+// directive, so this function was independently callable as a public
+// Server Action by anyone, with an arbitrary consignmentId, completely
+// bypassing the CRON_SECRET check on the route. It now requires the same
+// secret the route itself checks, verified here too, so direct calls
+// without it are rejected.
+export async function autoSettleScaleConsignmentForCron(consignmentId: number, cronSecret: string) {
+  if (!process.env.CRON_SECRET || cronSecret !== process.env.CRON_SECRET) {
+    throw new Error("Unauthorized");
+  }
   return settleScaleConsignmentCore(consignmentId, "midnight");
 }
 

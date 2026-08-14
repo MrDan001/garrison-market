@@ -21,7 +21,7 @@ import { createAdminNotification } from "@/lib/admin-notification.actions";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { assertSubscriptionActive, checkPlanLimit } from "@/lib/subscription-guard";
 import { creditReferralReward } from "@/lib/referral.actions"; // 👇 Safely imported
-import { resolveAffiliateAttribution, markAffiliateClickConverted } from "@/lib/affiliate.actions";
+import { resolveAffiliateAttribution, markAffiliateClickConverted } from "@/lib/affiliate-internal";
 import { checkRateLimit, resetRateLimit, getClientIp } from "@/lib/rate-limit";
 
 function isNextRedirectError(error: unknown): boolean {

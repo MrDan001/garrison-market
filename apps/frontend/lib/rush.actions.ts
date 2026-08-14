@@ -8,6 +8,28 @@ import { XP_AMOUNTS, LEVEL_THRESHOLDS, MAX_DEFINED_LEVEL, STREAK_GRACE_HOURS, fo
 
 type XpEventType = keyof typeof XP_AMOUNTS;
 
+// SECURITY FIX: shared by awardXp/awardCustomXp below. Confirms the
+// session doesn't just belong to the right person, but that this person
+// actually has access to the storeId being passed in — an owner must
+// own the store, a staff member must be assigned to it. Without this, a
+// legitimate, correctly-authenticated user could still pass an
+// arbitrary storeId belonging to someone else's shop and pollute that
+// store's XP totals, streaks, and leaderboard.
+async function verifyStoreAccess(session: { id: number; role: string }, storeId: number): Promise<boolean> {
+  if (session.role === "staff") {
+    const staff = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { staffStoreId: true },
+    });
+    return staff?.staffStoreId === storeId;
+  }
+  const store = await prisma.store.findFirst({
+    where: { id: storeId, ownerId: session.id },
+    select: { id: true },
+  });
+  return !!store;
+}
+
 // --- Level math -------------------------------------------------------
 
 export async function computeLevel(totalXp: number) {
@@ -190,8 +212,24 @@ async function applyXp(userId: number, storeId: number, amount: number, type: st
   ]);
 }
 
+// SECURITY FIX: userId/storeId used to be trusted directly from the
+// caller with no verification. Every real call site in this codebase
+// passes the current session's own id (never someone else's) — this
+// function only ever awards XP to the person triggering the action —
+// but because the file has a file-level "use server" directive, it was
+// also independently callable as a public Server Action with an
+// arbitrary userId and storeId, letting anyone hand XP (and therefore
+// levels, quests, and the real cash/gift reward spin) to any account,
+// or pollute a store they have no access to. Both are now verified.
 export async function awardXp(userId: number, storeId: number, type: XpEventType, meta?: Record<string, any>) {
   try {
+    const session = await getSessionUser();
+    if (!session || session.id !== userId) {
+      throw new Error("Unauthorized: userId does not match session");
+    }
+    if (!(await verifyStoreAccess(session, storeId))) {
+      throw new Error("Unauthorized: no access to storeId");
+    }
     await applyXp(userId, storeId, XP_AMOUNTS[type], type, meta);
   } catch (error) {
     console.error(`awardXp failed [type=${type}, userId=${userId}, storeId=${storeId}]:`, error);
@@ -203,6 +241,10 @@ export async function awardXp(userId: number, storeId: number, type: XpEventType
 // "Bonus XP Boost" prize. `sourceType` is stored as the XpEvent's type
 // (e.g. "SPIN_XP_BOOST") so it's distinguishable in history from the
 // regular XP sources.
+//
+// SECURITY FIX: same as awardXp above — now verifies the session
+// matches userId and has access to storeId before applying an
+// attacker-controlled `amount`.
 export async function awardCustomXp(
   userId: number,
   storeId: number,
@@ -211,6 +253,13 @@ export async function awardCustomXp(
   meta?: Record<string, any>,
 ) {
   try {
+    const session = await getSessionUser();
+    if (!session || session.id !== userId) {
+      throw new Error("Unauthorized: userId does not match session");
+    }
+    if (!(await verifyStoreAccess(session, storeId))) {
+      throw new Error("Unauthorized: no access to storeId");
+    }
     await applyXp(userId, storeId, amount, sourceType, meta);
   } catch (error) {
     console.error(`awardCustomXp failed [type=${sourceType}, userId=${userId}, storeId=${storeId}]:`, error);

@@ -24,7 +24,7 @@ export async function runMidnightScaleConsignmentReset() {
 
   for (const c of openConsignments) {
     try {
-      await autoSettleScaleConsignmentForCron(c.id);
+      await autoSettleScaleConsignmentForCron(c.id, process.env.CRON_SECRET!);
       results.push({ id: c.id, success: true });
     } catch (err: any) {
       results.push({ id: c.id, success: false, error: err?.message || "Unknown error" });
