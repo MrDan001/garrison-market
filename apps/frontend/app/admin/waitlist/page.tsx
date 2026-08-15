@@ -1,3 +1,4 @@
+
 // FILE: apps/frontend/app/admin/waitlist/page.tsx
 
 import { getSessionUser } from "@/lib/auth";
@@ -107,56 +108,33 @@ export default async function AdminWaitlistPage() {
         {feedback.length === 0 ? (
           <div className="px-5 pb-5 text-sm text-slate-500">No feedback yet.</div>
         ) : (
-          <>
-            {/* Desktop: table */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm border-t border-slate-200/10">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
-                    <th className="text-left px-5 py-2.5 w-[16%]">Name</th>
-                    <th className="text-left px-5 py-2.5 w-[28%]">Wants</th>
-                    <th className="text-left px-5 py-2.5 w-[28%]">Frustrations</th>
-                    <th className="text-left px-5 py-2.5 w-[28%]">Biggest challenge</th>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-t border-slate-200/10 min-w-[640px]">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+                  <th className="text-left px-5 py-2.5 w-[16%]">Name</th>
+                  <th className="text-left px-5 py-2.5 w-[28%]">Wants</th>
+                  <th className="text-left px-5 py-2.5 w-[28%]">Frustrations</th>
+                  <th className="text-left px-5 py-2.5 w-[28%]">Biggest challenge</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feedback.map((f) => (
+                  <tr key={f.id} className="border-t border-b border-slate-200/10 align-top">
+                    <td className="px-5 py-3">
+                      <div className="font-semibold text-[var(--text-primary)]">{f.fullName}</div>
+                      <div className="text-xs text-slate-500">
+                        {f.createdAt.toLocaleDateString("en-NG", { month: "short", day: "numeric" })}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-[var(--text-primary)] leading-relaxed">{f.wantToSee}</td>
+                    <td className="px-5 py-3 text-[var(--text-primary)] leading-relaxed">{f.toolFrustrations}</td>
+                    <td className="px-5 py-3 text-[var(--text-primary)] leading-relaxed">{f.biggestChallenge}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {feedback.map((f) => (
-                    <tr key={f.id} className="border-t border-slate-200/5 align-top">
-                      <td className="px-5 py-3">
-                        <div className="font-semibold text-[var(--text-primary)]">{f.fullName}</div>
-                        <div className="text-xs text-slate-500">
-                          {f.createdAt.toLocaleDateString("en-NG", { month: "short", day: "numeric" })}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 text-[var(--text-primary)] leading-relaxed">{f.wantToSee}</td>
-                      <td className="px-5 py-3 text-[var(--text-primary)] leading-relaxed">{f.toolFrustrations}</td>
-                      <td className="px-5 py-3 text-[var(--text-primary)] leading-relaxed">{f.biggestChallenge}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile: stacked cards */}
-            <div className="sm:hidden pb-2 max-h-[480px] overflow-y-auto">
-              {feedback.map((f) => (
-                <div key={f.id} className="px-5 py-3 border-t border-slate-200/5 first:border-t-0 space-y-1.5">
-                  <p className="text-sm text-[var(--text-primary)] leading-relaxed">
-                    <span className="font-semibold">Wants:</span> {f.wantToSee}
-                  </p>
-                  <p className="text-sm text-[var(--text-primary)] leading-relaxed">
-                    <span className="font-semibold">Frustrations:</span> {f.toolFrustrations}
-                  </p>
-                  <p className="text-sm text-[var(--text-primary)] leading-relaxed">
-                    <span className="font-semibold">Biggest challenge:</span> {f.biggestChallenge}
-                  </p>
-                  <div className="text-xs text-slate-500 pt-0.5">
-                    {f.fullName} · {f.createdAt.toLocaleDateString("en-NG", { month: "short", day: "numeric" })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
