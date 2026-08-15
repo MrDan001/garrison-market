@@ -90,6 +90,18 @@ export async function proxy(request: NextRequest) {
     // Admin has no equivalent screen and, per prisma/seed.ts, is only
     // ever created with status "approved" — falls back to /login.
     if (role === 'owner') {
+      // Carve-out: admin can message a single owner regardless of their
+      // approval status (sendAdminMessage's single_owner recipient lookup
+      // has no status filter, unlike the all_owners broadcast path, which
+      // only targets approved owners). Without this exception, a
+      // not-yet-approved owner gets the email fine but is bounced to
+      // /pending on every /owner/* route before ever reaching
+      // /owner/messages — the message "arrives by email but never shows
+      // in-app." Their own mailbox is the one page worth exempting; the
+      // rest of the app stays gated.
+      if (pathname === '/owner/messages' || pathname.startsWith('/owner/messages/')) {
+        return NextResponse.next();
+      }
       return NextResponse.redirect(new URL('/pending', request.url));
     }
     if (role === 'staff') {
