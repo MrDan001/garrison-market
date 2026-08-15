@@ -406,3 +406,83 @@ export async function sendAdminMessageReplyEmail(
   });
   return send(to, `Re: ${params.subject}`, html, params.replyTo);
 }
+
+// =====================================================================
+// 100-DAY WAITLIST (Stage 6)
+// =====================================================================
+
+// Sent right after someone joins the waitlist. Gives them their queue
+// position and their own referral link so sharing it is one tap away
+// instead of them having to dig it back up from the thank-you page.
+export async function sendWaitlistConfirmationEmail(
+  to: string,
+  fullName: string,
+  referralLink: string,
+  position: number
+) {
+  const firstName = fullName?.split(" ")[0] || "there";
+  const html = layout({
+    preheader: `You're number ${position} in line for Garrison Market.`,
+    badge: { label: "You're on the list", color: BRAND },
+    body: `
+      ${heading(`You're in, ${firstName}.`)}
+      ${paragraph(
+        `You're currently number <strong>${position.toLocaleString()}</strong> in line for Garrison Market. We'll email you the moment a spot opens.`
+      )}
+      ${paragraph("Want to move up? Share your personal link — everyone who joins through it moves you further up the queue.")}
+      ${button(referralLink, "Copy Your Referral Link")}
+      ${fineprint(referralLink)}
+    `,
+  });
+  return send(to, `You're #${position} on the Garrison Market waitlist`, html);
+}
+
+// One-off update to the whole waitlist (e.g. "we just crossed 1,000
+// signups"), sent by an admin via sendWaitlistMilestoneAction in
+// lib/waitlist.actions.ts. Single-recipient, same as
+// sendAdminBroadcastEmail — the caller loops this over every signup
+// with Promise.allSettled rather than one email with hundreds of
+// recipients, so nobody's address is exposed to anyone else on the
+// list.
+export async function sendWaitlistMilestoneEmail(
+  to: string,
+  fullName: string,
+  params: { subject: string; body: string }
+) {
+  const firstName = fullName?.split(" ")[0] || "there";
+  const escapeHtml = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const bodyHtml = escapeHtml(params.body).replace(/\n/g, "<br>");
+
+  const html = layout({
+    preheader: params.subject,
+    body: `
+      ${paragraph(`Hi ${firstName},`)}
+      ${paragraph(bodyHtml)}
+      ${fineprint("You're receiving this because you're on the Garrison Market waitlist.")}
+    `,
+  });
+  return send(to, params.subject, html);
+}
+
+// Sent by releaseWaitlistAction (Stage 7) — a real, working link to
+// register, once an admin has both opened the gate AND deliberately
+// released the list. Distinct from sendWaitlistConfirmationEmail
+// (which just confirms they joined) and from the gate toggle itself
+// (which never emails anyone at all).
+export async function sendWaitlistInviteEmail(to: string, fullName: string, registerUrl: string) {
+  const firstName = fullName?.split(" ")[0] || "there";
+  const html = layout({
+    preheader: "Your spot on Garrison Market is ready.",
+    badge: { label: "Your spot is ready", color: BRAND },
+    body: `
+      ${heading(`You're up, ${firstName}!`)}
+      ${paragraph(
+        "Thanks for waiting — your spot on Garrison Market is ready. Click below to create your account and start setting up your shop."
+      )}
+      ${button(registerUrl, "Create Your Account")}
+      ${fineprint("This link works for you specifically — no code needed.")}
+    `,
+  });
+  return send(to, "Your Garrison Market spot is ready", html);
+}

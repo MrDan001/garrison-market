@@ -1,0 +1,36 @@
+// FILE: apps/frontend/prisma/schema/system-settings.prisma (NEW FILE)
+//
+// Single-row settings table for platform-wide toggles that aren't tied
+// to any one owner/store. Starts with just the registration gate (Stage
+// 2 of the 100-day waitlist), but the shape is generic on purpose so a
+// future flag doesn't need its own table.
+//
+// Deliberately a single fixed row (id: 1) rather than a key-value table
+// — there's only ever one of these settings objects for the whole
+// platform, and a fixed-id row is simpler to read/update than a
+// key-value lookup for the handful of flags this will ever hold.
+//
+// SETUP REQUIRED:
+//   Run: npx prisma db push
+//   Then seed the one row (see lib/system-settings.actions.ts —
+//   getSystemSettings() creates it automatically on first read if
+//   missing, so no manual seeding step is actually required).
+
+model SystemSettings {
+  id Int @id @default(1)
+
+  // Stage 2: when true (the default — matches current live behavior),
+  // /register works normally. When an admin flips this to false,
+  // /register (and every path into it) redirects to /waitlist instead,
+  // for everyone, including admin — there is no bypass. Defaults to
+  // true so pushing this schema never silently closes registration;
+  // closing it is a deliberate action via the admin toggle (Stage 5),
+  // not something that happens on deploy.
+  //
+  // Toggling this alone never sends any email (see Stage 7's separate
+  // "release" action) — it only controls whether the page is
+  // reachable, so it's safe for an admin to flip on/off while testing.
+  registrationOpen Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+}

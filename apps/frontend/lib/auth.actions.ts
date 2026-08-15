@@ -22,7 +22,9 @@ import { TRIAL_DAYS } from "@/lib/plans";
 import { assertSubscriptionActive, checkPlanLimit } from "@/lib/subscription-guard";
 import { creditReferralReward } from "@/lib/referral.actions"; // 👇 Safely imported
 import { resolveAffiliateAttribution, markAffiliateClickConverted } from "@/lib/affiliate-internal";
+import { resolveWaitlistAttributionByEmail, markWaitlistSignupRegistered } from "@/lib/waitlist-internal";
 import { checkRateLimit, resetRateLimit, getClientIp } from "@/lib/rate-limit";
+import { isRegistrationOpen } from "@/lib/system-settings.actions";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -177,6 +179,17 @@ async function generateUniqueReferralCode(storeName: string): Promise<string> {
 }
 
 export async function registerOwnerAction(formData: FormData) {
+  // SECURITY: this is the authoritative gate check, not app/register/page.tsx's
+  // redirect. A page-level redirect only stops someone who loads the page
+  // normally — this Server Action is still independently callable directly
+  // (same class of issue fixed across affiliate.actions.ts/rush.actions.ts/
+  // referral.actions.ts — see SECURITY_FIXES notes on those files), so the
+  // block has to live here too, unconditionally, with no bypass for anyone.
+  const registrationOpen = await isRegistrationOpen();
+  if (!registrationOpen) {
+    return { error: "Registration is currently closed. Please join the waitlist at /waitlist." };
+  }
+
   const data = Object.fromEntries(formData.entries());
 
   try {
@@ -185,8 +198,21 @@ export async function registerOwnerAction(formData: FormData) {
     const appliedCodeInput = data.referralCode as string | null;
     let referrerId: number | null = null;
 
-    if (appliedCodeInput && appliedCodeInput.trim() !== "") {
-      const formattedToken = sanitizeToReferralToken(appliedCodeInput.trim());
+    // Stage 7: if this email has a WaitlistSignup row with a referrer
+    // attached, it wins as a fallback wherever the form itself came in
+    // blank — see waitlist-internal.ts's header comment for why the
+    // normal cookie/manual-entry paths can't be relied on here.
+    const waitlistAttribution = await resolveWaitlistAttributionByEmail((data.email as string) || "");
+
+    const codeToResolve =
+      appliedCodeInput && appliedCodeInput.trim() !== ""
+        ? appliedCodeInput
+        : waitlistAttribution?.referredByType === "owner"
+        ? waitlistAttribution.referredByCode
+        : null;
+
+    if (codeToResolve && codeToResolve.trim() !== "") {
+      const formattedToken = sanitizeToReferralToken(codeToResolve.trim());
 
       const referrer = await prisma.user.findUnique({
         where: { referralCode: formattedToken },
@@ -200,9 +226,12 @@ export async function registerOwnerAction(formData: FormData) {
 
     const targetStoreName = (data.storeName as string) || "";
     const cleanNewCodeForUser = await generateUniqueReferralCode(targetStoreName);
+    const affiliateCodeToResolve =
+      (data.affiliateCode as string) ||
+      (waitlistAttribution?.referredByType === "affiliate" ? waitlistAttribution.referredByCode : null);
     const affiliateAttribution = await resolveAffiliateAttribution(
       (data.email as string).toLowerCase().trim(),
-      (data.affiliateCode as string) || null
+      affiliateCodeToResolve
     );
 
     const newUser = await prisma.user.create({
@@ -234,6 +263,9 @@ affiliateReferredAt: affiliateAttribution ? new Date() : null,
     });
     if (affiliateAttribution) {
       await markAffiliateClickConverted(affiliateAttribution.clickId, newUser.id);
+    }
+    if (waitlistAttribution) {
+      await markWaitlistSignupRegistered(waitlistAttribution.waitlistSignupId, newUser.id);
     }
 
     const token = await signToken(newUser.id, newUser.role);

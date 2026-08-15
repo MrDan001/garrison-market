@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   Code2, // <-- Dev Assistant icon
   Handshake, // <-- Affiliates icon
+  ListChecks, // <-- Waitlist icon
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
@@ -35,6 +36,7 @@ export default function AdminLayout({
     { name: "Broadcast", href: "/admin/broadcast", icon: Bell },
     { name: "Dev Assistant", href: "/admin/dev-assistant", icon: Code2 },
     { name: "Affiliates", href: "/admin/affiliates", icon: Handshake },
+    { name: "Waitlist", href: "/admin/waitlist", icon: ListChecks },
   ];
 
   // Helper to determine active section name for the header
