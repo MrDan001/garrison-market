@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { sessionTimeoutLogoutAction } from "@/lib/auth.actions";
 
-const INACTIVITY_LIMIT_MS = 6 * 60 * 1000; // 6 minutes
+const INACTIVITY_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
 const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"] as const;
 const GUARDED_PREFIXES = ["/owner", "/staff", "/admin"];
 
