@@ -16,6 +16,16 @@ const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || "";
 const FROM_EMAIL = process.env.ADMIN_MESSAGE_FROM_EMAIL || "Garrison Market <support@gmstock.coisonmarket.com>";
 
 export async function getThreadStatusAction(messageId: number, ownerId: number): Promise<"open" | "closed"> {
+  // SECURITY: found during a fresh sweep — no auth check at all, and
+  // directly callable from message-threads-client.tsx. Low actual impact
+  // (it only returns "open"/"closed" for a thread, no message content or
+  // PII), but there's no reason for it to be unauthenticated when every
+  // sibling action in this file already requires an admin session.
+  const session = await getSessionUser();
+  if (!session || session.role !== "admin") {
+    return "open";
+  }
+
   const row = await prisma.adminMessageThreadStatus.findUnique({
     where: { messageId_ownerId: { messageId, ownerId } },
     select: { status: true },
