@@ -13,6 +13,7 @@ import {
 import GateToggle from "./GateToggle";
 import MilestoneComposer from "./MilestoneComposer";
 import ReleaseWaitlist from "./ReleaseWaitlist";
+import { Download } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -129,8 +130,18 @@ export default async function AdminWaitlistPage() {
 
       {/* Full list with survey answers */}
       <div className="rounded-2xl bg-[var(--bg-app)]/40 border border-slate-200/10 overflow-hidden">
-        <div className="px-5 pt-4 pb-3 text-xs font-black uppercase tracking-widest text-[var(--text-primary)]/60">
-          All signups ({signups.length}{signups.length === 200 ? "+" : ""})
+        <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)]/60">
+            All signups ({signups.length}{signups.length === 200 ? "+" : ""})
+          </div>
+          
+          <a
+            href="/admin/waitlist/export"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[var(--bg-app)]/60 border border-slate-200/10 text-[var(--text-primary)] hover:border-[#E55345] transition"
+          >
+            <Download size={13} strokeWidth={2.5} />
+            Download CSV
+          </a>
         </div>
         <div className="hidden sm:grid grid-cols-[1.3fr_0.9fr_1fr_1fr_0.8fr_0.7fr] gap-2 px-5 py-2.5 text-[10px] uppercase tracking-widest text-slate-500 font-bold border-t border-b border-slate-200/10">
           <span>Name / email</span>

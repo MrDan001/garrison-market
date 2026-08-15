@@ -297,3 +297,29 @@ export async function releaseWaitlistAction(): Promise<{
 
   return { released, failed };
 }
+// ---- Admin: full export — every signup, every field, no limit. Used
+// only by the CSV download route, never rendered on the page itself. ----
+export async function getAllWaitlistForExport() {
+    return prisma.waitlistSignup.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        state: true,
+        lga: true,
+        sells: true,
+        wantToSee: true,
+        toolFrustrations: true,
+        biggestChallenge: true,
+        referralCode: true,
+        referredByCode: true,
+        referredByType: true,
+        referralBoost: true,
+        status: true,
+        invitedAt: true,
+        createdAt: true,
+      },
+    });
+  }
