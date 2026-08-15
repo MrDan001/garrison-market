@@ -8,7 +8,9 @@ import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
-import { signToken, verifyToken } from "@/lib/auth";
+import { signToken, verifyToken, generateSessionToken } from "@/lib/auth";
+import { validatePassword } from "@/lib/password-validation";
+import { INACTIVITY_LIMIT_MS } from "@/lib/session-config";
 import {
   sendPasswordResetEmail,
   sendOwnerWelcomeEmail,
@@ -63,10 +65,41 @@ export async function getSessionUser() {
   if (!payload) return null;
 
   try {
-    return await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, status: true, ownerId: true }
+      select: { id: true, email: true, role: true, status: true, ownerId: true, currentSessionToken: true, lastActivityAt: true }
     });
+    if (!user) return null;
+
+    // Single-session enforcement — see lib/auth.ts's getSessionUser for
+    // the full explanation. Kept in sync with that copy since this file
+    // has its own duplicate of the lookup.
+    if (!payload.sessionToken || payload.sessionToken !== user.currentSessionToken) {
+      return null;
+    }
+
+    // Server-side inactivity enforcement — same reasoning as lib/auth.ts's
+    // copy. This one matters just as much: server actions (every mutation
+    // in this file) hit this function directly and never go through a page
+    // load, so without this check here too, a stolen cookie could keep
+    // performing writes indefinitely as long as it skipped page navigation.
+    const now = Date.now();
+    const lastActive = user.lastActivityAt?.getTime() ?? 0;
+    if (!user.lastActivityAt || now - lastActive > INACTIVITY_LIMIT_MS) {
+      await prisma.user
+        .update({ where: { id: user.id }, data: { currentSessionToken: null } })
+        .catch(() => {});
+      return null;
+    }
+
+    if (now - lastActive > 60 * 1000) {
+      await prisma.user
+        .update({ where: { id: user.id }, data: { lastActivityAt: new Date(now) } })
+        .catch(() => {});
+    }
+
+    const { currentSessionToken, lastActivityAt, ...safeUser } = user;
+    return safeUser;
   } catch {
     return null;
   }
@@ -109,7 +142,17 @@ export async function loginAction(formData: FormData) {
     const userStatus = user.status.toUpperCase().trim();
 
     const setSessionCookie = async () => {
-      const token = await signToken(user.id, user.role);
+      const sessionToken = generateSessionToken();
+      // Overwriting currentSessionToken here is what kicks out any other
+      // device — the next time that device's getSessionUser() runs, its
+      // old token won't match this new one and it'll be treated as logged
+      // out, forcing a fresh login there. lastActivityAt starts the
+      // inactivity clock (see lib/session-config.ts) fresh at login.
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { currentSessionToken: sessionToken, lastActivityAt: new Date() },
+      });
+      const token = await signToken(user.id, user.role, sessionToken);
       const cookieStore = await cookies();
       cookieStore.set("session-token", token, {
         httpOnly: true,
@@ -192,6 +235,11 @@ export async function registerOwnerAction(formData: FormData) {
 
   const data = Object.fromEntries(formData.entries());
 
+  const passwordCheck = validatePassword(data.password as string);
+  if (!passwordCheck.valid) {
+    return { error: passwordCheck.error };
+  }
+
   try {
     const hashedPassword = await bcrypt.hash(data.password as string, 10);
 
@@ -268,7 +316,17 @@ affiliateReferredAt: affiliateAttribution ? new Date() : null,
       await markWaitlistSignupRegistered(waitlistAttribution.waitlistSignupId, newUser.id);
     }
 
-    const token = await signToken(newUser.id, newUser.role);
+    const sessionToken = generateSessionToken();
+    const token = await signToken(newUser.id, newUser.role, sessionToken);
+    // BUG FIX: this previously set currentSessionToken but not
+    // lastActivityAt, leaving it null. getSessionUser() treats a null
+    // lastActivityAt as "already expired" (same check used for the
+    // 5-minute inactivity timeout — see lib/auth.ts) and immediately
+    // revokes the session, nulling currentSessionToken again. Net effect:
+    // a brand new owner was logged out on their very next request right
+    // after registering, before ever seeing a page. loginAction sets both
+    // fields together for the same reason; this now matches it.
+    await prisma.user.update({ where: { id: newUser.id }, data: { currentSessionToken: sessionToken, lastActivityAt: new Date() } });
     const cookieStore = await cookies();
     cookieStore.set("session-token", token, {
       httpOnly: true,
@@ -377,8 +435,9 @@ export async function resetPasswordAction(token: string, formData: FormData) {
   const newPassword = formData.get("newPassword") as string;
   const confirmPassword = formData.get("confirmPassword") as string;
 
-  if (!newPassword || newPassword.length < 6) {
-    return { error: "Password must be at least 6 characters long." };
+  const passwordCheck = validatePassword(newPassword);
+  if (!passwordCheck.valid) {
+    return { error: passwordCheck.error };
   }
   if (newPassword !== confirmPassword) {
     return { error: "Passwords do not match." };
@@ -411,12 +470,28 @@ export async function resetPasswordAction(token: string, formData: FormData) {
 
 export async function logoutAction() {
   const cookieStore = await cookies();
+  const token = cookieStore.get("session-token")?.value;
+  if (token) {
+    const payload = await verifyToken(token);
+    if (payload?.userId) {
+      // Clear the DB-side session token too — not just the cookie — so a
+      // copy of this token captured before logout can't be reused.
+      await prisma.user.update({ where: { id: payload.userId }, data: { currentSessionToken: null } }).catch(() => {});
+    }
+  }
   cookieStore.delete("session-token");
   await safeRedirect("/login");
 }
 
 export async function sessionTimeoutLogoutAction() {
   const cookieStore = await cookies();
+  const token = cookieStore.get("session-token")?.value;
+  if (token) {
+    const payload = await verifyToken(token);
+    if (payload?.userId) {
+      await prisma.user.update({ where: { id: payload.userId }, data: { currentSessionToken: null } }).catch(() => {});
+    }
+  }
   cookieStore.delete("session-token");
   await safeRedirect("/login?reason=timeout");
 }
@@ -448,6 +523,11 @@ export async function registerStaffAction(formData: FormData) {
 
   if (!email || !tempPassword) {
     return { success: false, error: "Email and password are required." };
+  }
+
+  const passwordCheck = validatePassword(tempPassword);
+  if (!passwordCheck.valid) {
+    return { success: false, error: passwordCheck.error };
   }
 
   if (storeId && !isNaN(storeId)) {
@@ -935,6 +1015,16 @@ export async function deleteUser(email: string) {
 }
 
 export async function getOwnersForAdmin() {
+  // SECURITY: not currently called from any client component (the admin
+  // UI uses getOwnersForAdminPicker in admin-message.actions.ts instead,
+  // which is already gated), but this was still exported with no check at
+  // all from a "use server" file — closing it off rather than leaving live
+  // unauthenticated dead code that returns every owner's PII.
+  const session = await getSessionUser();
+  if (!session || session.role.toLowerCase() !== "admin") {
+    return [];
+  }
+
   try {
     return await prisma.user.findMany({
       where: { role: 'owner' },

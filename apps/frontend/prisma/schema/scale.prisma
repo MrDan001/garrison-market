@@ -1,60 +1,35 @@
-// ============================================================================
-// SCALE INVENTORY (v2) — weight/volume-based selling
-// ============================================================================
-// Parallel system to the models in base.prisma, for stores where
-// `Store.storeType == "scale"`. An owner chooses "standard" or "scale" once,
-// at store creation — permanently — and every product, sale, report, and
-// consignment for that store flows through these models instead of the
-// standard Inventory/OrderItem/ReportItem/ConsignmentItem ones.
-//
-// Units: each ScaleInventory product is stocked in a fixed base unit
-// ("kg" or "L"), set by the owner when the product is created and never
-// changed afterward. At the point of sale or when logging wastage, staff
-// may enter the amount in the base unit OR its smaller counterpart
-// (g for kg, ml for L) — application code converts and stores the amount
-// actually deducted from stock in the base unit, so ScaleInventory.quantity
-// always stays in one consistent unit regardless of how a given sale was
-// entered.
-// ============================================================================
-
 model ScaleInventory {
-  id           Int      @id @default(autoincrement())
-  name         String
-  quantity     Decimal  // always stored in `unit` (kg or L)
-  unit         String   // "kg" | "L" — fixed at creation, never changes
-  price        Decimal  // price per 1 unit (per kg or per L)
-  costPrice    Decimal?
-  category     String?  // legacy free-text field — superseded by categoryId, kept for backfill/back-compat
-  restockLevel Decimal?
-  image        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  ownerId      Int
-  storeId      Int?
-
-  // --- New product detail fields — mirrors Inventory above ---
-  description  String?
-  sku          String?
-  // Reserved for a future barcode-scan feature — not read or written by any
-  // action yet.
-  barcode      String?
-  image2       String?
-  image3       String?
-  trackExpiry  Boolean  @default(false)
-  expiryDate   DateTime?
-  categoryId   Int?
-
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  store        Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  categoryRef  ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-
+  id               Int                    @id @default(autoincrement())
+  name             String
+  quantity         Decimal
+  unit             String
+  price            Decimal
+  costPrice        Decimal?
+  category         String?
+  restockLevel     Decimal?
+  image            String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  ownerId          Int
+  storeId          Int?
+  barcode          String?
+  categoryId       Int?
+  description      String?
+  expiryDate       DateTime?
+  image2           String?
+  image3           String?
+  sku              String?
+  trackExpiry      Boolean                @default(false)
+  consignmentItems ScaleConsignmentItem[]
+  categoryRef      ProductCategory?       @relation(fields: [categoryId], references: [id])
+  owner            User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  store            Store?                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
   orderItems       ScaleOrderItem[]
   reportItems      ScaleReportItem[]
-  consignmentItems ScaleConsignmentItem[]
-  wastageEntries   ScaleWastage[]
   stockBatches     ScaleStockBatch[]
   stockLosses      ScaleStockLoss[]
   stockReturns     ScaleStockReturn[]
+  wastageEntries   ScaleWastage[]
 
   @@index([ownerId, storeId])
   @@index([storeId])
@@ -62,44 +37,33 @@ model ScaleInventory {
 }
 
 model ScaleOrderItem {
-  id               Int      @id @default(autoincrement())
-  orderId          Int
-  scaleInventoryId Int
-
-  // Amount as entered by staff at sale time, in whichever unit they used
-  // (may be the base unit or its smaller counterpart, e.g. "g" for a
-  // product stocked in "kg").
-  quantity         Decimal
-  unit             String   // "kg" | "g" | "L" | "ml" — unit used for THIS sale
-
-  // Same amount converted to the product's base unit — this is what
-  // actually gets decremented from ScaleInventory.quantity, kept here too
-  // for a clean audit trail independent of unit conversion at read time.
+  id                 Int                   @id @default(autoincrement())
+  orderId            Int
+  scaleInventoryId   Int
+  quantity           Decimal
+  unit               String
   quantityInBaseUnit Decimal
-
-  priceAtTime      Decimal  // total price charged for this line (post-discount)
-  originalPrice    Decimal?
-  discountValue    Decimal?
-  discountType     String?
-  discountReason   String?
-
-  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
-  batchLines       ScaleOrderItemBatch[]
+  priceAtTime        Decimal
+  originalPrice      Decimal?
+  discountValue      Decimal?
+  discountType       String?
+  discountReason     String?
+  order              Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  scaleInventory     ScaleInventory        @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  batchLines         ScaleOrderItemBatch[]
 
   @@index([orderId])
   @@index([scaleInventoryId])
 }
 
 model ScaleReportItem {
-  id               Int      @id @default(autoincrement())
+  id               Int            @id @default(autoincrement())
   reportId         Int
   scaleInventoryId Int
-  name             String   // denormalized product name at time of report
-  quantitySold     Decimal  // total weight/volume sold, in base unit
-  unit             String   // base unit ("kg" | "L") for display
-  totalPrice       Decimal  // total price for this product on the report
-
+  name             String
+  quantitySold     Decimal
+  unit             String
+  totalPrice       Decimal
   report           Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
   scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
 
@@ -108,174 +72,120 @@ model ScaleReportItem {
 }
 
 model ScaleConsignmentItem {
-  id               Int      @id @default(autoincrement())
+  id               Int                         @id @default(autoincrement())
   consignmentId    Int
   scaleInventoryId Int
   quantityOut      Decimal
-  quantitySold     Decimal  @default(0)
-  quantityReturned Decimal  @default(0)
-  // Stage 1 (wastage fix): stock wasted while signed out to a staff
-  // member. Tracked separately from quantitySold/quantityReturned so
-  // settlement's sold+returned+wasted=quantityOut invariant holds, and
-  // so this amount is never re-added to ScaleInventory at settlement —
-  // it already left the shop for good when wastage was approved.
-  quantityWasted   Decimal  @default(0)
-  unit             String   // base unit ("kg" | "L")
+  quantitySold     Decimal                     @default(0)
+  quantityReturned Decimal                     @default(0)
+  unit             String
   priceAtTime      Decimal
-
-  consignment      Consignment    @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
-  scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
-  wastageEntries   ScaleWastage[]
-  // Stage 6 (batch tracking): which ScaleStockBatch(es) this sign-out's
-  // stock actually came from, allocated FIFO at sign-out time. Individual
-  // staff sales against this consignment item later draw down these
-  // allocations (oldest first) rather than re-querying the master batch
-  // pool, since the stock already left the pool the moment it was signed
-  // out — see consumeConsignmentItemBatchesFifo in stock-batch.helpers.ts.
+  quantityWasted   Decimal                     @default(0)
+  consignment      Consignment                 @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  scaleInventory   ScaleInventory              @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
   batchAllocations ScaleConsignmentItemBatch[]
+  wastageEntries   ScaleWastage[]
 
   @@index([consignmentId])
   @@index([scaleInventoryId])
 }
 
 model ScaleWastage {
-  id               Int       @id @default(autoincrement())
-  ownerId          Int
-  storeId          Int
-  scaleInventoryId Int
-  staffId          Int       // who logged it — kept for accountability
+  id                 Int                   @id @default(autoincrement())
+  ownerId            Int
+  storeId            Int
+  scaleInventoryId   Int
+  staffId            Int
+  quantity           Decimal
+  unit               String
+  quantityInBaseUnit Decimal
+  reason             String
+  note               String?
+  status             String                @default("pending")
+  declineReason      String?
+  reviewedById       Int?
+  reviewedAt         DateTime?
+  createdAt          DateTime              @default(now())
+  consignmentItemId  Int?
+  consignmentItem    ScaleConsignmentItem? @relation(fields: [consignmentItemId], references: [id])
+  owner              User                  @relation("ScaleWastageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  reviewedBy         User?                 @relation("ScaleWastageReviewer", fields: [reviewedById], references: [id])
+  scaleInventory     ScaleInventory        @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  staff              User                  @relation("ScaleWastageStaff", fields: [staffId], references: [id], onDelete: Cascade)
+  store              Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  // Stage 1 (wastage fix): set only for a merged store's entry, where
-  // the wasted stock came out of what was signed out to this staff
-  // member today rather than the shop's master ScaleInventory pool
-  // directly (native scale stores leave this null). Approval deducts
-  // from this consignment item's quantityWasted instead of the master
-  // pool, since sign-out already removed the stock from there.
-  consignmentItemId Int?
-
-  quantity         Decimal   // amount as entered by staff
-  unit             String    // unit used for this entry ("kg" | "g" | "L" | "ml")
-  quantityInBaseUnit Decimal // converted to product's base unit
-
-  reason           String    // "trimming" | "spillage" | "spoilage" | "sample" | "other"
-  note             String?
-
-  status           String    @default("pending") // "pending" | "approved" | "declined"
-  declineReason    String?   // required when status == "declined"
-
-  reviewedById     Int?      // owner who approved/declined
-  reviewedAt       DateTime?
-
-  createdAt        DateTime  @default(now())
-
-  owner            User           @relation("ScaleWastageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  store            Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  scaleInventory   ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
-  staff            User           @relation("ScaleWastageStaff", fields: [staffId], references: [id], onDelete: Cascade)
-  reviewedBy       User?          @relation("ScaleWastageReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  consignmentItem  ScaleConsignmentItem? @relation(fields: [consignmentItemId], references: [id], onDelete: SetNull)
-
-  // Powers "total wastage this month" + browsing by month/year.
   @@index([storeId, status])
   @@index([storeId, createdAt])
   @@index([staffId])
 }
 
-// ============================================================================
-// SCALE BATCH TRACKING — mirrors StockBatch/OrderItemBatch/StockLoss/
-// StockReturn in base.prisma exactly, for ScaleInventory products. The only
-// structural difference is quantity fields are Decimal here (weight/volume)
-// instead of Int, matching ScaleInventory.quantity itself. Deliberately
-// separate from ScaleWastage above — that's the staff-submitted, owner-
-// approved wastage-during-consignment workflow; this is the owner's own
-// batch-level restock/loss/return system, same as standard inventory's.
-// ============================================================================
-
 model ScaleStockBatch {
-  id                 Int       @id @default(autoincrement())
-  scaleInventoryId   Int
-  ownerId            Int
-  storeId            Int?
-
-  originalQty        Decimal   // immutable — the amount added in this restock, in base unit
-  remainingQty       Decimal   // decremented by sale/loss/return consumption
-
-  costPrice          Decimal?  // this batch's cost per base unit, snapshotted at add time
-  sellingPriceAtTime Decimal   // this batch's selling price per base unit, snapshotted at add time
-
-  expiryDate         DateTime?
-  paymentMethod      String?   // "cash" | "transfer"
-
-  addedAt            DateTime  @default(now())
-  createdById        Int?
-
-  scaleInventory ScaleInventory @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
-  owner          User           @relation("ScaleStockBatchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  store          Store?         @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  createdBy      User?          @relation("ScaleStockBatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  orderLines     ScaleOrderItemBatch[]
-  losses         ScaleStockLoss[]
-  returns        ScaleStockReturn[]
+  id                     Int                         @id @default(autoincrement())
+  scaleInventoryId       Int
+  ownerId                Int
+  storeId                Int?
+  originalQty            Decimal
+  remainingQty           Decimal
+  costPrice              Decimal?
+  sellingPriceAtTime     Decimal
+  expiryDate             DateTime?
+  paymentMethod          String?
+  addedAt                DateTime                    @default(now())
+  createdById            Int?
   consignmentAllocations ScaleConsignmentItemBatch[]
+  orderLines             ScaleOrderItemBatch[]
+  createdBy              User?                       @relation("ScaleStockBatchCreatedBy", fields: [createdById], references: [id])
+  owner                  User                        @relation("ScaleStockBatchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  scaleInventory         ScaleInventory              @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  store                  Store?                      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  losses                 ScaleStockLoss[]
+  returns                ScaleStockReturn[]
 
   @@index([scaleInventoryId])
   @@index([ownerId, storeId])
 }
 
-// Stage 6 — the allocation record created when ownerSignOutScaleToStaffAction
-// signs stock out to a staff member: FIFO-consumes the master ScaleStockBatch
-// pool for the signed-out quantity and remembers the breakdown here, so a
-// later individual sale against that ScaleConsignmentItem can attribute
-// itself back to the correct originating batch(es) — see
-// consumeConsignmentItemBatchesFifo in stock-batch.helpers.ts. remainingQty
-// decrements as sales draw against this allocation; quantity is the
-// original, immutable amount allocated from this batch.
 model ScaleConsignmentItemBatch {
-  id                Int     @id @default(autoincrement())
+  id                Int                  @id @default(autoincrement())
   consignmentItemId Int
   scaleStockBatchId Int
   quantity          Decimal
   remainingQty      Decimal
-
-  consignmentItem ScaleConsignmentItem @relation(fields: [consignmentItemId], references: [id], onDelete: Cascade)
-  scaleStockBatch ScaleStockBatch      @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
+  consignmentItem   ScaleConsignmentItem @relation(fields: [consignmentItemId], references: [id], onDelete: Cascade)
+  scaleStockBatch   ScaleStockBatch      @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
 
   @@index([consignmentItemId])
   @@index([scaleStockBatchId])
 }
 
 model ScaleOrderItemBatch {
-  id                Int     @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   scaleOrderItemId  Int
   scaleStockBatchId Int
-  quantity          Decimal // how much of this sale (in base unit) came from this batch
-
-  scaleOrderItem  ScaleOrderItem  @relation(fields: [scaleOrderItemId], references: [id], onDelete: Cascade)
-  scaleStockBatch ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
+  quantity          Decimal
+  scaleOrderItem    ScaleOrderItem  @relation(fields: [scaleOrderItemId], references: [id], onDelete: Cascade)
+  scaleStockBatch   ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
 
   @@index([scaleOrderItemId])
   @@index([scaleStockBatchId])
 }
 
 model ScaleStockLoss {
-  id                Int      @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   scaleInventoryId  Int
   scaleStockBatchId Int
   ownerId           Int
   storeId           Int?
-
-  quantity Decimal // base unit
-  reason   String  // "Damaged" | "Expired" | "Theft" | "Spillage" | "Other"
-  note     String?
-
-  createdAt    DateTime @default(now())
-  recordedById Int?
-
-  scaleInventory  ScaleInventory  @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
-  scaleStockBatch ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
-  owner           User            @relation("ScaleStockLossOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  store           Store?          @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  recordedBy      User?           @relation("ScaleStockLossRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  quantity          Decimal
+  reason            String
+  note              String?
+  createdAt         DateTime        @default(now())
+  recordedById      Int?
+  owner             User            @relation("ScaleStockLossOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recordedBy        User?           @relation("ScaleStockLossRecordedBy", fields: [recordedById], references: [id])
+  scaleInventory    ScaleInventory  @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  scaleStockBatch   ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
+  store             Store?          @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([scaleInventoryId])
   @@index([scaleStockBatchId])
@@ -283,26 +193,23 @@ model ScaleStockLoss {
 }
 
 model ScaleStockReturn {
-  id                Int      @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   scaleInventoryId  Int
   scaleStockBatchId Int
   ownerId           Int
   storeId           Int?
-
-  quantity     Decimal // base unit
-  supplierName String?
-  reason       String?
-  refundAmount Decimal?
-  note         String?
-
-  createdAt    DateTime @default(now())
-  recordedById Int?
-
-  scaleInventory  ScaleInventory  @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
-  scaleStockBatch ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
-  owner           User            @relation("ScaleStockReturnOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  store           Store?          @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  recordedBy      User?           @relation("ScaleStockReturnRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  quantity          Decimal
+  supplierName      String?
+  reason            String?
+  refundAmount      Decimal?
+  note              String?
+  createdAt         DateTime        @default(now())
+  recordedById      Int?
+  owner             User            @relation("ScaleStockReturnOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recordedBy        User?           @relation("ScaleStockReturnRecordedBy", fields: [recordedById], references: [id])
+  scaleInventory    ScaleInventory  @relation(fields: [scaleInventoryId], references: [id], onDelete: Cascade)
+  scaleStockBatch   ScaleStockBatch @relation(fields: [scaleStockBatchId], references: [id], onDelete: Cascade)
+  store             Store?          @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([scaleInventoryId])
   @@index([scaleStockBatchId])

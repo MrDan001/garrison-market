@@ -1,7 +1,5 @@
-// FILE: apps/frontend/prisma/schema/base.prisma
-
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -9,227 +7,112 @@ datasource db {
 }
 
 model User {
-  id                 Int      @id @default(autoincrement())
-  email              String   @unique
-  password           String
-  role               String   @default("owner")
-  status             String   @default("pending")
-  fullName           String?
-  phoneNumber        String?
-  image              String?
-  storeName          String?
-  mustChangePassword Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  ownerId            Int?
-
-  resetToken         String?   @unique
-  resetTokenExpiry   DateTime?
-
-  // --- Subscription / Billing (owner-level; staff inherit via ownerId) ---
-  plan                     String    @default("basic")     // "basic" | "premium"
-  subscriptionStatus       String    @default("trialing")  // "trialing" | "active" | "expired" | "cancelled"
-  trialEndsAt              DateTime?
-  currentPeriodEnd         DateTime?
-  paystackCustomerCode     String?
-  paystackAuthorizationCode String?
-  currentStoreId           Int?      // last store the owner was viewing, for "return to same store"
-
-  // --- Negotiated pricing (admin-set override) ---
-  // When set, these replace the plan's standard monthly price for this
-  // owner at checkout — cycle discounts still apply on top. Separate rates
-  // per plan since an owner may negotiate Basic and Premium differently
-  // (not every store has the same capacity/volume).
-  customPriceBasicNaira    Int?
-  customPriceBasicNote     String?
-  customPricePremiumNaira  Int?
-  customPricePremiumNote   String?
-  // Negotiated Max Package rate. Same pattern as Basic/Premium above — no
-  // static price exists for Max at all, so this is the ONLY way an owner
-  // can ever see a price or check out for it. Set by an admin after they've
-  // haggled with the owner over Support/email, per setCustomPriceAction
-  // (plan="max"). Until this is set, Max always renders as "contact admin"
-  // on the billing page, same as an unpriced Basic/Premium.
-  customPriceMaxNaira      Int?
-  customPriceMaxNote       String?
-  customPriceSetBy         String?   // admin email who last set either rate
-  customPriceUpdatedAt     DateTime?
-
-  // --- Referral Engine Tracks ---
-  // 👇 REMOVED @default(uuid()). We will manage this cleanly with application code!
-  referralCode               String?   @unique 
-  referredById               Int?
-  referredBy                 User?     @relation("ReferralTree", fields: [referredById], references: [id], onDelete: SetNull)
-  referrals                  User[]    @relation("ReferralTree")
-  hasTriggeredReferralReward Boolean   @default(false)
-
-  payments   Payment[]     @relation("OwnerPayments")
-  planExtensions PlanExtension[] @relation("OwnerPlanExtensions")
-  
-  ownerNotifications     Notification[] @relation("OwnerNotifications")
-  recipientNotifications Notification[] @relation("RecipientNotifications")
-  notificationReads      NotificationRead[]
-  pushSubscriptions      PushSubscription[]
-  supportOwnerScope      SupportMessage[] @relation("SupportOwnerScope")
-  supportSent            SupportMessage[] @relation("SupportSender")
-
-  // Dev Assistant (admin-only code assistant) — one resumable thread per
-  // admin account. See prisma/schema/dev-assistant.prisma.
-  devAssistantThread     DevAssistantThread? @relation("DevAssistantThreadAdmin")
-
-  // Dev Assistant uploaded codebase — one active project per admin
-  // account. See prisma/schema/dev-assistant-project.prisma.
-  devAssistantProject    DevAssistantProject? @relation("DevAssistantProjectAdmin")
-
-  // Admin -> owner/staff mailbox (see AdminMessage below). sentAdminMessages
-  // is populated only for admin-role users; targetedAdminMessages only for
-  // owners; targetedStaffAdminMessages only for staff. adminMessageAcks is
-  // shared by both owner and staff recipients.
-  sentAdminMessages          AdminMessage[]      @relation("AdminMessageSender")
-  targetedAdminMessages      AdminMessage[]      @relation("AdminMessageTarget")
-  targetedStaffAdminMessages AdminMessage[]      @relation("AdminMessageTargetStaff")
-  adminMessageReads          AdminMessageRead[]
-  adminMessageAcks           AdminMessageAck[]
-
-  // Engagement push blasts this admin has triggered (see AdminBroadcast
-  // below) — populated only for admin-role users.
-  sentAdminBroadcasts        AdminBroadcast[]    @relation("AdminBroadcastSender")
-  adminMessageReplies        AdminMessageReply[] @relation("AdminMessageReplyOwner")
-
-  shopAddress   String?
-  shopCity      String?
-  shopState     String?
-  productsSold  String?
-
-  notificationsEnabled Boolean @default(true)
-  discountEnabled      Boolean @default(false)
-  consignmentEnabled   Boolean @default(false)
-  screenshotProtectionEnabled  Boolean @default(false)
-
-  // Scale (weight/volume) inventory — owner-level toggle controlling
-  // whether staff on a "scale" store can view the wastage report,
-  // same on/off pattern as discountEnabled above. Approval itself is
-  // always owner-only regardless of this flag.
-  wastageVisibleToStaff Boolean @default(false)
-
-  // Admin-only override (set from the admin panel, never by the owner
-  // themselves): unlocks Scale Consignment for this owner even when their
-  // store's storeType is "standard". Standard inventory stays completely
-  // untouched — this only adds a parallel, consignment-gated Scale layer.
-  // Staff sign-out is DAILY: an automated midnight job force-settles any
-  // open scale consignment, returning unsold stock to ScaleInventory, so
-  // staff's scale view starts empty each day until the owner signs out
-  // fresh stock. See lib/scale-consignment-reset.ts for the cron logic.
-  scaleConsignmentEnabled Boolean @default(false)
-
-  // Admin-only override (set from the admin panel, never by the owner
-  // themselves) — same pattern as scaleConsignmentEnabled above, and only
-  // meaningful when that flag is also on. When both are on, staff get a
-  // single merged catalog + cart instead of the List/Scale mode switcher,
-  // so one sale can contain both standard Inventory items and scale items
-  // signed out via consignment. See processMergedSaleAction in
-  // lib/consignment.actions.ts.
-  mergedCartEnabled Boolean @default(false)
-
-  // Admin-only overrides (set from the admin panel, never by the owner
-  // themselves): grant Debtors / Customer Profiles to a specific owner
-  // regardless of their plan tier. These exist because both features
-  // became Pro+Max-gated (lib/plans.ts: PlanConfig.debtors /
-  // .customerProfiles) after having no plan gating at all — an admin
-  // needs a way to keep a Basic owner's already-existing access working,
-  // or grant either as a one-off courtesy. Every gate on these two
-  // features is `plan allows it OR this override is on`, never the
-  // override alone and never the plan alone — see hasFeatureAccess() in
-  // lib/subscription-guard.ts.
-  debtorsOverride Boolean @default(false)
-  customerProfilesOverride Boolean @default(false)
-
-  // Same pattern, added alongside the two above once staffConsignment/
-  // ownerConsignment became plan-gated (lib/plans.ts) — an admin can grant
-  // either to an owner regardless of plan tier. Deliberately separate from
-  // scaleConsignmentEnabled/mergedCartEnabled above: those two unlock the
-  // Scale Consignment *subsystem itself* on an otherwise-standard store,
-  // which is a different question from whether this owner's plan tier
-  // entitles them to use consignment at all. See hasFeatureAccess() in
-  // lib/subscription-guard.ts.
-  staffConsignmentOverride Boolean @default(false)
-  ownerConsignmentOverride Boolean @default(false)
-
-  // --- Max Package (negotiated price, admin-gated) ---
-  // Like Basic/Premium, Max has no static price — an owner requests it by
-  // contacting admin via Support or email, admin negotiates and sets a rate
-  // with setCustomPriceAction (see customPriceMaxNaira above), and only then
-  // can the owner check out for it via the normal Paystack flow.
-  //
-  // This flag is the actual unlock switch: it turns ON AUTOMATICALLY the
-  // moment a Max payment succeeds (webhook / syncPaymentDirectly), granting
-  // unlimited stores/staff/products and every gated feature regardless of
-  // trial/period expiry (see resolveEffectivePlanId() and getBillingStatus()
-  // in lib/subscription-guard.ts). If they haven't paid, it stays OFF.
-  // An admin can also flip it manually from the admin panel — e.g. to grant
-  // it as a courtesy, or to revoke it — independent of payment state.
-  maxPackageEnabled Boolean @default(false)
-
-  
-  stores         Store[]   @relation("OwnerStores")
-  staffStoreId   Int?
-  staffStore     Store?    @relation("StoreStaff", fields: [staffStoreId], references: [id])
-
-  inventory      Inventory[]
-  orders         Order[]
-  staffOrders    Order[]     @relation("StaffOrders")
-  reports        Report[]
-  owner          User?       @relation("StaffHierarchy", fields: [ownerId], references: [id], onDelete: Cascade)
-  managedStaff   User[]      @relation("StaffHierarchy")
-
-  consignmentsOwned   Consignment[] @relation("OwnerConsignments")
-  consignmentsStaffed Consignment[] @relation("StaffConsignments")
-
-  customers      Customer[] @relation("OwnerCustomers")
-
-  // --- Debtors (part-payment at checkout) ---
-  debtsOwned        Debt[]        @relation("OwnerDebts")
-  debtPaymentsMade  DebtPayment[] @relation("StaffDebtPayments")
-
-  // --- Expenses --- expenseCategoriesOwned is only ever populated for
-  // owner-role users (they're the only ones who manage the category
-  // list); the other two are populated for whichever role actually did
-  // the thing (owner or staff can both log an expense).
-  expensesOwned          Expense[]         @relation("ExpenseOwner")
-  expenseCategoriesOwned ExpenseCategory[] @relation("ExpenseCategoryOwner")
-
-  // --- Product categories (shared by standard + scale inventory) ---
-  // Same convention as expenseCategoriesOwned above: one list per owner,
-  // staff pick from it rather than create their own.
-  productCategoriesOwned ProductCategory[] @relation("ProductCategoryOwner")
-  expensesLogged         Expense[]         @relation("ExpenseLoggedBy")
-
-
-  // --- Scale (weight/volume) inventory relations ---
-  scaleInventory        ScaleInventory[]
-  scaleWastageOwned     ScaleWastage[]   @relation("ScaleWastageOwner")
-  scaleWastageSubmitted ScaleWastage[]   @relation("ScaleWastageStaff")
-  scaleWastageReviewed  ScaleWastage[]   @relation("ScaleWastageReviewer")
-
-  // --- Standard-inventory stock batches ---
-  stockBatchesOwned   StockBatch[] @relation("StockBatchOwner")
-  stockBatchesCreated StockBatch[] @relation("StockBatchCreatedBy")
-  stockLossesOwned    StockLoss[]  @relation("StockLossOwner")
-  stockLossesRecorded StockLoss[]  @relation("StockLossRecordedBy")
-  stockReturnsOwned   StockReturn[] @relation("StockReturnOwner")
-  stockReturnsRecorded StockReturn[] @relation("StockReturnRecordedBy")
-
-  // --- Scale-inventory stock batches (Stage 5) ---
-  scaleStockBatchesOwned   ScaleStockBatch[] @relation("ScaleStockBatchOwner")
-  scaleStockBatchesCreated ScaleStockBatch[] @relation("ScaleStockBatchCreatedBy")
-  scaleStockLossesOwned    ScaleStockLoss[]  @relation("ScaleStockLossOwner")
-  scaleStockLossesRecorded ScaleStockLoss[]  @relation("ScaleStockLossRecordedBy")
-  scaleStockReturnsOwned   ScaleStockReturn[] @relation("ScaleStockReturnOwner")
-  scaleStockReturnsRecorded ScaleStockReturn[] @relation("ScaleStockReturnRecordedBy")
-
-// --- Affiliate attribution (separate from the referral engine above) ---
-affiliateId         Int?
-affiliateReferredAt DateTime?
-referredByAffiliate Affiliate? @relation("AffiliateReferrals", fields: [affiliateId], references: [id], onDelete: SetNull)
+  id                          Int                  @id @default(autoincrement())
+  email                       String               @unique
+  password                    String
+  role                        String               @default("owner")
+  status                      String               @default("pending")
+  fullName                    String?
+  phoneNumber                 String?
+  storeName                   String?
+  mustChangePassword          Boolean              @default(false)
+  createdAt                   DateTime             @default(now())
+  ownerId                     Int?
+  image                       String?
+  productsSold                String?
+  shopAddress                 String?
+  shopCity                    String?
+  shopState                   String?
+  notificationsEnabled        Boolean              @default(true)
+  discountEnabled             Boolean              @default(false)
+  consignmentEnabled          Boolean              @default(false)
+  staffStoreId                Int?
+  currentPeriodEnd            DateTime?
+  currentStoreId              Int?
+  paystackAuthorizationCode   String?
+  paystackCustomerCode        String?
+  plan                        String               @default("basic")
+  resetToken                  String?              @unique
+  resetTokenExpiry            DateTime?
+  subscriptionStatus          String               @default("trialing")
+  trialEndsAt                 DateTime?
+  hasTriggeredReferralReward  Boolean              @default(false)
+  referralCode                String?              @unique
+  referredById                Int?
+  screenshotProtectionEnabled Boolean              @default(false)
+  customPriceSetBy            String?
+  customPriceUpdatedAt        DateTime?
+  customPriceBasicNaira       Int?
+  customPriceBasicNote        String?
+  customPricePremiumNaira     Int?
+  customPricePremiumNote      String?
+  wastageVisibleToStaff       Boolean              @default(false)
+  scaleConsignmentEnabled     Boolean              @default(false)
+  customPriceMaxNaira         Int?
+  customPriceMaxNote          String?
+  maxPackageEnabled           Boolean              @default(false)
+  mergedCartEnabled           Boolean              @default(false)
+  customerProfilesOverride    Boolean              @default(false)
+  debtorsOverride             Boolean              @default(false)
+  ownerConsignmentOverride    Boolean              @default(false)
+  staffConsignmentOverride    Boolean              @default(false)
+  affiliateId                 Int?
+  affiliateReferredAt         DateTime?
+  currentSessionToken         String?
+  lastActivityAt              DateTime?
+  sentAdminBroadcasts         AdminBroadcast[]     @relation("AdminBroadcastSender")
+  sentAdminMessages           AdminMessage[]       @relation("AdminMessageSender")
+  targetedAdminMessages       AdminMessage[]       @relation("AdminMessageTarget")
+  targetedStaffAdminMessages  AdminMessage[]       @relation("AdminMessageTargetStaff")
+  adminMessageAcks            AdminMessageAck[]
+  adminMessageReads           AdminMessageRead[]
+  adminMessageReplies         AdminMessageReply[]  @relation("AdminMessageReplyOwner")
+  consignmentsOwned           Consignment[]        @relation("OwnerConsignments")
+  consignmentsStaffed         Consignment[]        @relation("StaffConsignments")
+  customers                   Customer[]           @relation("OwnerCustomers")
+  debtsOwned                  Debt[]               @relation("OwnerDebts")
+  debtPaymentsMade            DebtPayment[]        @relation("StaffDebtPayments")
+  devAssistantProject         DevAssistantProject? @relation("DevAssistantProjectAdmin")
+  devAssistantThread          DevAssistantThread?  @relation("DevAssistantThreadAdmin")
+  expensesLogged              Expense[]            @relation("ExpenseLoggedBy")
+  expensesOwned               Expense[]            @relation("ExpenseOwner")
+  expenseCategoriesOwned      ExpenseCategory[]    @relation("ExpenseCategoryOwner")
+  inventory                   Inventory[]
+  ownerNotifications          Notification[]       @relation("OwnerNotifications")
+  recipientNotifications      Notification[]       @relation("RecipientNotifications")
+  notificationReads           NotificationRead[]
+  orders                      Order[]
+  staffOrders                 Order[]              @relation("StaffOrders")
+  payments                    Payment[]            @relation("OwnerPayments")
+  planExtensions              PlanExtension[]      @relation("OwnerPlanExtensions")
+  productCategoriesOwned      ProductCategory[]    @relation("ProductCategoryOwner")
+  pushSubscriptions           PushSubscription[]
+  reports                     Report[]
+  scaleInventory              ScaleInventory[]
+  scaleStockBatchesCreated    ScaleStockBatch[]    @relation("ScaleStockBatchCreatedBy")
+  scaleStockBatchesOwned      ScaleStockBatch[]    @relation("ScaleStockBatchOwner")
+  scaleStockLossesOwned       ScaleStockLoss[]     @relation("ScaleStockLossOwner")
+  scaleStockLossesRecorded    ScaleStockLoss[]     @relation("ScaleStockLossRecordedBy")
+  scaleStockReturnsOwned      ScaleStockReturn[]   @relation("ScaleStockReturnOwner")
+  scaleStockReturnsRecorded   ScaleStockReturn[]   @relation("ScaleStockReturnRecordedBy")
+  scaleWastageOwned           ScaleWastage[]       @relation("ScaleWastageOwner")
+  scaleWastageReviewed        ScaleWastage[]       @relation("ScaleWastageReviewer")
+  scaleWastageSubmitted       ScaleWastage[]       @relation("ScaleWastageStaff")
+  stockBatchesCreated         StockBatch[]         @relation("StockBatchCreatedBy")
+  stockBatchesOwned           StockBatch[]         @relation("StockBatchOwner")
+  stockLossesOwned            StockLoss[]          @relation("StockLossOwner")
+  stockLossesRecorded         StockLoss[]          @relation("StockLossRecordedBy")
+  stockReturnsOwned           StockReturn[]        @relation("StockReturnOwner")
+  stockReturnsRecorded        StockReturn[]        @relation("StockReturnRecordedBy")
+  stores                      Store[]              @relation("OwnerStores")
+  supportOwnerScope           SupportMessage[]     @relation("SupportOwnerScope")
+  supportSent                 SupportMessage[]     @relation("SupportSender")
+  referredByAffiliate         Affiliate?           @relation("AffiliateReferrals", fields: [affiliateId], references: [id])
+  owner                       User?                @relation("StaffHierarchy", fields: [ownerId], references: [id], onDelete: Cascade)
+  managedStaff                User[]               @relation("StaffHierarchy")
+  referredBy                  User?                @relation("ReferralTree", fields: [referredById], references: [id])
+  referrals                   User[]               @relation("ReferralTree")
+  staffStore                  Store?               @relation("StoreStaff", fields: [staffStoreId], references: [id])
 
   @@index([ownerId])
   @@index([staffStoreId])
@@ -238,68 +121,54 @@ referredByAffiliate Affiliate? @relation("AffiliateReferrals", fields: [affiliat
 }
 
 model Store {
-  id           Int      @id @default(autoincrement())
-  name         String
-  phoneNumber  String?
-  address      String?
-  city         String?
-  state        String?
-  productsSold String?
-  createdAt    DateTime @default(now())
-  ownerId      Int
-  owner        User     @relation("OwnerStores", fields: [ownerId], references: [id], onDelete: Cascade)
-
-  // Chosen once at store creation, before any other store detail, and
-  // permanent thereafter: "standard" (sell items individually — the
-  // existing Inventory/Order/Report/Consignment models) or "scale"
-  // (sell by weight/volume — the ScaleInventory/ScaleOrderItem/
-  // ScaleReportItem/ScaleConsignmentItem models in scale.prisma).
-  // Existing stores default to "standard" and are unaffected.
-  storeType    String   @default("standard") // "standard" | "scale"
-
-  // Rush clock-in — "HH:mm" 24-hour, store's own local wall-clock time.
-  // Owner-configurable (defaults to 8:00 AM); a staff clock-in at or
-  // before this time counts as on-time for the STAFF_ON_TIME XP award.
-  shiftStartTime String @default("08:00")
-
-  inventory     Inventory[]
-  orders        Order[]
-  reports       Report[]
-  consignments  Consignment[]
-  staff         User[]         @relation("StoreStaff")
-  notifications Notification[]
-  customers     Customer[]
-
-  scaleInventory ScaleInventory[]
-  scaleWastage   ScaleWastage[]
-  expenses       Expense[]
-  stockBatches   StockBatch[]
-  stockLosses    StockLoss[]
-  stockReturns   StockReturn[]
+  id                Int                @id @default(autoincrement())
+  name              String
+  phoneNumber       String?
+  createdAt         DateTime           @default(now())
+  ownerId           Int
+  address           String?
+  city              String?
+  productsSold      String?
+  state             String?
+  storeType         String             @default("standard")
+  shiftStartTime    String             @default("08:00")
+  consignments      Consignment[]
+  customers         Customer[]
+  expenses          Expense[]
+  inventory         Inventory[]
+  notifications     Notification[]
+  orders            Order[]
+  reports           Report[]
+  scaleInventory    ScaleInventory[]
   scaleStockBatches ScaleStockBatch[]
   scaleStockLosses  ScaleStockLoss[]
   scaleStockReturns ScaleStockReturn[]
+  scaleWastage      ScaleWastage[]
+  stockBatches      StockBatch[]
+  stockLosses       StockLoss[]
+  stockReturns      StockReturn[]
+  owner             User               @relation("OwnerStores", fields: [ownerId], references: [id], onDelete: Cascade)
+  staff             User[]             @relation("StoreStaff")
 
   @@index([ownerId])
 }
 
 model Report {
-  id            Int      @id @default(autoincrement())
-  status        String   @default("pending") // "pending" | "approved" | "declined" | "revision_requested"
-  date          DateTime @default(now())
-  totalSales    Decimal
-  cashTotal     Decimal  @default(0)
-  transferTotal Decimal  @default(0)
-  notes         String
-  ownerNote     String?
+  id            Int               @id @default(autoincrement())
+  status        String            @default("pending")
+  date          DateTime          @default(now())
   authorId      Int
   ownerId       Int
+  notes         String
+  totalSales    Decimal
   storeId       Int?
-  
-  author    User         @relation(fields: [authorId], references: [id], onDelete: SetNull)
-  store     Store?       @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  items     ReportItem[]
-  scaleItems ScaleReportItem[]
+  cashTotal     Decimal           @default(0)
+  ownerNote     String?
+  transferTotal Decimal           @default(0)
+  author        User              @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  store         Store?            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items         ReportItem[]
+  scaleItems    ScaleReportItem[]
 
   @@index([ownerId, status])
   @@index([storeId])
@@ -308,7 +177,7 @@ model Report {
 }
 
 model ReportItem {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   reportId       Int
   inventoryId    Int
   name           String
@@ -319,163 +188,114 @@ model ReportItem {
   discountValue  Decimal?
   discountType   String?
   discountReason String?
-  report         Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
   inventory      Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  report         Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([reportId])
   @@index([inventoryId])
 }
 
 model Inventory {
-  id           Int      @id @default(autoincrement())
-  name         String
-  quantity     Int
-  price        Decimal
-  costPrice    Decimal?
-  category     String?  // legacy free-text field — superseded by categoryId, kept for backfill/back-compat
-  restockLevel Int?
-  image        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  ownerId      Int
-  storeId      Int?
-
-  // --- New product detail fields ---
-  description  String?
-  sku          String?
-  // Reserved for a future barcode-scan feature — not read or written by any
-  // action yet. Deliberately nullable/unindexed until that feature lands.
-  barcode      String?
-  image2       String?
-  image3       String?
-  trackExpiry  Boolean  @default(false)
-  expiryDate   DateTime?
-  categoryId   Int?
-
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  store        Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  // Deleting a category shouldn't delete the products in it — same
-  // SetNull convention as Expense.category above.
-  categoryRef  ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  orderItems   OrderItem[]
-  reportItems  ReportItem[]
+  id               Int               @id @default(autoincrement())
+  name             String
+  quantity         Int
+  price            Decimal
+  updatedAt        DateTime          @updatedAt
+  ownerId          Int
+  category         String?
+  costPrice        Decimal?
+  image            String?
+  restockLevel     Int?
+  createdAt        DateTime          @default(now())
+  storeId          Int?
+  barcode          String?
+  categoryId       Int?
+  description      String?
+  expiryDate       DateTime?
+  image2           String?
+  image3           String?
+  sku              String?
+  trackExpiry      Boolean           @default(false)
   consignmentItems ConsignmentItem[]
-  stockBatches StockBatch[]
-  stockLosses  StockLoss[]
-  stockReturns StockReturn[]
+  categoryRef      ProductCategory?  @relation(fields: [categoryId], references: [id])
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  store            Store?            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderItems       OrderItem[]
+  reportItems      ReportItem[]
+  stockBatches     StockBatch[]
+  stockLosses      StockLoss[]
+  stockReturns     StockReturn[]
 
   @@index([ownerId, storeId])
   @@index([storeId])
   @@index([categoryId])
 }
 
-// Batch tracking — Stage 1 of the standard-inventory batch feature.
-//
-// Every time stock is added to a product (initial creation, or a later
-// restock), it becomes its own StockBatch row instead of just bumping
-// Inventory.quantity in place. Inventory.quantity is kept as the live,
-// denormalized total (sum of each batch's remainingQty) so every existing
-// read path (stock lists, low-stock checks, sale validation) keeps working
-// unchanged — batches are additive, not a replacement.
-//
-// remainingQty starts equal to originalQty and is untouched by this stage;
-// later stages wire sale/loss/return consumption to decrement it (FIFO,
-// oldest batch first) and link OrderItems back to the batch(es) they drew
-// from. costPrice/sellingPriceAtTime are snapshotted per batch so a
-// product's margin history stays accurate even after its current price
-// changes — the batch remembers what it actually cost/sold for when it
-// was added, independent of Inventory.costPrice/price today.
 model StockBatch {
-  id                 Int       @id @default(autoincrement())
+  id                 Int              @id @default(autoincrement())
   inventoryId        Int
   ownerId            Int
   storeId            Int?
-
-  originalQty        Int       // immutable — the amount added in this restock
-  remainingQty       Int       // decremented by future sale/loss/return stages
-
-  costPrice          Decimal?  // this batch's cost per unit, snapshotted at add time
-  sellingPriceAtTime Decimal   // this batch's selling price, snapshotted at add time
-
+  originalQty        Int
+  remainingQty       Int
+  costPrice          Decimal?
+  sellingPriceAtTime Decimal
   expiryDate         DateTime?
-  paymentMethod      String?   // "cash" | "transfer" — how this restock was paid for, if recorded
-
-  addedAt            DateTime  @default(now())
-  // Nullable + SetNull, same convention as Order.staffId: losing the user
-  // who added a batch shouldn't delete the batch or its stock history.
+  paymentMethod      String?
+  addedAt            DateTime         @default(now())
   createdById        Int?
-
-  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
-  owner       User      @relation("StockBatchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  store       Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  createdBy   User?     @relation("StockBatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  orderLines  OrderItemBatch[]
-  losses      StockLoss[]
-  returns     StockReturn[]
+  orderLines         OrderItemBatch[]
+  createdBy          User?            @relation("StockBatchCreatedBy", fields: [createdById], references: [id])
+  inventory          Inventory        @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  owner              User             @relation("StockBatchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store              Store?           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  losses             StockLoss[]
+  returns            StockReturn[]
 
   @@index([inventoryId])
   @@index([ownerId, storeId])
 }
 
-// Stage 4 — recording damaged/expired/stolen/spilled stock against a
-// specific batch (the owner records this from that batch's own detail
-// screen, so there's no FIFO to resolve — it always targets the exact
-// batch shown). Decrements that batch's remainingQty and the product's
-// Inventory.quantity together, in the same transaction, the same way a
-// sale does.
 model StockLoss {
-  id           Int      @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   inventoryId  Int
   stockBatchId Int
   ownerId      Int
   storeId      Int?
-
   quantity     Int
-  reason       String   // "Damaged" | "Expired" | "Theft" | "Spillage" | "Other"
+  reason       String
   note         String?
-
-  createdAt    DateTime @default(now())
-  // Nullable + SetNull — same convention as StockBatch.createdById.
+  createdAt    DateTime   @default(now())
   recordedById Int?
-
-  inventory  Inventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
-  stockBatch StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
-  owner      User       @relation("StockLossOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  store      Store?     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  recordedBy User?      @relation("StockLossRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  inventory    Inventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  owner        User       @relation("StockLossOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recordedBy   User?      @relation("StockLossRecordedBy", fields: [recordedById], references: [id])
+  stockBatch   StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
+  store        Store?     @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([inventoryId])
   @@index([stockBatchId])
   @@index([ownerId, storeId])
 }
 
-// Stage 4 — sending unsold stock from a batch back to the supplier
-// (short-dated stock, a bad delivery, etc). Same mechanics as StockLoss:
-// targets one specific batch directly, decrements remainingQty and
-// Inventory.quantity together. refundAmount is optional/informational —
-// it doesn't move any money in the app, just records what the supplier
-// credited back, if anything.
 model StockReturn {
-  id           Int      @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   inventoryId  Int
   stockBatchId Int
   ownerId      Int
   storeId      Int?
-
   quantity     Int
   supplierName String?
   reason       String?
   refundAmount Decimal?
   note         String?
-
-  createdAt    DateTime @default(now())
+  createdAt    DateTime   @default(now())
   recordedById Int?
-
-  inventory  Inventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
-  stockBatch StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
-  owner      User       @relation("StockReturnOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  store      Store?     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  recordedBy User?      @relation("StockReturnRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  inventory    Inventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  owner        User       @relation("StockReturnOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recordedBy   User?      @relation("StockReturnRecordedBy", fields: [recordedById], references: [id])
+  stockBatch   StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
+  store        Store?     @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([inventoryId])
   @@index([stockBatchId])
@@ -483,40 +303,25 @@ model StockReturn {
 }
 
 model Order {
-  id            Int      @id @default(autoincrement())
+  id            Int              @id @default(autoincrement())
   total         Decimal
-  date          DateTime @default(now())
-  paymentMethod String   @default("cash") // "cash" | "transfer"
-  buyerName     String?
-  buyerPhone    String?
+  date          DateTime         @default(now())
   ownerId       Int
   staffId       Int?
+  consignmentId Int?
   storeId       Int?
-
-  owner         User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  staff         User?         @relation("StaffOrders", fields: [staffId], references: [id], onDelete: SetNull)
-  store         Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  paymentMethod String           @default("cash")
+  buyerName     String?
+  buyerPhone    String?
+  customerId    Int?
+  debt          Debt?
+  consignment   Consignment?     @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  customer      Customer?        @relation(fields: [customerId], references: [id])
+  owner         User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  staff         User?            @relation("StaffOrders", fields: [staffId], references: [id])
+  store         Store?           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items         OrderItem[]
   scaleItems    ScaleOrderItem[]
-  consignmentId Int?
-  consignment   Consignment?  @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
-
-  // Set only when the staff member picked (or matched into) an existing
-  // customer profile at checkout — see resolveOrCreateCustomer in
-  // customer.actions.ts. Free-text buyerName/buyerPhone above still get
-  // written on every order regardless (that's what the invoice/receipt
-  // reads from); customerId is what lets the owner's Customers page roll
-  // orders up into a running per-customer total. Orders placed before this
-  // feature existed, or where staff left the fields blank, simply have no
-  // customerId and are invisible to that ranking — nothing to backfill.
-  customerId    Int?
-  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  // Set only when this sale was NOT paid in full at checkout (staff chose
-  // "Part payment"). One-to-one: an order either has no debt at all (paid
-  // in full) or exactly one Debt row tracking what's left owing on it —
-  // see Debt below.
-  debt          Debt?
 
   @@index([ownerId, date])
   @@index([storeId, date])
@@ -525,71 +330,35 @@ model Order {
 }
 
 model OrderItem {
-  id            Int      @id @default(autoincrement())
-  orderId       Int
-  inventoryId   Int
-  quantity      Int
-  priceAtTime   Decimal
-  originalPrice Decimal?
-  discountValue Decimal?
-  discountType  String?
+  id             Int              @id @default(autoincrement())
+  orderId        Int
+  inventoryId    Int
+  quantity       Int
+  priceAtTime    Decimal
   discountReason String?
-  inventory     Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
-  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  batchLines    OrderItemBatch[]
+  discountType   String?
+  discountValue  Decimal?
+  originalPrice  Decimal?
+  inventory      Inventory        @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  order          Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  batchLines     OrderItemBatch[]
 
   @@index([orderId])
   @@index([inventoryId])
 }
 
-// Records which StockBatch(es) an OrderItem's sale actually drew stock
-// from — a single sale can span more than one batch (e.g. the oldest
-// batch only has 5 left but the sale is for 12, so it draws 5 from batch
-// A and 7 from batch B). This is what lets a batch's own "Sales" and
-// "Customers" tabs show only the orders that came out of that specific
-// batch, instead of every sale of the product.
-//
-// Deliberately best-effort: a sale is validated and allowed against
-// Inventory.quantity (the authoritative total) regardless of whether
-// batch bookkeeping can fully account for it — e.g. a pre-batch-tracking
-// item that hasn't been through the backfill script yet. If FIFO
-// consumption runs out of batches before the sale quantity is covered,
-// the sale still goes through; only the coverable portion gets a
-// OrderItemBatch row, and the shortfall is simply unattributed to a
-// batch rather than blocking the sale.
 model OrderItemBatch {
-  id          Int @id @default(autoincrement())
-  orderItemId Int
+  id           Int        @id @default(autoincrement())
+  orderItemId  Int
   stockBatchId Int
-  quantity    Int // how much of the OrderItem's sale came from this batch
-
-  orderItem  OrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  stockBatch StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
+  quantity     Int
+  orderItem    OrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  stockBatch   StockBatch @relation(fields: [stockBatchId], references: [id], onDelete: Cascade)
 
   @@index([orderItemId])
   @@index([stockBatchId])
 }
 
-// A per-store customer profile — the thing the owner's Customers page ranks
-// by total spend. Deliberately scoped to ONE store (not the owner as a
-// whole): an owner running several shops gets a separate customer list and
-// ranking per shop, same as the rest of the app scopes inventory/orders/
-// reports. Two different stores can have a customer with the same phone
-// number and that's two unrelated rows here — there's no cross-store
-// identity merging.
-//
-// Created lazily the first time a staff member matches or types a new
-// name+phone at checkout (see resolveOrCreateCustomer in
-// customer.actions.ts) — nothing is backfilled from historical orders, so
-// an owner's ranking simply starts accumulating from whenever they (or
-// their staff) first use the picker.
-//
-// totalSpent is NOT stored here — it's intentionally left as a derived
-// number, computed on the fly from linked Order rows only when the owner
-// opens the Customers page (see getCustomersForOwner). That keeps it
-// consistent with the "auto-update only happens on the owner Customers
-// page" requirement: nothing about a sale's running total is written,
-// shown, or pushed anywhere else the moment a staff member checks out.
 model Customer {
   id        Int      @id @default(autoincrement())
   name      String
@@ -598,43 +367,29 @@ model Customer {
   storeId   Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   owner     User     @relation("OwnerCustomers", fields: [ownerId], references: [id], onDelete: Cascade)
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  orders    Order[]
   debts     Debt[]
+  orders    Order[]
 
-  // Phone is the real identity key within a store — name is editable/
-  // re-typeable and can vary sale to sale, phone is what checkout matches
-  // on. Blank-phone walk-ins never create a Customer row at all (see
-  // resolveOrCreateCustomer), so this uniqueness constraint is never
-  // tested against empty strings.
   @@unique([storeId, phone])
   @@index([ownerId])
   @@index([storeId, name])
 }
 
 model Notification {
-  id          Int      @id @default(autoincrement())
+  id          Int                @id @default(autoincrement())
   type        String
   message     String
   link        String?
-  // Legacy single-row flag — kept so nothing existing breaks, but no
-  // longer what read status is computed from. A notification with
-  // recipientId: null is visible to the owner AND every staff member
-  // under them; this boolean lives on the ONE shared Notification row,
-  // so whichever of those people opened the bell first flipped it to
-  // true for everyone else too. Actual per-person read state now comes
-  // from the `reads` join below — see NotificationRead.
-  read        Boolean  @default(false)
+  read        Boolean            @default(false)
   ownerId     Int
   recipientId Int?
+  createdAt   DateTime           @default(now())
   storeId     Int?
-  createdAt   DateTime @default(now())
-
-  owner       User     @relation("OwnerNotifications", fields: [ownerId], references: [id], onDelete: Cascade)
-  recipient   User?    @relation("RecipientNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
-  store       Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  owner       User               @relation("OwnerNotifications", fields: [ownerId], references: [id], onDelete: Cascade)
+  recipient   User?              @relation("RecipientNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
+  store       Store?             @relation(fields: [storeId], references: [id], onDelete: Cascade)
   reads       NotificationRead[]
 
   @@index([ownerId, read])
@@ -642,17 +397,11 @@ model Notification {
   @@index([createdAt])
 }
 
-// One row per (notification, person who has actually opened it). Lets a
-// notification shared by several people (recipientId: null — owner + every
-// staff member) track read status independently per viewer, instead of one
-// boolean on the Notification row that any single viewer flips for
-// everyone else the moment they open their own notification bell.
 model NotificationRead {
-  id             Int      @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   notificationId Int
   userId         Int
-  readAt         DateTime @default(now())
-
+  readAt         DateTime     @default(now())
   notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -660,11 +409,6 @@ model NotificationRead {
   @@index([userId])
 }
 
-// One row per browser/device the user has granted push permission on
-// (a phone and a laptop both get their own row). endpoint is unique
-// because the browser's push service issues one per subscription — if
-// the same device re-subscribes (e.g. after clearing site data) we
-// upsert on endpoint rather than accumulating dead rows.
 model PushSubscription {
   id        Int      @id @default(autoincrement())
   userId    Int
@@ -673,31 +417,14 @@ model PushSubscription {
   auth      String
   userAgent String?
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// Platform-level notifications for the Garrison Market team — deliberately
-// separate from Notification above, which is always scoped to a single
-// owner's tenant (Notification.ownerId is required and non-nullable, and
-// getNotificationsForStaff() resolves an owner/staff viewer's own tenant
-// from it). An admin isn't part of any tenant, so these two things are not
-// the same "notification" conceptually even though they render in the same
-// NotificationBell UI — see getAdminNotifications() in
-// lib/admin-notification.actions.ts.
-//
-// read is a single shared flag (not a per-viewer join table like
-// NotificationRead) because, unlike an owner's notifications which are
-// genuinely shared across several distinct staff logins, the admin side of
-// this app is operated by one small internal team — the same simple
-// tradeoff the legacy Notification.read boolean made before per-viewer
-// reads existed. Revisit with a proper read-per-admin join table if/when
-// multiple admin accounts need independent unread counts.
 model AdminNotification {
   id        Int      @id @default(autoincrement())
-  type      String   // "pending_owner" | "email_awaiting_reply"
+  type      String
   message   String
   link      String?
   read      Boolean  @default(false)
@@ -707,62 +434,39 @@ model AdminNotification {
   @@index([createdAt])
 }
 
-// Admin-triggered engagement pushes — deliberately separate from
-// AdminNotification above (that's the reverse direction: system events
-// notifying admin) and from AdminMessage (that's a threaded mailbox
-// message tied to a specific owner/staff conversation). A broadcast is a
-// one-off, admin-authored push blast aimed at pulling owners/staff back
-// into the app — "New feature available", "Your report is ready", etc.
-// One row per trigger, kept for a simple send history / audit trail.
 model AdminBroadcast {
-  id         Int      @id @default(autoincrement())
-  title      String
-  body       String
-  link       String?
-  // Who the admin targeted at send time. "owners" | "staff" | "everyone"
-  // | "owner_tenant" | "store". Kept as a plain string (matching the
-  // AdminNotification.type convention above) rather than an enum, since
-  // this is UI-facing copy more than a strict domain concept.
-  targetType String
-  // Only set when targetType is "owner_tenant" (a specific owner + their
-  // staff) or "store" (staff pinned to one specific Store via
-  // User.staffStoreId). Null for "owners" / "staff" / "everyone".
-  targetId   Int?
-  // How many devices actually received a push at send time (subscriptions
-  // sent to, not unique users) — a quick sanity signal that this isn't
-  // silently reaching zero people. Not a live delivery receipt.
+  id             Int      @id @default(autoincrement())
+  title          String
+  body           String
+  link           String?
+  targetType     String
+  targetId       Int?
   recipientCount Int      @default(0)
   sentById       Int
-  sentBy         User     @relation("AdminBroadcastSender", fields: [sentById], references: [id], onDelete: Cascade)
   createdAt      DateTime @default(now())
+  sentBy         User     @relation("AdminBroadcastSender", fields: [sentById], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
   @@index([sentById])
 }
 
 model Consignment {
-  id             Int       @id @default(autoincrement())
+  id             Int                    @id @default(autoincrement())
   ownerId        Int
-  // Nullable: null means this consignment is SHARED with every staff
-  // member at the store (see ownerSignOutScaleToStaffAction's "All Staff"
-  // mode) rather than signed out to one specific person. Every staff-facing
-  // scale query must match `staffId: session.id OR staffId: null` for the
-  // active store to also surface these.
   staffId        Int?
-  storeId        Int?
   recipientName  String
   recipientPhone String
   recipientNote  String?
-  status         String    @default("out")
-  createdAt      DateTime  @default(now())
+  status         String                 @default("out")
+  createdAt      DateTime               @default(now())
   settledAt      DateTime?
-
-  owner          User      @relation("OwnerConsignments", fields: [ownerId], references: [id], onDelete: Cascade)
-  staff          User?     @relation("StaffConsignments", fields: [staffId], references: [id], onDelete: SetNull)
-  store          Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId        Int?
+  owner          User                   @relation("OwnerConsignments", fields: [ownerId], references: [id], onDelete: Cascade)
+  staff          User?                  @relation("StaffConsignments", fields: [staffId], references: [id])
+  store          Store?                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items          ConsignmentItem[]
-  scaleItems     ScaleConsignmentItem[]
   orders         Order[]
+  scaleItems     ScaleConsignmentItem[]
 
   @@index([ownerId])
   @@index([staffId])
@@ -778,7 +482,6 @@ model ConsignmentItem {
   quantitySold     Int         @default(0)
   quantityReturned Int         @default(0)
   priceAtTime      Decimal
-
   consignment      Consignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
   inventory        Inventory   @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 
@@ -786,34 +489,19 @@ model ConsignmentItem {
   @@index([inventoryId])
 }
 
-// A "debtor" — created only when a staff member marks a checkout as "Part
-// payment" instead of "Paid in full" (see processSaleAction in
-// business.actions.ts). One row per unpaid/partly-unpaid Order, always
-// linked to a Customer (part payment REQUIRES picking/creating a customer
-// at checkout, unlike a normal walk-in sale where name/phone are optional
-// — see resolveOrCreateCustomer) so the owner always has a name and phone
-// to chase.
-//
-// amountPaid is a running total, NOT the amount from any single payment —
-// it's the sum of every DebtPayment row logged against this debt (the
-// first one created at checkout time, plus any later top-ups staff log
-// when the customer comes back). totalAmount is duplicated from
-// order.total at creation time purely for convenience/indexing; the order
-// itself remains the source of truth for what was actually bought.
 model Debt {
-  id          Int       @id @default(autoincrement())
-  orderId     Int       @unique
+  id          Int           @id @default(autoincrement())
+  orderId     Int           @unique
   customerId  Int
   ownerId     Int
   storeId     Int?
   totalAmount Decimal
-  amountPaid  Decimal   @default(0)
-  status      String    @default("owing") // "owing" | "settled"
-  createdAt   DateTime  @default(now())
+  amountPaid  Decimal       @default(0)
+  status      String        @default("owing")
+  createdAt   DateTime      @default(now())
   settledAt   DateTime?
-
-  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   customer    Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   owner       User          @relation("OwnerDebts", fields: [ownerId], references: [id], onDelete: Cascade)
   payments    DebtPayment[]
 
@@ -823,106 +511,59 @@ model Debt {
   @@index([status])
 }
 
-// One row per payment logged against a Debt — the first row is created
-// automatically at checkout (the part payment the customer handed over
-// there and then), and every later top-up the customer makes when they
-// come back to pay more gets its own row too, each stamped with whichever
-// staff member logged it and when. This is what lets the owner see a full
-// payment history per debtor, not just a single before/after balance.
-//
-// paymentMethod + isInitialPayment exist for one reason: submitDailyReport
-// needs to reconcile cash/transfer actually COLLECTED, not the sale price.
-// isInitialPayment marks the row created at checkout (already folded into
-// that order's own paymentMethod bucket via the Order itself) so it isn't
-// double-counted when a report separately sums up every OTHER DebtPayment
-// a staff member logged in their period.
 model DebtPayment {
-  id              Int      @id @default(autoincrement())
-  debtId          Int
-  amount          Decimal
-  paymentMethod   String   @default("cash") // "cash" | "transfer"
-  isInitialPayment Boolean @default(false)
-  staffId         Int?
-  createdAt       DateTime @default(now())
-
-  debt      Debt  @relation(fields: [debtId], references: [id], onDelete: Cascade)
-  staff     User? @relation("StaffDebtPayments", fields: [staffId], references: [id], onDelete: SetNull)
+  id               Int      @id @default(autoincrement())
+  debtId           Int
+  amount           Decimal
+  staffId          Int?
+  createdAt        DateTime @default(now())
+  isInitialPayment Boolean  @default(false)
+  paymentMethod    String   @default("cash")
+  debt             Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  staff            User?    @relation("StaffDebtPayments", fields: [staffId], references: [id])
 
   @@index([debtId])
   @@index([staffId])
 }
 
-// ============================================================================
-// Expenses — store running costs (rent, transport, utilities, salaries,
-// etc), tracked separately from inventory/product spend. Both owner and
-// staff can log an expense; the category list itself is owner-managed only
-// (staff pick from it, they don't create categories). loggedById records
-// who actually logged each entry, since "today's expenses" is a shared,
-// store-wide view — every staff member sees everyone's entries for today,
-// not just their own, and each row is expected to display "Logged by: X"
-// using that field.
-// ============================================================================
-// ============================================================================
-// PRODUCT CATEGORIES — shared by standard Inventory and ScaleInventory
-// ============================================================================
-// Same pattern as ExpenseCategory below: one list per owner (not per store),
-// staff/owner pick from it when adding/editing a product rather than typing
-// free text. Inventory.category / ScaleInventory.category (the old string
-// fields) are left in place untouched for now — existing rows keep working,
-// and a one-time backfill (Stage 2) will create ProductCategory rows from
-// their distinct values and link categoryId. Nothing reads categoryId yet.
-// ============================================================================
 model ProductCategory {
-  id        Int      @id @default(autoincrement())
-  ownerId   Int
-  name      String
-  createdAt DateTime @default(now())
-
-  owner            User             @relation("ProductCategoryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  inventoryItems   Inventory[]
+  id                  Int              @id @default(autoincrement())
+  ownerId             Int
+  name                String
+  createdAt           DateTime         @default(now())
+  inventoryItems      Inventory[]
+  owner               User             @relation("ProductCategoryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   scaleInventoryItems ScaleInventory[]
 
-  // One "Beverages" per owner, not one globally.
   @@unique([ownerId, name])
   @@index([ownerId])
 }
 
 model ExpenseCategory {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   ownerId   Int
   name      String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+  owner     User      @relation("ExpenseCategoryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
-  owner    User      @relation("ExpenseCategoryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  expenses Expense[]
-
-  // One "Rent" per owner, not one globally — different owners' category
-  // lists are fully independent of each other.
   @@unique([ownerId, name])
   @@index([ownerId])
 }
 
 model Expense {
-  id         Int      @id @default(autoincrement())
+  id         Int              @id @default(autoincrement())
   ownerId    Int
   storeId    Int?
   categoryId Int?
   amount     Decimal
   note       String?
   loggedById Int?
-  createdAt  DateTime @default(now())
-
-  owner    User             @relation("ExpenseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  store    Store?           @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  // SetNull rather than Cascade — an owner deleting/renaming their category
-  // list shouldn't wipe out the historical expense rows that used it; the
-  // amount and note stand on their own even with no category attached.
-  category ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  // Same SetNull convention as every other "who logged this" field in the
-  // schema (Order.staffId, Consignment.staffId, DebtPayment.staffId) — the
-  // expense record and the owner's history stay intact even if that one
-  // staff account is later removed; it just loses the specific name.
-  loggedBy User?            @relation("ExpenseLoggedBy", fields: [loggedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime         @default(now())
+  category   ExpenseCategory? @relation(fields: [categoryId], references: [id])
+  loggedBy   User?            @relation("ExpenseLoggedBy", fields: [loggedById], references: [id])
+  owner      User             @relation("ExpenseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  store      Store?           @relation(fields: [storeId], references: [id])
 
   @@index([ownerId, storeId, createdAt])
   @@index([categoryId])
@@ -930,23 +571,18 @@ model Expense {
 }
 
 model SupportMessage {
-  id         Int      @id @default(autoincrement())
-  threadType String
-  ownerId    Int
-  staffId    Int?
-  senderId   Int
-  senderRole String
-  content    String
-  read       Boolean  @default(false)
-  // True only for the auto-generated summary bubble posted by
-  // submitIntakeAndEscalate. Hidden from the owner/staff's own thread view
-  // (their filled-in form "disappears" on their end) but still visible to
-  // admin, and the full structured answers live in SupportIntake regardless.
-  isIntakeSummary Boolean @default(false)
-  createdAt  DateTime @default(now())
-
-  owner      User @relation("SupportOwnerScope", fields: [ownerId], references: [id], onDelete: Cascade)
-  sender     User @relation("SupportSender", fields: [senderId], references: [id], onDelete: Cascade)
+  id              Int      @id @default(autoincrement())
+  threadType      String
+  ownerId         Int
+  staffId         Int?
+  senderId        Int
+  senderRole      String
+  content         String
+  read            Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  isIntakeSummary Boolean  @default(false)
+  owner           User     @relation("SupportOwnerScope", fields: [ownerId], references: [id], onDelete: Cascade)
+  sender          User     @relation("SupportSender", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, createdAt])
   @@index([senderId])
@@ -955,7 +591,7 @@ model SupportMessage {
 
 model SupportIntake {
   id             Int       @id @default(autoincrement())
-  threadType     String    // "owner_admin" | "staff_admin"
+  threadType     String
   ownerId        Int
   staffId        Int?
   name           String
@@ -967,67 +603,34 @@ model SupportIntake {
   detailAnswer   String?
   triedSelfHelp  String?
   extraNotes     String?
-  status         String    @default("open") // "open" | "closed"
+  status         String    @default("open")
   resolvedBySelf Boolean   @default(false)
-  // Tracks whether admin has opened this submission in the inbox yet —
-  // independent of chat "read" state, since a self-resolved intake has
-  // no chat thread at all.
-  adminRead      Boolean   @default(false)
   createdAt      DateTime  @default(now())
   closedAt       DateTime?
+  adminRead      Boolean   @default(false)
 
   @@index([threadType, ownerId, status])
   @@index([threadType, staffId, status])
 }
 
-// Admin -> owner "mailbox" — one-way broadcast/announcement messages from
-// the Garrison Market admin team to owners, distinct from the two-way
-// SupportMessage thread above. An admin composes one of these once; it
-// fans out to either every owner or a single targeted one via the
-// notification system (see notification.actions.ts, type "admin_message")
-// and email (see sendAdminBroadcastEmail in lib/email.ts). The row itself
-// is the single source of truth for the full message content — the
-// Notification created alongside it only carries a short preview + a link
-// back to /owner/messages/[id], same pattern as every other notification
-// type in this app.
 model AdminMessage {
-  id        Int      @id @default(autoincrement())
-  subject   String
-  body      String
-  link      String?
-  imageUrl  String?
-
-  // "all_owners"  -> every approved owner account at send time.
-  // "single_owner" -> just targetOwnerId.
-  // "all_staff"    -> every approved staff account at send time.
-  // "single_staff" -> just targetStaffId.
-  // Owner-audience values are delivered/read via targetOwner + the owner
-  // mailbox; staff-audience values via targetStaff + the staff mailbox.
-  // The two tracks stay separate on purpose — a staff account is not an
-  // owner account, so it never satisfies an owner-audience send and vice
-  // versa, even though both use the same underlying User table.
+  id            Int                 @id @default(autoincrement())
+  subject       String
+  body          String
+  link          String?
+  imageUrl      String?
   audience      String
   targetOwnerId Int?
+  sentById      Int
+  createdAt     DateTime            @default(now())
   targetStaffId Int?
-
-  // "popup" -> info-only: in-app notification/pop-up + mailbox row, no
-  // email, not repliable. "email" -> today's original behavior: mailbox
-  // row + notification + email + a repliable thread. Chosen once at send
-  // time via the compose screen's Pop-up/Email toggle; staff sends are
-  // always forced to "popup" server-side since staff has no reply/email
-  // thread. Defaults to "email" so every message sent before this field
-  // existed keeps behaving exactly as it did (repliable, already emailed).
-  channel   String   @default("email")
-
-  sentById  Int
-  createdAt DateTime @default(now())
-
-  sentBy      User                @relation("AdminMessageSender", fields: [sentById], references: [id], onDelete: Cascade)
-  targetOwner User?               @relation("AdminMessageTarget", fields: [targetOwnerId], references: [id], onDelete: Cascade)
-  targetStaff User?               @relation("AdminMessageTargetStaff", fields: [targetStaffId], references: [id], onDelete: Cascade)
-  reads       AdminMessageRead[]
-  replies     AdminMessageReply[]
-  acks        AdminMessageAck[]
+  channel       String              @default("email")
+  sentBy        User                @relation("AdminMessageSender", fields: [sentById], references: [id], onDelete: Cascade)
+  targetOwner   User?               @relation("AdminMessageTarget", fields: [targetOwnerId], references: [id], onDelete: Cascade)
+  targetStaff   User?               @relation("AdminMessageTargetStaff", fields: [targetStaffId], references: [id], onDelete: Cascade)
+  acks          AdminMessageAck[]
+  reads         AdminMessageRead[]
+  replies       AdminMessageReply[]
 
   @@index([audience, targetOwnerId])
   @@index([audience, targetStaffId])
@@ -1035,81 +638,66 @@ model AdminMessage {
 }
 
 model AdminMessageRead {
-  id        Int      @id @default(autoincrement())
+  id        Int          @id @default(autoincrement())
   messageId Int
   ownerId   Int
-  readAt    DateTime @default(now())
-
-  message AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  owner   User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  readAt    DateTime     @default(now())
+  message   AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  owner     User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, ownerId])
   @@index([ownerId])
 }
 
-// Explicit "Acknowledged" action from a recipient (owner OR staff) on the
-// pop-up announcement modal — distinct from AdminMessageRead above (which
-// only ever tracked an owner opening the mailbox detail page). Clicking
-// "Acknowledged" is what dismisses the pop-up and is what the recipient's
-// Messages list uses to show the message as acknowledged. Keyed generically
-// by userId (not ownerId) since both owner and staff accounts acknowledge
-// through the same flow.
 model AdminMessageAck {
-  id             Int      @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   messageId      Int
   userId         Int
-  acknowledgedAt DateTime @default(now())
-
-  message AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  acknowledgedAt DateTime     @default(now())
+  message        AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userId])
   @@index([userId])
 }
 
-// One AdminMessage can go to many owners at once (audience: "all_owners"),
-// so a reply thread is scoped to (messageId, ownerId) — not just messageId —
-// so each owner's back-and-forth with admin stays private to that owner.
 model AdminMessageReply {
-  id         Int      @id @default(autoincrement())
+  id         Int          @id @default(autoincrement())
   messageId  Int
   ownerId    Int
-  authorRole String   // "admin" | "owner"
+  authorRole String
   body       String
-  createdAt  DateTime @default(now())
-
-  message AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  owner   User         @relation("AdminMessageReplyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now())
+  message    AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  owner      User         @relation("AdminMessageReplyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([messageId, ownerId])
   @@index([ownerId])
 }
 
 model Payment {
-  id                Int      @id @default(autoincrement())
-  ownerId           Int
-  plan              String   // "basic" | "premium"
-  amount            Decimal  // in Naira
-  reference         String   @unique // Paystack transaction reference
-  status            String   @default("pending") // "pending" | "success" | "failed"
-  periodStart       DateTime @default(now())
-  periodEnd         DateTime
-  createdAt         DateTime @default(now())
-
-  owner             User     @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
+  id          Int      @id @default(autoincrement())
+  ownerId     Int
+  plan        String
+  amount      Decimal
+  reference   String   @unique
+  status      String   @default("pending")
+  periodStart DateTime @default(now())
+  periodEnd   DateTime
+  createdAt   DateTime @default(now())
+  owner       User     @relation("OwnerPayments", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
 }
 
 model PlanExtension {
-  id         Int      @id @default(autoincrement())
-  ownerId    Int
-  days       Int
-  reason     String?
-  grantedBy  String   // admin email
-  createdAt  DateTime @default(now())
-
-  owner      User     @relation("OwnerPlanExtensions", fields: [ownerId], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  ownerId   Int
+  days      Int
+  reason    String?
+  grantedBy String
+  createdAt DateTime @default(now())
+  owner     User     @relation("OwnerPlanExtensions", fields: [ownerId], references: [id], onDelete: Cascade)
 }
 
 model TypingStatus {
@@ -1121,34 +709,19 @@ model TypingStatus {
   @@unique([threadKey, senderRole])
 }
 
-// ADD THIS TO THE END OF: apps/frontend/prisma/schema/base.prisma
-// Then run: npx prisma migrate dev --name add_admin_thread_status
-// (or your equivalent migrate/generate command)
-
-// Tracks the open/closed state of one admin<->owner thread. Threads
-// themselves aren't a real model (they're just AdminMessage + replies
-// grouped by ownerId), so this is the single source of truth for
-// "closed" status per (messageId, ownerId) pair. Created lazily —
-// a thread with no row here is treated as "open".
 model AdminMessageThreadStatus {
   id        Int       @id @default(autoincrement())
   messageId Int
   ownerId   Int
-  status    String    @default("open") // "open" | "closed"
+  status    String    @default("open")
   closedAt  DateTime?
-  closedBy  String?   // admin identifier who closed it
+  closedBy  String?
 
   @@unique([messageId, ownerId])
   @@index([messageId])
   @@index([ownerId])
 }
 
-// Backs lib/rate-limit.ts. DB-backed (not in-memory) on purpose — the app
-// runs on Vercel's serverless platform across many short-lived instances,
-// so an in-memory counter would reset constantly and never actually catch
-// a distributed brute-force attempt. One row per rate-limited "bucket"
-// (e.g. "login:email:someone@x.com" or "login:ip:1.2.3.4"); the window
-// resets itself once `windowStart` is older than the caller's window.
 model RateLimitBucket {
   id          Int      @id @default(autoincrement())
   key         String   @unique

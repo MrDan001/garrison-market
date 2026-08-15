@@ -1,33 +1,20 @@
-// FILE: apps/frontend/prisma/schema/rush.prisma (UPDATED — Fix C1 adds SpinPrizeOption (owner-managed prize pool, default + custom) and settlement fields on RewardSpin, plus badges/streakShieldActive on RushProfile. Everything else unchanged from Fix A.)
-
 model RushProfile {
-  id       Int @id @default(autoincrement())
-
-  userId   Int
-  storeId  Int
-
-  level        Int      @default(1)
-  totalXp      Int      @default(0)
-  xpIntoLevel  Int      @default(0)
-
-  currentStreak Int      @default(0)
-  longestStreak Int      @default(0)
-  lastActiveDate DateTime?
-
-  // Fix C1 additions. badges is an append-only list of everything won
-  // from a "badge"-kind spin prize, e.g. [{"label":"Today's MVP
-  // Title","wonAt":"2026-08-11T..."}]. streakShieldActive is consumed
-  // (set back to false) the first time it actually protects a streak
-  // reset — see the streak-reset job.
-  badges Json?
-  streakShieldActive Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  xpEvents       XpEvent[]
-  questProgress  QuestProgress[]
-  rewardSpins    RewardSpin[]
+  id                 Int             @id @default(autoincrement())
+  userId             Int
+  storeId            Int
+  level              Int             @default(1)
+  totalXp            Int             @default(0)
+  xpIntoLevel        Int             @default(0)
+  currentStreak      Int             @default(0)
+  longestStreak      Int             @default(0)
+  lastActiveDate     DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  badges             Json?
+  streakShieldActive Boolean         @default(false)
+  questProgress      QuestProgress[]
+  rewardSpins        RewardSpin[]
+  xpEvents           XpEvent[]
 
   @@unique([userId, storeId])
   @@index([storeId])
@@ -35,76 +22,52 @@ model RushProfile {
 }
 
 model XpEvent {
-  id     Int @id @default(autoincrement())
-
+  id            Int         @id @default(autoincrement())
   rushProfileId Int
+  type          String
+  amount        Int
+  meta          Json?
+  createdAt     DateTime    @default(now())
   rushProfile   RushProfile @relation(fields: [rushProfileId], references: [id], onDelete: Cascade)
-
-  type   String
-  amount Int
-
-  meta   Json?
-
-  createdAt DateTime @default(now())
 
   @@index([rushProfileId, createdAt])
   @@index([type])
 }
 
 model QuestProgress {
-  id     Int @id @default(autoincrement())
-
-  rushProfileId Int
-  rushProfile   RushProfile @relation(fields: [rushProfileId], references: [id], onDelete: Cascade)
-
-  type      String
-  questDate DateTime
-
-  progress  Int     @default(0)
-  target    Int     @default(5)
-  completed Boolean @default(false)
-  completedAt DateTime?
-
+  id                   Int         @id @default(autoincrement())
+  rushProfileId        Int
+  type                 String
+  questDate            DateTime
+  progress             Int         @default(0)
+  target               Int         @default(5)
+  completed            Boolean     @default(false)
+  completedAt          DateTime?
   verifiedInventoryIds Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  rushProfile          RushProfile @relation(fields: [rushProfileId], references: [id], onDelete: Cascade)
 
   @@unique([rushProfileId, type, questDate])
   @@index([rushProfileId])
 }
 
-// Stage 5 addition — one row per (profile, calendar day). A spin becomes
-// claimable once that day's quest is completed (checked in application
-// code, not here) and stays claimed permanently once used, so the same
-// day can never be spun twice.
 model RewardSpin {
-  id Int @id @default(autoincrement())
-
-  rushProfileId Int
-  rushProfile   RushProfile @relation(fields: [rushProfileId], references: [id], onDelete: Cascade)
-
-  spinDate   DateTime // local calendar day this spin belongs to
-  claimed    Boolean  @default(false)
-  prizeLabel String?
-  claimedAt  DateTime?
-
-  // Fix C1 additions. prizeOptionId links back to the exact prize
-  // definition that was won; prizeKind is a snapshot taken at spin time
-  // so history reads correctly even if the owner edits/deletes the
-  // prize option later. requiresSettlement is true only for cash/gift
-  // wins — cosmetic wins (xp_boost/badge/streak_shield) apply
-  // immediately and never need settling.
-  prizeOptionId Int?
-  prizeOption   SpinPrizeOption? @relation(fields: [prizeOptionId], references: [id], onDelete: SetNull)
-  prizeKind     String? // snapshot: "xp_boost" | "badge" | "streak_shield" | "cash" | "gift"
-
-  requiresSettlement Boolean   @default(false)
-  settled            Boolean   @default(false)
+  id                 Int              @id @default(autoincrement())
+  rushProfileId      Int
+  spinDate           DateTime
+  claimed            Boolean          @default(false)
+  prizeLabel         String?
+  claimedAt          DateTime?
+  createdAt          DateTime         @default(now())
+  prizeKind          String?
+  prizeOptionId      Int?
+  requiresSettlement Boolean          @default(false)
+  settled            Boolean          @default(false)
   settledAt          DateTime?
   settledByOwnerId   Int?
-
-  createdAt DateTime @default(now())
+  prizeOption        SpinPrizeOption? @relation(fields: [prizeOptionId], references: [id])
+  rushProfile        RushProfile      @relation(fields: [rushProfileId], references: [id], onDelete: Cascade)
 
   @@unique([rushProfileId, spinDate])
   @@index([rushProfileId])
@@ -112,58 +75,34 @@ model RewardSpin {
   @@index([requiresSettlement, settled])
 }
 
-// Fix C1 addition — the full prize pool for a store's spin wheel, owner-
-// managed. Seeded with the 5 original cosmetic defaults the first time a
-// store's pool is read (isDefault: true on those), but the owner can
-// edit, deactivate, or delete any row, default or custom — nothing here
-// is hardcoded as untouchable. Deactivating (active: false) removes a
-// prize from the wheel without losing the history of past wins tied to
-// it (RewardSpin.prizeOptionId still points at it).
 model SpinPrizeOption {
-  id Int @id @default(autoincrement())
-
-  storeId Int
-
-  label String
-  kind  String // "xp_boost" | "badge" | "streak_shield" | "cash" | "gift"
-
-  // Exactly one of these is meaningful, depending on kind.
-  xpAmount        Int?    // kind = "xp_boost"
-  cashAmount      Int?    // kind = "cash", in naira
-  giftDescription String? // kind = "gift"
-
-  weight    Int     @default(1) // relative odds in the weighted draw
-  active    Boolean @default(true)
-  isDefault Boolean @default(false) // seeded default vs owner-added
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  spins RewardSpin[]
+  id              Int          @id @default(autoincrement())
+  storeId         Int
+  label           String
+  kind            String
+  xpAmount        Int?
+  cashAmount      Int?
+  giftDescription String?
+  weight          Int          @default(1)
+  active          Boolean      @default(true)
+  isDefault       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  spins           RewardSpin[]
 
   @@index([storeId])
   @@index([storeId, active])
 }
 
-// Fix A addition — one row per (staff member, store, calendar day). Not
-// linked to RushProfile directly (mirrors how RushProfile itself stores
-// plain userId/storeId ints rather than relations) so a store or user
-// deletion cascade doesn't have to reason about this table specially.
-// onTime is decided once, at clock-in, against the store's shiftStartTime
-// at that moment — it is never recalculated later even if the owner
-// changes the setting afterward.
 model ClockEvent {
-  id Int @id @default(autoincrement())
-
-  userId    Int
-  storeId   Int
-  clockDate DateTime // start-of-day this clock-in belongs to
-
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  storeId    Int
+  clockDate  DateTime
   clockInAt  DateTime
   clockOutAt DateTime?
   onTime     Boolean   @default(false)
-
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@unique([userId, storeId, clockDate])
   @@index([storeId, clockDate])

@@ -1,57 +1,23 @@
-// FILE: apps/frontend/prisma/schema/dev-assistant.prisma
-//
-// Stage 1 of the admin-only "Dev Assistant" feature (code review/rewrite +
-// sandboxed execution come in later stages). This file only adds
-// persistent memory for the chat — no AI or sandbox logic lives here.
-//
-// SETUP REQUIRED after adding this file:
-//   1. Add ONE line inside the User model in schema/base.prisma (near the
-//      other back-relations, e.g. supportOwnerScope):
-//        devAssistantThread DevAssistantThread? @relation("DevAssistantThreadAdmin")
-//   2. Run: npx prisma migrate dev --name add_dev_assistant_memory
-//
-// One thread per admin account — adminId is @unique, so re-opening the
-// page always finds the same thread and its full history. That's how
-// "resume exactly where I left off" works: nothing here is ever deleted
-// or silently summarized away in storage. What gets FED to the model on
-// any given turn is a separate, bounded question — handled in Stage 3.
 model DevAssistantThread {
-  id      Int @id @default(autoincrement())
-  adminId Int @unique
-
-  // Rolling summary of messages older than what fits in the model's
-  // context window, plus a cursor marking the last message id already
-  // folded into it — together these mean "everything before this point
-  // has been condensed, everything after is sent verbatim." Nothing in
-  // DevAssistantMessage is ever deleted; this only controls what's fed to
-  // the model each turn. See sendDevAssistantMessage in
-  // lib/dev-assistant.actions.ts.
-  summary           String?
-  summarizedUpToId  Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  admin    User                  @relation("DevAssistantThreadAdmin", fields: [adminId], references: [id], onDelete: Cascade)
-  messages DevAssistantMessage[]
+  id               Int                   @id @default(autoincrement())
+  adminId          Int                   @unique
+  summary          String?
+  summarizedUpToId Int?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  messages         DevAssistantMessage[]
+  admin            User                  @relation("DevAssistantThreadAdmin", fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
 }
 
-// Every message, forever — this table is never pruned. "Never forget a
-// single thing" is implemented as: everything lands here permanently;
-// Stage 3 decides what subset + summary actually gets sent to the model
-// on a given turn (the model's context window has a hard size limit no
-// matter what — see the chat explanation for why that split matters).
 model DevAssistantMessage {
-  id       Int    @id @default(autoincrement())
-  threadId Int
-  role     String // "user" | "assistant"
-  content  String @db.Text
-
-  createdAt DateTime @default(now())
-
-  thread DevAssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  id        Int                @id @default(autoincrement())
+  threadId  Int
+  role      String
+  content   String
+  createdAt DateTime           @default(now())
+  thread    DevAssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@index([threadId, createdAt])
 }

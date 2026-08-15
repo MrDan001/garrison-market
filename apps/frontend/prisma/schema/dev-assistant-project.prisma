@@ -1,54 +1,27 @@
-// FILE: apps/frontend/prisma/schema/dev-assistant-project.prisma
-//
-// Stage 2: persistent storage for the codebase an admin uploads to the Dev
-// Assistant. One "project" (workspace) per admin — uploading replaces the
-// previous project's files, same one-active-workspace pattern as
-// DevAssistantThread from Stage 1.
-//
-// Stage 6 update: files are no longer required to be text. Binary files
-// (images, PDFs, fonts, etc.) are stored in Vercel Blob — the same
-// storage your app already uses elsewhere — with only the URL kept here;
-// text files still store their content directly in this table. A file
-// can never be both.
-//
-// SETUP REQUIRED:
-//   1. Add ONE line inside the User model in schema/base.prisma, right
-//      next to devAssistantThread:
-//        devAssistantProject DevAssistantProject? @relation("DevAssistantProjectAdmin")
-//   2. Run: npx prisma migrate dev --name add_dev_assistant_project_binaries
 model DevAssistantProject {
-  id        Int      @id @default(autoincrement())
-  adminId   Int      @unique
-  name      String // original zip/file name, for display only
-  fileCount Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  admin User               @relation("DevAssistantProjectAdmin", fields: [adminId], references: [id], onDelete: Cascade)
-  files DevAssistantFile[]
+  id        Int                @id @default(autoincrement())
+  adminId   Int                @unique
+  name      String
+  fileCount Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  files     DevAssistantFile[]
+  admin     User               @relation("DevAssistantProjectAdmin", fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
 }
 
-// One row per ingested file — text OR binary, never both. Text files
-// (source code, config, markdown, etc.) store their content directly, so
-// the AI can read them as chat context. Binary files (images, PDFs,
-// fonts, etc.) live in Vercel Blob instead — content stays null, blobUrl
-// points at the stored file. The upload route (see
-// app/api/dev-assistant/upload-project/route.ts) decides which path a
-// file takes by sniffing for null bytes, not by trusting the extension.
 model DevAssistantFile {
-  id        Int      @id @default(autoincrement())
+  id        Int                 @id @default(autoincrement())
   projectId Int
-  path      String // relative path, e.g. "src/app.ts" or "logo.png"
-  content   String?  @db.Text // set for text files, null for binary
-  isBinary  Boolean  @default(false)
-  blobUrl   String? // set for binary files, null for text
-  mimeType  String?
+  path      String
+  content   String?
   sizeBytes Int
-  createdAt DateTime @default(now())
-
-  project DevAssistantProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime            @default(now())
+  blobUrl   String?
+  isBinary  Boolean             @default(false)
+  mimeType  String?
+  project   DevAssistantProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, path])
   @@index([projectId])

@@ -1,69 +1,22 @@
-// FILE: apps/frontend/prisma/schema/waitlist.prisma
-//
-// Stage 1 of the 100-day registration-gate waitlist. Fully separate
-// table — deliberately not reusing User or Affiliate, since a waitlist
-// entrant isn't a real account yet, just an expression of interest.
-//
-// Referral attribution is intentionally loose (referredByCode +
-// referredByType as plain strings, not a foreign key) because a
-// referrer can be ANY of three different kinds of row depending on
-// where the signup came from:
-//   - another WaitlistSignup (someone shares their own waitlist link)
-//   - an existing owner (User.referralCode, the pre-existing
-//     owner-to-owner referral engine in base.prisma)
-//   - an existing affiliate (Affiliate.referralCode)
-// A strict relation can only point at one table, so this stores the
-// code + which kind it was and resolves it in application code when
-// needed (leaderboard, credit-on-registration in a later stage).
-//
-// SETUP REQUIRED:
-//   Run: npx prisma db push
-
 model WaitlistSignup {
-  id       Int    @id @default(autoincrement())
-  fullName String
-  email    String @unique
-  phone    String
-  state    String?
-  lga      String?
-  sells    String? // free-text answer to "what do you sell" on the signup form
-
-  // Three separate prompts, each required on signup — kept as distinct
-  // columns rather than one combined field so admins can scan each
-  // dimension separately instead of parsing free text for it. Nullable
-  // because a small number of legacy rows predate this field; every
-  // NEW signup is still forced to answer all three via validation in
-  // joinWaitlistAction. Surfaced in the admin dashboard's dedicated
-  // Feedback section and inline on each row of the full signups list.
-  wantToSee        String?
-  toolFrustrations String?
-  biggestChallenge String?
-
-  // This signup's own shareable code — e.g. gmstock.co/waitlist?ref=CODE
-  referralCode String @unique
-
-  // Who referred this signup in, if anyone. referredByType is
-  // "waitlist" | "owner" | "affiliate"; referredByCode is that
-  // referrer's own code from whichever table referredByType points to.
-  referredByCode String?
-  referredByType String?
-
-  // Incremented by 1 every time someone signs up using THIS row's own
-  // referralCode. Used to rank queue position ahead of pure signup
-  // order — referring people moves you up the line.
-  referralBoost Int @default(0)
-
-  // "waiting" -> "invited" (Stage 7 release fired their invite email)
-  // -> "registered" (they actually completed owner registration)
-  status    String    @default("waiting")
-  invitedAt DateTime?
-
-  // Set once this person actually registers as an owner (Stage 7/8),
-  // so referral credit can be resolved against the real User row at
-  // the moment they eventually subscribe — never before.
+  id                Int       @id @default(autoincrement())
+  fullName          String
+  email             String    @unique
+  phone             String
+  state             String?
+  lga               String?
+  sells             String?
+  referralCode      String    @unique
+  referredByCode    String?
+  referredByType    String?
+  referralBoost     Int       @default(0)
+  status            String    @default("waiting")
+  invitedAt         DateTime?
   registeredOwnerId Int?
-
-  createdAt DateTime @default(now())
+  createdAt         DateTime  @default(now())
+  biggestChallenge  String?
+  toolFrustrations  String?
+  wantToSee         String?
 
   @@index([referralCode])
   @@index([referredByCode])

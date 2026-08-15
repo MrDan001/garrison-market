@@ -4,6 +4,7 @@
 
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "./auth.actions";
+import { isActiveForRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "./notification.actions";
 import { getActiveStoreId } from "./store-context";
@@ -27,6 +28,13 @@ const FEATURE_SELECT = { plan: true, subscriptionStatus: true, trialEndsAt: true
 export async function getOpenDebtsForStaff() {
   const session = await getSessionUser();
   if (!session) return [];
+  // SECURITY (Stage 2 follow-up): proxy.ts already blocks a suspended
+  // account from reaching /staff/debts or /staff/orders at all, but this
+  // action is still directly callable on its own (see the same reasoning
+  // in lib/waitlist.actions.ts's requireAdmin) — checking here too means
+  // this function isn't relying on the route it happens to be called from
+  // staying the sole gate forever.
+  if (!isActiveForRole(session.role, session.status)) return [];
 
   const ownerScopeId = session.role === "owner" ? session.id : session.ownerId!;
 
@@ -116,6 +124,7 @@ export async function getOpenDebtsForOwner() {
 export async function recordDebtPaymentAction(debtId: number, amount: number, paymentMethod: "cash" | "transfer") {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
+  if (!isActiveForRole(session.role, session.status)) throw new Error("Unauthorized");
 
   const ownerScopeId = session.role === "owner" ? session.id : session.ownerId!;
   await assertFeatureAllowed(ownerScopeId, "debtors");

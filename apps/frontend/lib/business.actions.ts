@@ -5,6 +5,7 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "./auth.actions";
+import { isActiveForRole } from "@/lib/auth";
 import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { createNotification } from "./notification.actions";
@@ -1156,6 +1157,7 @@ export async function updateInventoryQuantity(id: number, change: number) {
 export async function getStaffOrderHistory() {
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
+  if (!isActiveForRole(session.role, session.status)) throw new Error("Unauthorized");
 
   // Previously only fetched `items` (standard Inventory lines), so any
   // scale sale — including the scale half of a merged-cart order — never

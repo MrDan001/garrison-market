@@ -10,6 +10,23 @@
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
 import { sendWaitlistMilestoneEmail, sendWaitlistInviteEmail } from "@/lib/email";
+import { getSessionUser } from "@/lib/auth";
+
+// SECURITY: every function in the ADMIN section below is imported and
+// called from client components (MilestoneComposer.tsx, ReleaseWaitlist.tsx,
+// app/admin/waitlist/page.tsx). Next.js turns each into its own callable
+// server action with an id shipped in the client bundle — the page-level
+// redirect in app/admin/waitlist/page.tsx does NOT stop someone from
+// invoking the action directly by its id, bypassing the page entirely.
+// This helper is the actual authorization boundary; the page check is only
+// a UX nicety on top of it.
+async function requireAdmin() {
+  const session = await getSessionUser();
+  if (!session || session.role?.toLowerCase() !== "admin") {
+    throw new Error("Not authorized.");
+  }
+  return session;
+}
 
 function sanitizeToReferralToken(input: string): string {
   return input.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -170,6 +187,7 @@ export async function getWaitlistSignupByReferralCode(code: string) {
 
 // ---- Admin: dashboard stats ----
 export async function getWaitlistAdminStats(): Promise<{ total: number; last24h: number }> {
+  await requireAdmin();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const [total, last24h] = await Promise.all([
     prisma.waitlistSignup.count(),
@@ -180,6 +198,7 @@ export async function getWaitlistAdminStats(): Promise<{ total: number; last24h:
 
 // ---- Admin: referral leaderboard ----
 export async function getWaitlistLeaderboard(limit: number = 10) {
+  await requireAdmin();
   return prisma.waitlistSignup.findMany({
     where: { referralBoost: { gt: 0 } },
     orderBy: [{ referralBoost: "desc" }, { createdAt: "asc" }],
@@ -190,6 +209,7 @@ export async function getWaitlistLeaderboard(limit: number = 10) {
 
 // ---- Admin: full signup list ----
 export async function listWaitlistForAdmin(limit: number = 200) {
+  await requireAdmin();
   return prisma.waitlistSignup.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -213,12 +233,14 @@ export async function listWaitlistForAdmin(limit: number = 200) {
 
 // ---- Admin: how many are still waiting to be invited ----
 export async function getPendingReleaseCount(): Promise<number> {
+  await requireAdmin();
   return prisma.waitlistSignup.count({ where: { status: "waiting" } });
 }
 
 // ---- Admin: dedicated feedback feed — newest first. Skips the 1 legacy
 // row from before this field existed (feedback is null there). ----
 export async function getWaitlistFeedback(limit: number = 100) {
+  await requireAdmin();
   return prisma.waitlistSignup.findMany({
     where: { wantToSee: { not: null } },
     orderBy: { createdAt: "desc" },
@@ -240,6 +262,13 @@ export async function sendWaitlistMilestoneAction(
   subject: string,
   body: string
 ): Promise<{ success: boolean; sent: number; failed: number }> {
+  // SECURITY: previously callable by anyone, logged in or not — this is
+  // a mass-email trigger to every address on the waitlist with an
+  // attacker-controlled subject and body. Confirmed reachable directly
+  // (bypassing the admin page) since MilestoneComposer.tsx is a client
+  // component that imports and calls this action by name.
+  await requireAdmin();
+
   const recipients = await prisma.waitlistSignup.findMany({
     select: { email: true, fullName: true },
   });
@@ -266,6 +295,11 @@ export async function releaseWaitlistAction(): Promise<{
   released?: number;
   failed?: number;
 }> {
+  // SECURITY: same issue as sendWaitlistMilestoneAction above — reachable
+  // directly by anyone via ReleaseWaitlist.tsx's client-side import,
+  // regardless of the admin page's own redirect.
+  await requireAdmin();
+
   const { isRegistrationOpen } = await import("@/lib/system-settings.actions");
   const open = await isRegistrationOpen();
   if (!open) {
@@ -300,6 +334,7 @@ export async function releaseWaitlistAction(): Promise<{
 // ---- Admin: full export — every signup, every field, no limit. Used
 // only by the CSV download route, never rendered on the page itself. ----
 export async function getAllWaitlistForExport() {
+    await requireAdmin();
     return prisma.waitlistSignup.findMany({
       orderBy: { createdAt: "desc" },
       select: {

@@ -1,18 +1,32 @@
 // FILE: apps/frontend/app/admin/users/[id]/page.tsx
 
 import prisma from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Store, Phone, Mail, Calendar, Package, Users, Gift, Crown, History, Shield } from "lucide-react";
 import { OwnerActions } from "./OwnerActions";
 import { OwnerTabs } from "./OwnerTabs";
 import Image from "next/image";
+import { getSessionUser } from "@/lib/auth";
 
 export default async function OwnerDetailsPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // SECURITY: this page previously had no auth check at all — it fetched
+  // and server-rendered a full owner record (email, phone, address,
+  // subscription/plan, and complete payment history) for any numeric id
+  // in the URL, to anyone, logged in or not. Every sibling page under
+  // /admin/* already does this same check independently (see
+  // app/admin/users/page.tsx, app/admin/dashboard/page.tsx, etc.) — this
+  // was the one page in the section that got missed. Matches that same
+  // pattern here rather than introducing a new one.
+  const session = await getSessionUser();
+  if (!session || session.role?.toLowerCase() !== "admin") {
+    redirect("/login");
+  }
+
   const { id } = await params;
 
   const owner = await prisma.user.findUnique({

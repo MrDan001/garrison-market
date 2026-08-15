@@ -1,131 +1,68 @@
-// FILE: apps/frontend/prisma/schema/affiliate.prisma
-//
-// Stage 1: Affiliate commission engine — fully separate from the existing
-// owner-to-owner referral system in base.prisma (referralCode/referredById/
-// hasTriggeredReferralReward on User). That system stays untouched.
-//
-// An Affiliate is its own actor with its own login — not a User row. They
-// don't need plan/subscription/store fields, and keeping them out of User
-// avoids mixing two different referral concepts in one table.
-//
-// SETUP REQUIRED:
-//   1. Add TWO lines inside the User model in schema/base.prisma, right
-//      next to the existing "Referral Engine Tracks" block (do NOT touch
-//      referralCode/referredById/hasTriggeredReferralReward — those stay
-//      exactly as they are):
-//
-//        // --- Affiliate attribution (separate from the referral engine above) ---
-//        affiliateId         Int?
-//        affiliateReferredAt DateTime?
-//        referredByAffiliate Affiliate? @relation("AffiliateReferrals", fields: [affiliateId], references: [id], onDelete: SetNull)
-//
-//   2. Run: npx prisma migrate dev --name add_affiliate_system
-//
-// FLOW THIS SCHEMA SUPPORTS (see the WhatsApp spec you pasted):
-//   - Affiliate signs up -> gets referralCode + link
-//   - AffiliateClick logs every link click (for the Clicks/Conversion stat)
-//   - Owner signs up via link -> User.affiliateId set, User.affiliateReferredAt
-//     stamped (this is the 30-day cookie/link-expiry check: compare the
-//     click's clickedAt to signup time in application code)
-//   - Owner pays (Paystack webhook) -> one AffiliateCommission row created
-//     per successful payment, rate resolved by how many months old the
-//     referral is (months 1-3 = 50%, month 4+ = 30%)
-//   - Owner refunds -> a REVERSAL commission row is created (negative
-//     amount) rather than deleting the original, so payout history stays
-//     an honest ledger
-//   - Manual payout: affiliate requests -> admin approves/sends by hand ->
-//     marks AffiliatePayout as paid. (v1 = manual, per your call.)
-
 model Affiliate {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  password     String
-  fullName     String
-  phoneNumber  String
-  status       String   @default("pending") // "pending" | "active" | "suspended"
-  createdAt    DateTime @default(now())
-
-  // Public-facing identity: gmstock.co/ref/{referralCode}
-  referralCode String   @unique
-
-  // Bank details for manual payout (admin sends transfer by hand for v1)
+  id                Int                   @id @default(autoincrement())
+  email             String                @unique
+  password          String
+  fullName          String
+  phoneNumber       String
+  status            String                @default("pending")
+  createdAt         DateTime              @default(now())
+  referralCode      String                @unique
   bankName          String?
   bankAccountNumber String?
   bankAccountName   String?
-
-  referredOwners User[]               @relation("AffiliateReferrals")
-  clicks         AffiliateClick[]
-  commissions    AffiliateCommission[]
-  payouts        AffiliatePayout[]
+  clicks            AffiliateClick[]
+  commissions       AffiliateCommission[]
+  payouts           AffiliatePayout[]
+  referredOwners    User[]                @relation("AffiliateReferrals")
 
   @@index([referralCode])
 }
 
-// One row per click on an affiliate's link, before we know if it converts.
-// Used for the Clicks / Signups / Conversion stats on the Promote page,
-// and as the source of truth for the 30-day link-expiry rule (compare
-// clickedAt against the eventual owner's createdAt at signup time).
 model AffiliateClick {
-  id           Int      @id @default(autoincrement())
-  affiliateId  Int
-  clickedAt    DateTime @default(now())
-  ipHash       String?  // hashed, not raw IP — enough to dedupe/rate-limit
-  userAgent    String?
-  converted    Boolean  @default(false)
+  id               Int       @id @default(autoincrement())
+  affiliateId      Int
+  clickedAt        DateTime  @default(now())
+  ipHash           String?
+  userAgent        String?
+  converted        Boolean   @default(false)
   convertedOwnerId Int?
-
-  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  affiliate        Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
 
   @@index([affiliateId])
   @@index([affiliateId, clickedAt])
 }
 
-// One row per commission-worthy event: a successful subscription payment
-// by a referred owner, OR a reversal if that payment gets refunded.
-// This table (not a running balance field) is the ledger — "Unpaid" rows
-// summed per affiliate is exactly what gets paid out.
 model AffiliateCommission {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   affiliateId Int
-  ownerId     Int      // the referred owner (User.id) who paid
-  paymentId   Int?     // links back to Payment, if this came from one
-
-  monthNumber Int      // 1 = first paid month for this owner, etc. Drives the rate.
-  ratePercent Int       // 50 or 30, snapshotted at creation time
-  amountNaira Decimal  // negative for a reversal/chargeback row
-
-  kind   String @default("earned") // "earned" | "reversal"
-  status String @default("unpaid") // "unpaid" | "paid" | "held"
-
-  createdAt DateTime @default(now())
-
-  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  ownerId     Int
+  paymentId   Int?
+  monthNumber Int
+  ratePercent Int
+  amountNaira Decimal
+  kind        String    @default("earned")
+  status      String    @default("unpaid")
+  createdAt   DateTime  @default(now())
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
 
   @@index([affiliateId])
   @@index([affiliateId, status])
   @@index([ownerId])
 }
 
-// A payout request/record. Manual for v1: affiliate requests, admin
-// reviews the unpaid commission total, sends the transfer by hand, then
-// marks this paid. Once paid, the AffiliateCommission rows it covers are
-// flipped to status="paid" (done in application code at approval time).
 model AffiliatePayout {
-  id          Int       @id @default(autoincrement())
-  affiliateId Int
-  amountNaira Decimal
-  status      String    @default("requested") // "requested" | "approved" | "paid" | "rejected"
-
-  bankName          String?  // snapshot at request time, in case affiliate edits bank later
+  id                Int       @id @default(autoincrement())
+  affiliateId       Int
+  amountNaira       Decimal
+  status            String    @default("requested")
+  bankName          String?
   bankAccountNumber String?
   bankAccountName   String?
-
-  requestedAt DateTime  @default(now())
-  processedAt DateTime?
-  processedBy String?   // admin email who approved/sent/rejected
-  note        String?   // admin note, e.g. rejection reason
-
-  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  requestedAt       DateTime  @default(now())
+  processedAt       DateTime?
+  processedBy       String?
+  note              String?
+  affiliate         Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
 
   @@index([affiliateId])
   @@index([status])
