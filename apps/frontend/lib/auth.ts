@@ -1,14 +1,27 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { cache } from "react";
+import crypto from "crypto";
 import prisma from "@/lib/prisma";
 
 const SECRET = new TextEncoder().encode(process.env.SESSION_SECRET);
 
 // --- Token Helpers ---
 
-export async function signToken(userId: number, role: string) {
-  return await new SignJWT({ userId, role })
+// A fresh, cryptographically random session token (32 bytes — unguessable,
+// not a sequential/lookup ID) minted on every login. Stored on
+// User.currentSessionToken and embedded in the JWT — see getSessionUser()
+// below for how the two are compared to enforce a single active session
+// per user.
+export function generateSessionToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+export async function signToken(userId: number, role: string, sessionToken?: string) {
+  const claims: Record<string, unknown> = { userId, role };
+  if (sessionToken) claims.sessionToken = sessionToken;
+
+  return await new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("7d")
     .sign(SECRET);
@@ -17,7 +30,7 @@ export async function signToken(userId: number, role: string) {
 export async function verifyToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, SECRET);
-    return payload as { userId: number; role: string };
+    return payload as { userId: number; role: string; sessionToken?: string };
   } catch {
     return null;
   }
@@ -48,14 +61,25 @@ export const getSessionUser = cache(async function getSessionUser() {
         ownerId: true,
         subscriptionStatus: true,
         currentPeriodEnd: true,
+        currentSessionToken: true,
       },
     });
 
     if (!user) return null;
 
+    // Single-session enforcement: if this token's sessionToken doesn't
+    // match what's currently on the user's row, a newer login (on another
+    // device) has replaced it, or an explicit/timeout logout cleared it.
+    // Either way, this session is stale — treat the caller as logged out.
+    if (!payload.sessionToken || payload.sessionToken !== user.currentSessionToken) {
+      return null;
+    }
+
+    const { currentSessionToken, ...safeUser } = user;
+
     // Convert raw JavaScript Date instances to plain ISO strings before leaving the server
     return {
-      ...user,
+      ...safeUser,
       currentPeriodEnd: user.currentPeriodEnd ? user.currentPeriodEnd.toISOString() : null,
     };
   } catch {
