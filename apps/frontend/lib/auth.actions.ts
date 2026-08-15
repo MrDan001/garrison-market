@@ -8,7 +8,7 @@ import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
-import { signToken, verifyToken } from "@/lib/auth";
+import { signToken, verifyToken, generateSessionToken } from "@/lib/auth";
 import {
   sendPasswordResetEmail,
   sendOwnerWelcomeEmail,
@@ -63,10 +63,21 @@ export async function getSessionUser() {
   if (!payload) return null;
 
   try {
-    return await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, status: true, ownerId: true }
+      select: { id: true, email: true, role: true, status: true, ownerId: true, currentSessionToken: true }
     });
+    if (!user) return null;
+
+    // Single-session enforcement — see lib/auth.ts's getSessionUser for
+    // the full explanation. Kept in sync with that copy since this file
+    // has its own duplicate of the lookup.
+    if (!payload.sessionToken || payload.sessionToken !== user.currentSessionToken) {
+      return null;
+    }
+
+    const { currentSessionToken, ...safeUser } = user;
+    return safeUser;
   } catch {
     return null;
   }
@@ -109,7 +120,13 @@ export async function loginAction(formData: FormData) {
     const userStatus = user.status.toUpperCase().trim();
 
     const setSessionCookie = async () => {
-      const token = await signToken(user.id, user.role);
+      const sessionToken = generateSessionToken();
+      // Overwriting currentSessionToken here is what kicks out any other
+      // device — the next time that device's getSessionUser() runs, its
+      // old token won't match this new one and it'll be treated as logged
+      // out, forcing a fresh login there.
+      await prisma.user.update({ where: { id: user.id }, data: { currentSessionToken: sessionToken } });
+      const token = await signToken(user.id, user.role, sessionToken);
       const cookieStore = await cookies();
       cookieStore.set("session-token", token, {
         httpOnly: true,
@@ -268,7 +285,9 @@ affiliateReferredAt: affiliateAttribution ? new Date() : null,
       await markWaitlistSignupRegistered(waitlistAttribution.waitlistSignupId, newUser.id);
     }
 
-    const token = await signToken(newUser.id, newUser.role);
+    const sessionToken = generateSessionToken();
+    const token = await signToken(newUser.id, newUser.role, sessionToken);
+    await prisma.user.update({ where: { id: newUser.id }, data: { currentSessionToken: sessionToken } });
     const cookieStore = await cookies();
     cookieStore.set("session-token", token, {
       httpOnly: true,
@@ -411,12 +430,28 @@ export async function resetPasswordAction(token: string, formData: FormData) {
 
 export async function logoutAction() {
   const cookieStore = await cookies();
+  const token = cookieStore.get("session-token")?.value;
+  if (token) {
+    const payload = await verifyToken(token);
+    if (payload?.userId) {
+      // Clear the DB-side session token too — not just the cookie — so a
+      // copy of this token captured before logout can't be reused.
+      await prisma.user.update({ where: { id: payload.userId }, data: { currentSessionToken: null } }).catch(() => {});
+    }
+  }
   cookieStore.delete("session-token");
   await safeRedirect("/login");
 }
 
 export async function sessionTimeoutLogoutAction() {
   const cookieStore = await cookies();
+  const token = cookieStore.get("session-token")?.value;
+  if (token) {
+    const payload = await verifyToken(token);
+    if (payload?.userId) {
+      await prisma.user.update({ where: { id: payload.userId }, data: { currentSessionToken: null } }).catch(() => {});
+    }
+  }
   cookieStore.delete("session-token");
   await safeRedirect("/login?reason=timeout");
 }
