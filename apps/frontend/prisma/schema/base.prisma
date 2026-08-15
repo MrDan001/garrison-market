@@ -34,6 +34,15 @@ model User {
   // after the fact.
   currentSessionToken String?
 
+  // Wall-clock timestamp of the last request getSessionUser() accepted for
+  // this session. Checked server-side on every authenticated request (see
+  // lib/auth.ts) to enforce the 5-minute inactivity timeout regardless of
+  // whether any client-side JS timer actually ran — covers a locked
+  // screen, a backgrounded/fully-closed tab, or a captured cookie replayed
+  // directly against a server action. Set on login, refreshed (throttled)
+  // on activity, and irrelevant once currentSessionToken is cleared.
+  lastActivityAt DateTime?
+
   resetToken         String?   @unique
   resetTokenExpiry   DateTime?
 
