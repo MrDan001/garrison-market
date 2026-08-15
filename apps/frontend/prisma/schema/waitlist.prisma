@@ -1,4 +1,4 @@
-// FILE: apps/frontend/prisma/schema/waitlist.prisma (NEW FILE)
+// FILE: apps/frontend/prisma/schema/waitlist.prisma
 //
 // Stage 1 of the 100-day registration-gate waitlist. Fully separate
 // table — deliberately not reusing User or Affiliate, since a waitlist
@@ -27,6 +27,17 @@ model WaitlistSignup {
   state    String?
   lga      String?
   sells    String? // free-text answer to "what do you sell" on the signup form
+
+  // Three separate prompts, each required on signup — kept as distinct
+  // columns rather than one combined field so admins can scan each
+  // dimension separately instead of parsing free text for it. Nullable
+  // because a small number of legacy rows predate this field; every
+  // NEW signup is still forced to answer all three via validation in
+  // joinWaitlistAction. Surfaced in the admin dashboard's dedicated
+  // Feedback section and inline on each row of the full signups list.
+  wantToSee        String?
+  toolFrustrations String?
+  biggestChallenge String?
 
   // This signup's own shareable code — e.g. gmstock.co/waitlist?ref=CODE
   referralCode String @unique

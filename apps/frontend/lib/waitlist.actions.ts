@@ -77,10 +77,16 @@ export async function joinWaitlistAction(formData: FormData) {
   const state = (formData.get("state") as string || "").trim() || null;
   const lga = (formData.get("lga") as string || "").trim() || null;
   const sells = (formData.get("sells") as string || "").trim() || null;
+  const wantToSee = (formData.get("wantToSee") as string || "").trim();
+  const toolFrustrations = (formData.get("toolFrustrations") as string || "").trim();
+  const biggestChallenge = (formData.get("biggestChallenge") as string || "").trim();
   const rawRef = (formData.get("ref") as string) || null;
 
   if (!fullName || !email || !phone) {
     return { error: "Name, email, and phone are required." };
+  }
+  if (!wantToSee || !toolFrustrations || !biggestChallenge) {
+    return { error: "Please answer all three questions." };
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) {
     return { error: "Enter a valid email address." };
@@ -98,6 +104,9 @@ export async function joinWaitlistAction(formData: FormData) {
         state,
         lga,
         sells,
+        wantToSee,
+        toolFrustrations,
+        biggestChallenge,
         referralCode,
         referredByCode: referrer?.code ?? null,
         referredByType: referrer?.type ?? null,
@@ -192,6 +201,9 @@ export async function listWaitlistForAdmin(limit: number = 200) {
       state: true,
       lga: true,
       sells: true,
+      wantToSee: true,
+      toolFrustrations: true,
+      biggestChallenge: true,
       referredByType: true,
       status: true,
       createdAt: true,
@@ -202,6 +214,25 @@ export async function listWaitlistForAdmin(limit: number = 200) {
 // ---- Admin: how many are still waiting to be invited ----
 export async function getPendingReleaseCount(): Promise<number> {
   return prisma.waitlistSignup.count({ where: { status: "waiting" } });
+}
+
+// ---- Admin: dedicated feedback feed — newest first. Skips the 1 legacy
+// row from before this field existed (feedback is null there). ----
+export async function getWaitlistFeedback(limit: number = 100) {
+  return prisma.waitlistSignup.findMany({
+    where: { wantToSee: { not: null } },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      wantToSee: true,
+      toolFrustrations: true,
+      biggestChallenge: true,
+      createdAt: true,
+    },
+  });
 }
 
 // ---- Admin: broadcast a milestone update to everyone on the list ----
@@ -246,7 +277,8 @@ export async function releaseWaitlistAction(): Promise<{
     select: { id: true, email: true, fullName: true, referralCode: true },
   });
 
-  const appUrl = process.env.APP_URL || "https://gmstock.co";  let released = 0;
+  const appUrl = process.env.APP_URL || "https://gmstock.co";
+  let released = 0;
   let failed = 0;
 
   for (const p of pending) {

@@ -1,4 +1,4 @@
-// FILE: apps/frontend/app/waitlist/WaitlistForm.tsx (NEW FILE)
+// FILE: apps/frontend/app/waitlist/WaitlistForm.tsx
 
 "use client";
 
@@ -42,6 +42,7 @@ export default function WaitlistForm({ referredByCode }: { referredByCode: strin
     "w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)]/15 rounded-lg px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-primary)]/35 focus:outline-none focus:border-[#E55345] transition-colors";
   const selectClass =
     "w-full bg-[var(--bg-surface)] text-sm text-[var(--text-primary)] pl-9 pr-8 py-3 rounded-lg border border-[var(--border-subtle)]/15 focus:outline-none focus:border-[#E55345] appearance-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors";
+  const labelClass = "block text-sm font-semibold text-[var(--text-primary)] mb-2";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
@@ -83,6 +84,48 @@ export default function WaitlistForm({ referredByCode }: { referredByCode: strin
       </div>
 
       <input name="sells" placeholder="What do you sell? (optional)" className={inputClass} />
+
+      <div>
+        <label htmlFor="wantToSee" className={labelClass}>
+          What do you want to see on Garrison Market?
+        </label>
+        <textarea
+          id="wantToSee"
+          name="wantToSee"
+          required
+          rows={3}
+          placeholder="Tell us here..."
+          className={`${inputClass} resize-none`}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="toolFrustrations" className={labelClass}>
+          What frustrates you about the tools you use now?
+        </label>
+        <textarea
+          id="toolFrustrations"
+          name="toolFrustrations"
+          required
+          rows={3}
+          placeholder="Tell us here..."
+          className={`${inputClass} resize-none`}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="biggestChallenge" className={labelClass}>
+          What's your biggest challenge running your shop?
+        </label>
+        <textarea
+          id="biggestChallenge"
+          name="biggestChallenge"
+          required
+          rows={3}
+          placeholder="Tell us here..."
+          className={`${inputClass} resize-none`}
+        />
+      </div>
 
       {error && (
         <p className="text-sm text-red-500 font-medium">{error}</p>

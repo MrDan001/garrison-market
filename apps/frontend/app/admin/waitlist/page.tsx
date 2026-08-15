@@ -1,4 +1,4 @@
-// FILE: apps/frontend/app/admin/waitlist/page.tsx (NEW FILE)
+// FILE: apps/frontend/app/admin/waitlist/page.tsx
 
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -8,6 +8,7 @@ import {
   getWaitlistLeaderboard,
   listWaitlistForAdmin,
   getPendingReleaseCount,
+  getWaitlistFeedback,
 } from "@/lib/waitlist.actions";
 import GateToggle from "./GateToggle";
 import MilestoneComposer from "./MilestoneComposer";
@@ -28,12 +29,13 @@ export default async function AdminWaitlistPage() {
     redirect("/login");
   }
 
-  const [registrationOpen, stats, leaderboard, signups, pendingReleaseCount] = await Promise.all([
+  const [registrationOpen, stats, leaderboard, signups, pendingReleaseCount, feedback] = await Promise.all([
     isRegistrationOpen(),
     getWaitlistAdminStats(),
     getWaitlistLeaderboard(10),
     listWaitlistForAdmin(200),
     getPendingReleaseCount(),
+    getWaitlistFeedback(100),
   ]);
 
   return (
@@ -96,6 +98,35 @@ export default async function AdminWaitlistPage() {
         )}
       </div>
 
+      {/* Feedback — what people actually want */}
+      <div className="rounded-2xl bg-[var(--bg-app)]/40 border border-slate-200/10 overflow-hidden">
+        <div className="px-5 pt-4 pb-3 text-xs font-black uppercase tracking-widest text-[var(--text-primary)]/60">
+          Feedback ({feedback.length})
+        </div>
+        {feedback.length === 0 ? (
+          <div className="px-5 pb-5 text-sm text-slate-500">No feedback yet.</div>
+        ) : (
+          <div className="pb-2 max-h-[480px] overflow-y-auto">
+            {feedback.map((f) => (
+              <div key={f.id} className="px-5 py-3 border-t border-slate-200/5 first:border-t-0 space-y-1.5">
+                <p className="text-sm text-[var(--text-primary)] leading-relaxed">
+                  <span className="font-semibold">Wants:</span> {f.wantToSee}
+                </p>
+                <p className="text-sm text-[var(--text-primary)] leading-relaxed">
+                  <span className="font-semibold">Frustrations:</span> {f.toolFrustrations}
+                </p>
+                <p className="text-sm text-[var(--text-primary)] leading-relaxed">
+                  <span className="font-semibold">Biggest challenge:</span> {f.biggestChallenge}
+                </p>
+                <div className="text-xs text-slate-500 pt-0.5">
+                  {f.fullName} · {f.createdAt.toLocaleDateString("en-NG", { month: "short", day: "numeric" })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Full list with survey answers */}
       <div className="rounded-2xl bg-[var(--bg-app)]/40 border border-slate-200/10 overflow-hidden">
         <div className="px-5 pt-4 pb-3 text-xs font-black uppercase tracking-widest text-[var(--text-primary)]/60">
@@ -117,6 +148,9 @@ export default async function AdminWaitlistPage() {
               <div className="text-xs text-slate-500 font-mono truncate">{s.email} · {s.phone}</div>
               <div className="text-xs text-[var(--text-primary)]/60">{s.state}, {s.lga}{s.sells ? ` · ${s.sells}` : ""}</div>
               <div className="text-xs text-slate-500">{referrerLabel(s.referredByType)} · {s.createdAt.toLocaleDateString("en-NG", { month: "short", day: "numeric" })}</div>
+              {s.wantToSee && (
+                <div className="text-xs text-[var(--text-primary)]/70 italic line-clamp-2">"{s.wantToSee}"</div>
+              )}
             </div>
 
             {/* Tablet/desktop: table row */}
@@ -131,6 +165,11 @@ export default async function AdminWaitlistPage() {
               <span className="text-xs">{referrerLabel(s.referredByType)}</span>
               <span className="text-xs font-mono text-slate-500">{s.createdAt.toLocaleDateString("en-NG", { month: "short", day: "numeric" })}</span>
             </div>
+            {s.wantToSee && (
+              <div className="hidden sm:block px-5 pb-3 -mt-1 text-xs text-[var(--text-primary)]/60 italic truncate">
+                "{s.wantToSee}"
+              </div>
+            )}
           </div>
         ))}
       </div>
