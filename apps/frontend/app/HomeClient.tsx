@@ -797,7 +797,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
 
                         {isMax ? (
                           <a
-                            href="mailto:support@garrison.com"
+                            href="mailto:support.gmstock@gmail.com"
                             className="w-full flex items-center justify-center gap-2 py-4 rounded-none font-bold uppercase tracking-wider text-xs transition-all duration-300 bg-amber-500 text-[#0D1527] hover:bg-amber-400"
                           >
                             <Mail size={14} /> Contact Us
