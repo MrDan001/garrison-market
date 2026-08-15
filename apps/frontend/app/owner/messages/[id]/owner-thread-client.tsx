@@ -1,9 +1,10 @@
 "use client";
 // FILE: apps/frontend/app/owner/messages/[id]/owner-thread-client.tsx
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { sendOwnerReplyAction } from "@/lib/admin-message.actions";
-import { Send, ShieldCheck, User } from "lucide-react";
+import { getOwnerThreadStatusAction } from "@/lib/admin-thread-close.actions";
+import { Send, ShieldCheck, Star, User } from "lucide-react";
 
 type Reply = { id: number; authorRole: string; body: string; createdAt: Date };
 
@@ -33,8 +34,29 @@ export default function OwnerThreadClient({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Closed state is fetched client-side (same pattern as the admin thread
+  // view) rather than passed down from the server component, since it can
+  // change at any time after this page has already loaded — an admin
+  // closing the thread in another tab shouldn't require the owner to
+  // manually refresh to lose the ability to reply.
+  const [threadStatus, setThreadStatus] = useState<"open" | "closed">("open");
+  const [reviewUrl, setReviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getOwnerThreadStatusAction(messageId).then((result) => {
+      if (!cancelled) {
+        setThreadStatus(result.status);
+        setReviewUrl(result.reviewUrl);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [messageId]);
+
   async function handleSendReply() {
-    if (!replyBody.trim()) return;
+    if (!replyBody.trim() || threadStatus === "closed") return;
     setSending(true);
     setError(null);
     try {
@@ -88,7 +110,23 @@ export default function OwnerThreadClient({
 
       <div className="p-5 sm:p-6">
         {error && <p className="text-xs font-semibold text-rose-500 mb-2">{error}</p>}
-        {channel !== "email" ? (
+        {threadStatus === "closed" ? (
+          <div className="text-center py-2 space-y-3">
+            <p className="text-xs font-semibold text-slate-500">
+              This conversation has been closed. Replies are no longer accepted here.
+            </p>
+            {reviewUrl && (
+              <a
+                href={reviewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm px-5 py-2.5 rounded-xl transition-colors"
+              >
+                <Star size={14} /> Rate us on Google
+              </a>
+            )}
+          </div>
+        ) : channel !== "email" ? (
           <p className="text-xs text-slate-400 text-center py-2">
             This is a pop-up message — it's info-only and isn't repliable.
           </p>

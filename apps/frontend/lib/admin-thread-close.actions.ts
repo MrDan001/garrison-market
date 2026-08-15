@@ -33,6 +33,30 @@ export async function getThreadStatusAction(messageId: number, ownerId: number):
   return (row?.status as "open" | "closed") || "open";
 }
 
+// Owner-facing counterpart to getThreadStatusAction above. An owner only
+// ever has one thread on a given message (their own), so this is keyed off
+// their own session id rather than taking an ownerId param — nothing stops
+// an owner from probing another owner's thread status otherwise. Also
+// returns the review link (only once the thread is actually closed) so the
+// owner's in-app view can offer the same "rate us" prompt the closing email
+// sends, without duplicating the env var lookup on the client.
+export async function getOwnerThreadStatusAction(
+  messageId: number
+): Promise<{ status: "open" | "closed"; reviewUrl: string | null }> {
+  const session = await getSessionUser();
+  if (!session || session.role !== "owner") {
+    return { status: "open", reviewUrl: null };
+  }
+
+  const row = await prisma.adminMessageThreadStatus.findUnique({
+    where: { messageId_ownerId: { messageId, ownerId: session.id } },
+    select: { status: true },
+  });
+  const status = (row?.status as "open" | "closed") || "open";
+
+  return { status, reviewUrl: status === "closed" && GOOGLE_REVIEW_URL ? GOOGLE_REVIEW_URL : null };
+}
+
 export async function closeThreadAction(messageId: number, ownerId: number) {
   const session = await getSessionUser();
   if (!session || session.role !== "admin") {

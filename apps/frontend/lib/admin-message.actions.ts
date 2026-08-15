@@ -566,6 +566,19 @@ export async function sendOwnerReplyAction(
   if (!message) return { success: false, error: "Message not found." };
   if (message.channel !== "email") return { success: false, error: "Pop-up messages aren't repliable." };
 
+  // Mirrors the check the resend-inbound webhook already does for email
+  // replies (app/api/webhooks/resend-inbound/route.ts) — that one only
+  // covers replies that come in by actual email. This is the same guard
+  // for the in-app reply box, which previously had no closed-thread check
+  // at all and let owners keep replying here after admin closed things out.
+  const threadStatus = await prisma.adminMessageThreadStatus.findUnique({
+    where: { messageId_ownerId: { messageId, ownerId: session.id } },
+    select: { status: true },
+  });
+  if (threadStatus?.status === "closed") {
+    return { success: false, error: "This conversation has been closed." };
+  }
+
   await prisma.adminMessageReply.create({
     data: { messageId, ownerId: session.id, authorRole: "owner", body: trimmed },
   });
