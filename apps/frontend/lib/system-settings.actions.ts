@@ -48,10 +48,14 @@ export async function toggleRegistrationGateAction(open: boolean) {
       create: { id: 1, registrationOpen: open },
     });
 
-    // /register itself checks the gate on every render, but revalidate
-    // it explicitly so a flip takes effect immediately rather than
-    // waiting on Next's default caching for that route.
+    // /register, / (homepage CTAs), and /login (register link) all
+    // render based on this flag. Each is now marked force-dynamic so
+    // they read fresh on every request regardless, but revalidating
+    // here too means a flip takes effect immediately rather than
+    // waiting on the next natural request cycle.
     revalidatePath("/register");
+    revalidatePath("/");
+    revalidatePath("/login");
 
     return { success: true };
   } catch (error) {
