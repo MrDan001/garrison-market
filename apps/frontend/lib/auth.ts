@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import crypto from "crypto";
 import prisma from "@/lib/prisma";
+import { INACTIVITY_LIMIT_MS } from "@/lib/session-config";
 
 const SECRET = new TextEncoder().encode(process.env.SESSION_SECRET);
 
@@ -62,6 +63,7 @@ export const getSessionUser = cache(async function getSessionUser() {
         subscriptionStatus: true,
         currentPeriodEnd: true,
         currentSessionToken: true,
+        lastActivityAt: true,
       },
     });
 
@@ -75,7 +77,34 @@ export const getSessionUser = cache(async function getSessionUser() {
       return null;
     }
 
-    const { currentSessionToken, ...safeUser } = user;
+    // Server-side inactivity enforcement. This is the authoritative check
+    // — deliberately independent of SessionTimeoutGuard's client-side JS
+    // timer, which cannot be trusted to run: a locked screen or
+    // backgrounded/fully-closed tab suspends or discards it, and a copied
+    // cookie replayed straight against a server action never runs it at
+    // all. lastActivityAt is wall-clock time written by the server itself,
+    // so none of that matters — if too much real time has passed since the
+    // last request this session made, it's dead, full stop.
+    const now = Date.now();
+    const lastActive = user.lastActivityAt?.getTime() ?? 0;
+    if (!user.lastActivityAt || now - lastActive > INACTIVITY_LIMIT_MS) {
+      // Revoke server-side so the cookie can't be replayed later, exactly
+      // like an explicit/timeout logout does.
+      await prisma.user
+        .update({ where: { id: user.id }, data: { currentSessionToken: null } })
+        .catch(() => {});
+      return null;
+    }
+
+    // Refresh the activity clock, throttled to once a minute so normal
+    // browsing doesn't turn into an UPDATE on every single request.
+    if (now - lastActive > 60 * 1000) {
+      await prisma.user
+        .update({ where: { id: user.id }, data: { lastActivityAt: new Date(now) } })
+        .catch(() => {});
+    }
+
+    const { currentSessionToken, lastActivityAt, ...safeUser } = user;
 
     // Convert raw JavaScript Date instances to plain ISO strings before leaving the server
     return {
