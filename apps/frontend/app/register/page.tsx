@@ -25,6 +25,14 @@ import { redirect } from "next/navigation";
 import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import RegisterForm from "./RegisterForm";
 
+// Without this, Next has no dynamic signal on this page (no cookies(),
+// headers(), or searchParams) and can statically cache the rendered
+// result — including the redirect below — so an admin flipping the
+// gate in /admin/waitlist doesn't reliably show up here. Forcing
+// dynamic rendering means isRegistrationOpen() is read fresh on every
+// request.
+export const dynamic = "force-dynamic";
+
 export default async function RegisterPage() {
   const open = await isRegistrationOpen();
   if (!open) {
