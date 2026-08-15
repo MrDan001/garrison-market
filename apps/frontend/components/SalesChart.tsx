@@ -17,8 +17,20 @@ export default function SalesDashboard({
   const processedData = useMemo(() => {
     let baseData: any[] = [];
     if (view === 'day') {
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      baseData = days.map(d => ({ name: d, sales: 0, fullDate: d, dayName: d }));
+      // Rolling 7-day window ending today, instead of a fixed Sun–Sat
+      // week — so the chart advances by a day every day instead of
+      // resetting back to Sunday. Each bucket carries its own actual
+      // calendar date (dateKey) so sales are matched to the specific
+      // day they happened on, not just to a weekday name that repeats
+      // every week.
+      baseData = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() - (6 - i));
+        const dateKey = d.toISOString().slice(0, 10);
+        const label = `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}`;
+        return { name: label, sales: 0, fullDate: d.toDateString(), dateKey };
+      });
     } else if (view === 'week') {
       baseData = Array.from({ length: 5 }, (_, i) => ({ name: `Wk ${i + 1}`, sales: 0, fullDate: `Week ${i + 1}` }));
     } else {
@@ -29,8 +41,14 @@ export default function SalesDashboard({
     data.forEach(d => {
       const dateObj = new Date(d.date);
       if (isNaN(dateObj.getTime())) return;
+      if (view === 'day') {
+        const dateKey = dateObj.toISOString().slice(0, 10);
+        const found = baseData.find(item => item.dateKey === dateKey);
+        if (found) found.sales += Number(d.total);
+        return;
+      }
       const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-      let key = view === 'day' ? dayName : view === 'week' ? `Wk ${Math.ceil(dateObj.getDate() / 7)}` : dateObj.toLocaleDateString('en-US', { month: 'short' });
+      let key = view === 'week' ? `Wk ${Math.ceil(dateObj.getDate() / 7)}` : dateObj.toLocaleDateString('en-US', { month: 'short' });
       const found = baseData.find(item => item.name === key);
       if (found) found.sales += Number(d.total);
     });
