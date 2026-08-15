@@ -22,6 +22,18 @@ model User {
   createdAt          DateTime @default(now())
   ownerId            Int?
 
+  // --- Session control ---
+  // A fresh, cryptographically random token (32 bytes, unguessable — not a
+  // sequential/lookup ID) minted on every login and embedded in that
+  // session's JWT. getSessionUser() compares the two on every request: a
+  // mismatch means a newer login happened elsewhere, so this older token is
+  // treated as logged out. This is what enforces "one device at a time" —
+  // logging in on device B overwrites this, silently invalidating device
+  // A's session on its next request. Cleared to null on explicit logout
+  // and on inactivity timeout, so a captured cookie can't be replayed
+  // after the fact.
+  currentSessionToken String?
+
   resetToken         String?   @unique
   resetTokenExpiry   DateTime?
 
