@@ -16,6 +16,12 @@
 import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import HomeClient from "./HomeClient";
 
+// Same reasoning as app/register/page.tsx: no dynamic signal here
+// otherwise, so Next can cache the "Get started" CTAs against
+// whatever gate state existed at build/first request. Force dynamic
+// rendering so registrationOpen is read fresh every time.
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const registrationOpen = await isRegistrationOpen();
   return <HomeClient registrationOpen={registrationOpen} />;
