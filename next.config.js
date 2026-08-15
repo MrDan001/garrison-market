@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
 const nextConfig = {
   images: {
     remotePatterns: [
@@ -14,6 +16,9 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '10mb', // Adjust this size based on your maximum expected upload
     },
+  },
+  turbopack: {
+    root: path.join(__dirname),
   },
 };
 
