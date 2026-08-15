@@ -32,7 +32,7 @@ export type RestockRunState = {
   progress: number;
   target: number;
   completed: boolean;
-  verifiedInventoryIds: number[];
+  verifiedInventoryIds: (number | string)[];
 };
 
 export async function getRestockRunState(): Promise<RestockRunState | null> {
@@ -60,7 +60,7 @@ export async function getRestockRunState(): Promise<RestockRunState | null> {
       target: quest.target,
       completed: quest.completed,
       verifiedInventoryIds: Array.isArray(quest.verifiedInventoryIds)
-        ? (quest.verifiedInventoryIds as number[])
+        ? (quest.verifiedInventoryIds as (number | string)[])
         : [],
     };
   } catch (error) {
@@ -70,11 +70,26 @@ export async function getRestockRunState(): Promise<RestockRunState | null> {
 }
 
 // A handful of real inventory items from the active store, surfaced as
-// "things to verify today." Staler items (least recently touched) come
-// first — a natural nudge toward what hasn't been looked at in a while.
-// Read-only, reuses existing Inventory rows — no new "verification"
-// concept added to the inventory model itself.
-export type RestockRunItem = { id: number; name: string; quantity: number };
+// "things to verify today." Pulls from BOTH inventory systems — the
+// standard Inventory table and the separate ScaleInventory table used
+// by weight/volume-based stores (Store.storeType === "scale") — since
+// they're two independent tables an owner can have items in
+// simultaneously. Each item is tagged with `kind` and identified by a
+// composite `key` ("inventory:3" / "scale:3") rather than the bare
+// numeric id, because ScaleInventory has its own separate autoincrement
+// sequence — its ids collide with Inventory ids (both can have an id of
+// 3, referring to two entirely different products), so the bare number
+// alone isn't safe to use as a unique key across both. Staler items
+// (least recently touched) come first across the combined pool — a
+// natural nudge toward what hasn't been looked at in a while.
+export type RestockRunItem = {
+  key: string;
+  id: number;
+  kind: "inventory" | "scale";
+  name: string;
+  quantity: number;
+  unit?: string;
+};
 
 export async function getRestockRunItems(): Promise<RestockRunItem[]> {
   try {
@@ -87,23 +102,59 @@ export async function getRestockRunItems(): Promise<RestockRunItem[]> {
     const ownerId = session.role === "owner" ? session.id : session.ownerId;
     if (!ownerId) return [];
 
-    return await prisma.inventory.findMany({
-      where: { ownerId, OR: [{ storeId }, { storeId: null }] },
-      select: { id: true, name: true, quantity: true },
-      orderBy: { updatedAt: "asc" },
-      take: 5,
-    });
+    const [standardItems, scaleItems] = await Promise.all([
+      prisma.inventory.findMany({
+        where: { ownerId, OR: [{ storeId }, { storeId: null }] },
+        select: { id: true, name: true, quantity: true, updatedAt: true },
+        orderBy: { updatedAt: "asc" },
+        take: 5,
+      }),
+      prisma.scaleInventory.findMany({
+        where: { ownerId, OR: [{ storeId }, { storeId: null }] },
+        select: { id: true, name: true, quantity: true, unit: true, updatedAt: true },
+        orderBy: { updatedAt: "asc" },
+        take: 5,
+      }),
+    ]);
+
+    const combined: (RestockRunItem & { updatedAt: Date })[] = [
+      ...standardItems.map((i) => ({
+        key: `inventory:${i.id}`,
+        id: i.id,
+        kind: "inventory" as const,
+        name: i.name,
+        quantity: i.quantity,
+        updatedAt: i.updatedAt,
+      })),
+      ...scaleItems.map((i) => ({
+        key: `scale:${i.id}`,
+        id: i.id,
+        kind: "scale" as const,
+        name: i.name,
+        quantity: Number(i.quantity),
+        unit: i.unit,
+        updatedAt: i.updatedAt,
+      })),
+    ];
+
+    return combined
+      .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
+      .slice(0, 5)
+      .map(({ updatedAt, ...item }) => item);
   } catch (error) {
     console.error("getRestockRunItems failed:", error);
     return [];
   }
 }
 
-// Marks one inventory item as "verified" toward today's Restock Run.
+// Marks one item — from either inventory system — as "verified" toward
+// today's Restock Run. `kind` disambiguates which table `id` refers to,
+// since the two tables' ids can collide (see getRestockRunItems above).
 // Idempotent per item per day (tapping the same item twice does nothing
 // the second time) so a double-tap on a slow connection can't inflate
 // progress or XP.
-export async function verifyRestockItem(inventoryId: number) {
+export async function verifyRestockItem(id: number, kind: "inventory" | "scale" = "inventory") {
+  const key = `${kind}:${id}`;
   try {
     const session = await getSessionUser();
     if (!session) return { success: false as const };
@@ -124,11 +175,17 @@ export async function verifyRestockItem(inventoryId: number) {
         },
       });
 
-      const alreadyVerified: number[] = existing && Array.isArray(existing.verifiedInventoryIds)
-        ? (existing.verifiedInventoryIds as number[])
+      // Pre-existing rows may still hold bare numbers from before scale
+      // items were added — those always meant an Inventory id, so treat
+      // a matching bare number as equivalent to "inventory:<id>".
+      const alreadyVerified: (number | string)[] = existing && Array.isArray(existing.verifiedInventoryIds)
+        ? (existing.verifiedInventoryIds as (number | string)[])
         : [];
+      const isAlreadyVerified = alreadyVerified.some(
+        (v) => v === key || (kind === "inventory" && v === id)
+      );
 
-      if (alreadyVerified.includes(inventoryId)) {
+      if (isAlreadyVerified) {
         return { alreadyVerified: true, justCompleted: false };
       }
 
@@ -136,7 +193,7 @@ export async function verifyRestockItem(inventoryId: number) {
       const newProgress = (existing?.progress ?? 0) + 1;
       const wasAlreadyCompleted = existing?.completed ?? false;
       const nowCompleted = newProgress >= target;
-      const updatedIds = [...alreadyVerified, inventoryId];
+      const updatedIds = [...alreadyVerified, key];
 
       await tx.questProgress.upsert({
         where: {
@@ -170,7 +227,7 @@ export async function verifyRestockItem(inventoryId: number) {
     if (!outcome.alreadyVerified) {
       const storeId = await getActiveStoreId();
       if (storeId) {
-        await awardXp(session.id, storeId, "STOCK_VERIFIED", { inventoryId });
+        await awardXp(session.id, storeId, "STOCK_VERIFIED", { inventoryId: id, kind });
         if (outcome.justCompleted) {
           await awardXp(session.id, storeId, "QUEST_COMPLETED", { quest: "RESTOCK_RUN" });
         }
