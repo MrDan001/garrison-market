@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { signToken, verifyToken, generateSessionToken } from "@/lib/auth";
+import { INACTIVITY_LIMIT_MS } from "@/lib/session-config";
 import {
   sendPasswordResetEmail,
   sendOwnerWelcomeEmail,
@@ -65,7 +66,7 @@ export async function getSessionUser() {
   try {
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, status: true, ownerId: true, currentSessionToken: true }
+      select: { id: true, email: true, role: true, status: true, ownerId: true, currentSessionToken: true, lastActivityAt: true }
     });
     if (!user) return null;
 
@@ -76,7 +77,27 @@ export async function getSessionUser() {
       return null;
     }
 
-    const { currentSessionToken, ...safeUser } = user;
+    // Server-side inactivity enforcement — same reasoning as lib/auth.ts's
+    // copy. This one matters just as much: server actions (every mutation
+    // in this file) hit this function directly and never go through a page
+    // load, so without this check here too, a stolen cookie could keep
+    // performing writes indefinitely as long as it skipped page navigation.
+    const now = Date.now();
+    const lastActive = user.lastActivityAt?.getTime() ?? 0;
+    if (!user.lastActivityAt || now - lastActive > INACTIVITY_LIMIT_MS) {
+      await prisma.user
+        .update({ where: { id: user.id }, data: { currentSessionToken: null } })
+        .catch(() => {});
+      return null;
+    }
+
+    if (now - lastActive > 60 * 1000) {
+      await prisma.user
+        .update({ where: { id: user.id }, data: { lastActivityAt: new Date(now) } })
+        .catch(() => {});
+    }
+
+    const { currentSessionToken, lastActivityAt, ...safeUser } = user;
     return safeUser;
   } catch {
     return null;
@@ -124,8 +145,12 @@ export async function loginAction(formData: FormData) {
       // Overwriting currentSessionToken here is what kicks out any other
       // device — the next time that device's getSessionUser() runs, its
       // old token won't match this new one and it'll be treated as logged
-      // out, forcing a fresh login there.
-      await prisma.user.update({ where: { id: user.id }, data: { currentSessionToken: sessionToken } });
+      // out, forcing a fresh login there. lastActivityAt starts the
+      // inactivity clock (see lib/session-config.ts) fresh at login.
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { currentSessionToken: sessionToken, lastActivityAt: new Date() },
+      });
       const token = await signToken(user.id, user.role, sessionToken);
       const cookieStore = await cookies();
       cookieStore.set("session-token", token, {
