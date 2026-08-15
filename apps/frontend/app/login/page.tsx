@@ -11,6 +11,11 @@
 import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import LoginClient from "./LoginClient";
 
+// Same reasoning as app/register/page.tsx and app/page.tsx — force
+// dynamic rendering so the "Register now" / "Join the waitlist" link
+// reflects the current gate state instead of a cached one.
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   const registrationOpen = await isRegistrationOpen();
   return <LoginClient registrationOpen={registrationOpen} />;
