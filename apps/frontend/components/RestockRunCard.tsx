@@ -22,7 +22,7 @@ export default function RestockRunCard() {
   const [items, setItems] = useState<RestockRunItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
-  const [pendingId, setPendingId] = useState<number | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,15 +52,15 @@ export default function RestockRunCard() {
   // a broken quest card.
   if (!state) return null;
 
-  const handleVerify = (inventoryId: number) => {
-    setPendingId(inventoryId);
+  const handleVerify = (item: RestockRunItem) => {
+    setPendingKey(item.key);
     startTransition(async () => {
-      const result = await verifyRestockItem(inventoryId);
+      const result = await verifyRestockItem(item.id, item.kind);
       if (result.success) {
         const [freshState] = await Promise.all([getRestockRunState()]);
         setState(freshState);
       }
-      setPendingId(null);
+      setPendingKey(null);
     });
   };
 
@@ -92,21 +92,23 @@ export default function RestockRunCard() {
       ) : (
         <div className="space-y-2">
           {items.map((item) => {
-            const isVerified = state.verifiedInventoryIds.includes(item.id);
-            const isRowPending = isPending && pendingId === item.id;
+            const isVerified = state.verifiedInventoryIds.includes(item.key);
+            const isRowPending = isPending && pendingKey === item.key;
             return (
               <div
-                key={item.id}
+                key={item.key}
                 className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] border border-white/10 px-4 py-3"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-white truncate">{item.name}</p>
-                  <p className="text-[11px] text-fuchsia-200/60">{item.quantity} in stock</p>
+                  <p className="text-[11px] text-fuchsia-200/60">
+                    {item.quantity}{item.unit ? ` ${item.unit}` : ""} in stock
+                  </p>
                 </div>
                 <button
                   type="button"
                   disabled={isVerified || isRowPending}
-                  onClick={() => handleVerify(item.id)}
+                  onClick={() => handleVerify(item)}
                   className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
                     isVerified
                       ? "bg-emerald-500/15 text-emerald-300 cursor-default"
