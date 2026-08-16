@@ -56,11 +56,11 @@ const BLOB_HOSTNAME = "fg3uwdlr4t2605wl.public.blob.vercel-storage.com";
 
 const cspDirectives = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline'`,
+  `script-src 'self' 'unsafe-inline' https://connect.facebook.net`,
   `style-src 'self' 'unsafe-inline'`,
-  `img-src 'self' data: https://${BLOB_HOSTNAME}`,
+  `img-src 'self' data: https://${BLOB_HOSTNAME} https://www.facebook.com`,
   `font-src 'self' data:`,
-  `connect-src 'self' https://${BLOB_HOSTNAME}`,
+  `connect-src 'self' https://${BLOB_HOSTNAME} https://www.facebook.com https://connect.facebook.net`,
   `worker-src 'self'`,
   `manifest-src 'self'`,
   `object-src 'none'`,
