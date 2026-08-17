@@ -11,8 +11,10 @@
 // exists, even before those redirects are wired up.
 
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Oswald, Inter, IBM_Plex_Mono } from "next/font/google";
 import { getWaitlistCount } from "@/lib/waitlist.actions";
+import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import WaitlistForm from "./WaitlistForm";
 import { Users } from "lucide-react";
 
@@ -30,6 +32,11 @@ export default async function WaitlistPage({
 }: {
   searchParams: Promise<{ ref?: string }>;
 }) {
+  const open = await isRegistrationOpen();
+  if (open) {
+    redirect("/register");
+  }
+
   const { ref } = await searchParams;
   const count = await getWaitlistCount();
 
