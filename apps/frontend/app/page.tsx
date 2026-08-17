@@ -16,6 +16,11 @@
 import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import HomeClient from "./HomeClient";
 
+// Reads the same gate flag as /register, /waitlist, and /login for
+// its CTAs — force-dynamic so it can't serve stale cached buttons
+// after a toggle.
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const registrationOpen = await isRegistrationOpen();
   return <HomeClient registrationOpen={registrationOpen} />;
