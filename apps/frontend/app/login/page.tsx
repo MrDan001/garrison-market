@@ -11,6 +11,11 @@
 import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import LoginClient from "./LoginClient";
 
+// Reads the same gate flag as /register and /waitlist for its
+// "Register now" / "Join the waitlist" link — force-dynamic so it
+// can't serve a stale cached link after a toggle.
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   const registrationOpen = await isRegistrationOpen();
   return <LoginClient registrationOpen={registrationOpen} />;
