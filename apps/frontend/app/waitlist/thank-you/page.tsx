@@ -14,6 +14,8 @@ import { Oswald, Inter, IBM_Plex_Mono } from "next/font/google";
 import { getWaitlistSignupByReferralCode } from "@/lib/waitlist.actions";
 import { CheckCircle2 } from "lucide-react";
 import CopyLinkButton from "./CopyLinkButton";
+import FeedbackForm from "./FeedbackForm";
+import { Facebook } from "lucide-react";
 
 const display = Oswald({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
 const body = Inter({ subsets: ["latin"], variable: "--font-body" });
@@ -54,7 +56,7 @@ export default async function WaitlistThankYouPage({
               <CheckCircle2 className="h-6 w-6 text-emerald-500" strokeWidth={2.5} />
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight mb-2" style={{ fontFamily: "var(--font-display)" }}>
-              You're on the list, {signup.fullName.split(" ")[0]}.
+              Thanks, {signup.fullName.split(" ")[0]}! You're in line 🎉
             </h1>
             <p className="text-sm text-[var(--text-primary)]/70 mb-8">
               You're currently number <span className="font-bold text-[var(--text-primary)]">{signup.position.toLocaleString()}</span> in
@@ -73,6 +75,29 @@ export default async function WaitlistThankYouPage({
                 it moves you up in the queue.
               </p>
               <CopyLinkButton referralCode={signup.referralCode} />
+            </div>
+
+            <a
+              href="https://www.facebook.com/share/1ETvbBii6s/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-subtle)]/10 bg-[var(--text-primary)]/[0.03] p-6 sm:p-8 hover:border-[#E55345]/40 transition-colors"
+            >
+              <div>
+                <p className="text-sm font-bold text-[var(--text-primary)] mb-1">
+                  Follow Garrison Market on Facebook
+                </p>
+                <p className="text-sm text-[var(--text-primary)]/60">
+                  Launch updates, tips, and behind-the-scenes progress.
+                </p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-[#1877F2]/10 flex items-center justify-center shrink-0">
+                <Facebook size={20} className="text-[#1877F2]" strokeWidth={2} />
+              </div>
+            </a>
+
+            <div className="mt-6">
+              <FeedbackForm referralCode={signup.referralCode} />
             </div>
           </>
         ) : (

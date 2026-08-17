@@ -94,16 +94,15 @@ export async function joinWaitlistAction(formData: FormData) {
   const state = (formData.get("state") as string || "").trim() || null;
   const lga = (formData.get("lga") as string || "").trim() || null;
   const sells = (formData.get("sells") as string || "").trim() || null;
-  const wantToSee = (formData.get("wantToSee") as string || "").trim();
-  const toolFrustrations = (formData.get("toolFrustrations") as string || "").trim();
-  const biggestChallenge = (formData.get("biggestChallenge") as string || "").trim();
   const rawRef = (formData.get("ref") as string) || null;
 
-  if (!fullName || !email || !phone) {
-    return { error: "Name, email, and phone are required." };
-  }
-  if (!wantToSee || !toolFrustrations || !biggestChallenge) {
-    return { error: "Please answer all three questions." };
+  // The 3 pain-point questions moved to a second step (the thank-you
+  // page, right after signup) so the initial form stays short. They're
+  // optional here by design — someone who bounces before answering them
+  // is still a captured lead; submitWaitlistFeedbackAction below fills
+  // them in later if the person continues.
+  if (!fullName || !email || !phone || !sells || !state) {
+    return { error: "Please fill in all fields." };
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) {
     return { error: "Enter a valid email address." };
@@ -121,9 +120,6 @@ export async function joinWaitlistAction(formData: FormData) {
         state,
         lga,
         sells,
-        wantToSee,
-        toolFrustrations,
-        biggestChallenge,
         referralCode,
         referredByCode: referrer?.code ?? null,
         referredByType: referrer?.type ?? null,
@@ -179,6 +175,37 @@ export async function getWaitlistSignupByReferralCode(code: string) {
   });
 
   return { ...signup, position: ahead + 1 };
+}
+
+// Step 2 of the split signup flow: fills in the 3 pain-point questions
+// on a signup that already exists, found by its referralCode (shown
+// back to the person on the thank-you page — not sensitive, meant to
+// be theirs to use). All 3 fields are optional so a partial answer or
+// an empty submit (from a "skip" action) both succeed silently rather
+// than blocking someone who already committed at step 1.
+export async function submitWaitlistFeedbackAction(formData: FormData) {
+  const referralCode = (formData.get("referralCode") as string || "").trim();
+  const wantToSee = (formData.get("wantToSee") as string || "").trim() || null;
+  const toolFrustrations = (formData.get("toolFrustrations") as string || "").trim() || null;
+  const biggestChallenge = (formData.get("biggestChallenge") as string || "").trim() || null;
+
+  if (!referralCode) {
+    return { error: "Missing signup reference." };
+  }
+
+  try {
+    await prisma.waitlistSignup.update({
+      where: { referralCode: sanitizeToReferralToken(referralCode) },
+      data: { wantToSee, toolFrustrations, biggestChallenge },
+    });
+    return { success: true };
+  } catch (error: any) {
+    if (error?.code === "P2025") {
+      return { error: "Signup not found." };
+    }
+    console.error("submitWaitlistFeedbackAction error:", error);
+    return { error: "Something went wrong. Please try again." };
+  }
 }
 
 // =====================================================================

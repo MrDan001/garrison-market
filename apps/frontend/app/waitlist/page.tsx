@@ -61,14 +61,12 @@ export default async function WaitlistPage({
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-3 leading-tight" style={{ fontFamily: "var(--font-display)" }}>
-          New shops open in waves.
-          <br />
-          Get in line for the next one.
+          Join Garrison Market Early Access
         </h1>
         <p className="text-sm text-[var(--text-primary)]/70 leading-relaxed mb-10 max-w-lg">
-          Garrison Market registration is closed while we onboard the current wave properly.
-          Join the waitlist and we'll email you the moment a spot opens — refer other shop
-          owners with your personal link to move up the line.
+          0% fees for 1 months — track stock, staff, and sales from one dashboard. Join the
+          waitlist and we'll email you the moment a spot opens — refer other shop owners with
+          your personal link to move up the line.
         </p>
 
         <WaitlistForm referredByCode={ref || null} />
