@@ -48,10 +48,13 @@ export async function toggleRegistrationGateAction(open: boolean) {
       create: { id: 1, registrationOpen: open },
     });
 
-    // /register itself checks the gate on every render, but revalidate
-    // it explicitly so a flip takes effect immediately rather than
-    // waiting on Next's default caching for that route.
+    // /register and /waitlist both check the gate on every render, but
+    // revalidate them (and the homepage CTAs) explicitly so a flip
+    // takes effect immediately rather than waiting on Next's default
+    // caching for those routes.
     revalidatePath("/register");
+    revalidatePath("/waitlist");
+    revalidatePath("/");
 
     return { success: true };
   } catch (error) {
