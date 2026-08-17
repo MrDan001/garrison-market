@@ -48,12 +48,16 @@ export async function toggleRegistrationGateAction(open: boolean) {
       create: { id: 1, registrationOpen: open },
     });
 
-    // /register and /waitlist both check the gate on every render, but
-    // revalidate them (and the homepage CTAs) explicitly so a flip
-    // takes effect immediately rather than waiting on Next's default
-    // caching for those routes.
+    // /register, /waitlist, and /login all check the gate on every
+    // render, but revalidate them (and the homepage CTAs) explicitly
+    // so a flip takes effect immediately rather than waiting on
+    // Next's default caching for those routes. /login's "Register
+    // now" vs "Join the waitlist" link reads this same flag
+    // (LoginClient.tsx) so it needs the same treatment or it serves
+    // a stale cached link until something else happens to revalidate it.
     revalidatePath("/register");
     revalidatePath("/waitlist");
+    revalidatePath("/login");
     revalidatePath("/");
 
     return { success: true };
