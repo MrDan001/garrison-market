@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { isValidCronAuthHeader } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,7 @@ export const dynamic = "force-dynamic";
 // Purpose: run a trivial real query against Supabase so the project never
 // crosses the 7-day-inactivity threshold that triggers an auto-pause.
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isValidCronAuthHeader(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

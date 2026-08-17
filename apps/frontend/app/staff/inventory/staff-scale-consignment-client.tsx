@@ -259,6 +259,14 @@ export default function StaffScaleConsignmentClient({
         enteredQty: line.enteredQty,
         enteredUnit: line.enteredUnit,
         price: line.linePrice,
+        ...(line.discountValue
+          ? {
+              originalPrice: line.price,
+              discountValue: line.discountValue,
+              discountType: line.discountType,
+              discountReason: line.discountReason,
+            }
+          : {}),
       }));
 
       await sellFromScaleConsignmentAction(payload, paymentMethod, buyerName, buyerPhone);

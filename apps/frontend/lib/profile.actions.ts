@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 // 👇 Changed from "@/lib/auth" to "@/lib/auth.actions" to use the correct session resolver
 import { getSessionUser } from "@/lib/auth.actions";
 import { revalidatePath } from "next/cache";
+import { isOwnBlobUrl } from "@/lib/blob-validation";
 
 export async function updateProfileWithPhoto(formData: FormData) {
   const session = await getSessionUser();
@@ -13,6 +14,11 @@ export async function updateProfileWithPhoto(formData: FormData) {
   const phoneNumber = formData.get("phone") as string;
 
   const imageUrl = formData.get("imageUrl") as string | null;
+  // SECURITY: same reasoning as registerOwnerAction — only accept an
+  // imageUrl that actually resolves to this app's own Blob storage,
+  // rather than trusting an arbitrary string from the request. See
+  // lib/blob-validation.ts.
+  const validatedImageUrl = isOwnBlobUrl(imageUrl) ? imageUrl : null;
 
   try {
     await prisma.user.update({
@@ -20,7 +26,7 @@ export async function updateProfileWithPhoto(formData: FormData) {
       data: {
         fullName,
         phoneNumber,
-        ...(imageUrl && { image: imageUrl }),
+        ...(validatedImageUrl && { image: validatedImageUrl }),
       },
     });
   } catch (error) {

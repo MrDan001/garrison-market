@@ -34,8 +34,16 @@ export function parseMessageBody(body: string): MessageSegment[] {
 // external (plain <a target="_blank">). Used by both the in-app renderer
 // and the email template (which needs to resolve internal paths to an
 // absolute URL since email has no app router to hand off to).
+//
+// SECURITY: a bare `startsWith("/")` also matches protocol-relative hrefs
+// like "//evil.com" — browsers resolve that as an external origin, but it
+// would've been treated as "internal" here, rendered with no external-link
+// warning and no target="_blank"/rel="noopener". Backslash variants
+// ("/\evil.com", "\/evil.com") can normalize the same way in some
+// browsers, so backslashes are folded to forward slashes before the check.
 export function isInternalLink(href: string): boolean {
-  return href.startsWith("/");
+  const normalized = href.replace(/\\/g, "/");
+  return normalized.startsWith("/") && !normalized.startsWith("//");
 }
 
 // Only http/https survive as a real clickable external link — anything

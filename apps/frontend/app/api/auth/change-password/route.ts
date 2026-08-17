@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, generateSessionToken, signToken } from "@/lib/auth";
 import { validatePassword } from "@/lib/password-validation";
 
 export async function POST(request: NextRequest) {
@@ -38,12 +38,29 @@ export async function POST(request: NextRequest) {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // SECURITY: rotate the session token on every password change, not
+    // just the password hash. Without this, a cookie stolen before the
+    // change (e.g. via a compromised device or session fixation) would
+    // stay valid afterward — the exact scenario someone is usually
+    // guarding against when they change their password. Rotating here
+    // invalidates every other active session, including a stolen one,
+    // the same way a fresh login already does.
+    const newSessionToken = generateSessionToken();
     await prisma.user.update({
       where: { id: user.id },
-      data: { password: hashedPassword },
+      data: { password: hashedPassword, currentSessionToken: newSessionToken, lastActivityAt: new Date() },
     });
 
-    return NextResponse.json({ message: "Password changed successfully." }, { status: 200 });
+    const newToken = await signToken(user.id, user.role, newSessionToken);
+    const response = NextResponse.json({ message: "Password changed successfully." }, { status: 200 });
+    response.cookies.set("session-token", newToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return response;
   } catch (error) {
     console.error("Change password error:", error);
     return NextResponse.json({ message: "An unexpected error occurred." }, { status: 500 });

@@ -14,6 +14,22 @@ function parseReplyAddress(address: string): { messageId: number; ownerId: numbe
   return { messageId, ownerId };
 }
 
+// SECURITY: reply+msgN-ownerM@ addresses are guessable (small sequential
+// integers), and the Svix signature only proves the request came from
+// Resend — it says nothing about who the *email* was actually from. This
+// extracts a clean, lowercased address from whatever shape Resend hands
+// back (a bare address, or "Display Name <address>") so it can be checked
+// against the owner's own registered email before a reply is ever
+// attributed to them.
+function extractEmailAddress(raw: unknown): string | null {
+  if (!raw) return null;
+  const str = typeof raw === "string" ? raw : (raw as { address?: string })?.address;
+  if (!str) return null;
+  const angleMatch = str.match(/<([^>]+)>/);
+  const candidate = (angleMatch ? angleMatch[1] : str).trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) ? candidate : null;
+}
+
 function stripQuotedReply(text: string): string {
   let result = text.replace(/\r\n/g, "\n");
 
@@ -80,12 +96,27 @@ export async function POST(request: NextRequest) {
         },
         select: { id: true, subject: true },
       }),
-      prisma.user.findUnique({ where: { id: ownerId }, select: { id: true, role: true, fullName: true, storeName: true } }),
+      prisma.user.findUnique({ where: { id: ownerId }, select: { id: true, role: true, fullName: true, storeName: true, email: true } }),
     ]);
 
     if (!message || !owner) {
       console.error(
         `[resend-inbound] Thread validation failed: Message #${messageId} or Owner #${ownerId} not found.`
+      );
+      return NextResponse.json({ received: true });
+    }
+
+    // SECURITY: the recipient address only tells us which thread this
+    // *claims* to belong to — it's guessable, and Svix only authenticates
+    // Resend as the transport, not the original sender. Without this check,
+    // anyone who emails a guessed reply+msgN-ownerM@ address gets their
+    // message recorded and shown to the admin as if it came from that
+    // owner. Reject (rather than silently attribute) anything that doesn't
+    // match the owner's own registered email.
+    const senderAddress = extractEmailAddress(event.data?.from);
+    if (!owner.email || !senderAddress || senderAddress !== owner.email.trim().toLowerCase()) {
+      console.warn(
+        `[resend-inbound] Sender mismatch on Message #${messageId}, Owner #${ownerId}: got "${senderAddress ?? "unknown"}", expected the registered owner email. Dropping.`
       );
       return NextResponse.json({ received: true });
     }

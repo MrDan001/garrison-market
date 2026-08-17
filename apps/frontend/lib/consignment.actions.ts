@@ -17,6 +17,8 @@ import {
   consumeScaleStockBatchesFifo,
   consumeConsignmentItemBatchesFifo,
 } from "./stock-batch.helpers";
+import { resolveLinePrice, resolveScaleLinePrice, isValidPositiveQty } from "./pricing.helpers";
+import { isValidCronSecret } from "./cron-auth";
 
 type SignOutItem = { inventoryId: number; quantityOut: number };
 type SignOutScaleItem = { scaleInventoryId: number; enteredQty: number; enteredUnit: string };
@@ -957,7 +959,11 @@ type ConsignmentSaleCartItem = {
   consignmentItemId: number;
   enteredQty: number;
   enteredUnit: string;
-  price: number; // per base unit, post-discount if any
+  price: number; // UI echo only — never trusted server-side, see resolveScaleLinePrice below
+  originalPrice?: number;
+  discountValue?: number;
+  discountType?: "percent" | "flat";
+  discountReason?: string;
 };
 
 export async function sellFromScaleConsignmentAction(
@@ -979,7 +985,7 @@ export async function sellFromScaleConsignmentAction(
   // themselves filling in at the till.
   const owner = await prisma.user.findUnique({
     where: { id: ownerId },
-    select: { plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true, staffConsignmentOverride: true },
+    select: { plan: true, subscriptionStatus: true, trialEndsAt: true, maxPackageEnabled: true, staffConsignmentOverride: true, discountEnabled: true },
   });
   if (!owner || !hasFeatureAccess(owner, "staffConsignment")) {
     throw new Error("UPGRADE_REQUIRED: Consignment requires the Pro plan or higher.");
@@ -1001,7 +1007,12 @@ export async function sellFromScaleConsignmentAction(
       include: { consignment: true, scaleInventory: true },
     });
 
-    const resolved: { cart: ConsignmentSaleCartItem; baseQty: number; row: (typeof consignmentItems)[number] }[] = [];
+    const resolved: {
+      cart: ConsignmentSaleCartItem;
+      baseQty: number;
+      row: (typeof consignmentItems)[number];
+      line: ReturnType<typeof resolveScaleLinePrice>;
+    }[] = [];
 
     for (const cart of cartItems) {
       const row = consignmentItems.find((r) => r.id === cart.consignmentItemId);
@@ -1010,6 +1021,7 @@ export async function sellFromScaleConsignmentAction(
       const isSharedAtOwnStore = row.consignment.staffId === null && row.consignment.storeId === activeStoreId;
       if (!isOwnConsignment && !isSharedAtOwnStore) throw new Error("Unauthorized for this consignment.");
       if (row.consignment.status !== "out") throw new Error("This consignment has already been settled.");
+      if (!row.scaleInventory) throw new Error("Consigned item's inventory record is missing.");
 
       const baseQty = convertToBaseUnit(cart.enteredQty, cart.enteredUnit, row.unit);
       if (baseQty <= 0) throw new Error(`Invalid quantity for ${row.scaleInventory?.name}.`);
@@ -1018,10 +1030,17 @@ export async function sellFromScaleConsignmentAction(
       if (baseQty > remaining) {
         throw new Error(`Only ${remaining}${row.unit} of ${row.scaleInventory?.name} left to sell today.`);
       }
-      resolved.push({ cart, baseQty, row });
+
+      // SECURITY: per-base-unit price always comes from the consigned
+      // item's ScaleInventory.price, never from cart.price on the request.
+      // Flat discounts are "naira off the whole line" for scale items —
+      // see resolveScaleLinePrice.
+      const line = resolveScaleLinePrice(Number(row.scaleInventory.price), baseQty, !!owner.discountEnabled, cart);
+
+      resolved.push({ cart, baseQty, row, line });
     }
 
-    const total = resolved.reduce((sum, r) => sum + r.cart.price * r.baseQty, 0);
+    const total = resolved.reduce((sum, r) => sum + r.line.price * r.baseQty, 0);
     // Use the consignment's own storeId as the source of truth — it's what
     // the item was actually signed out under, independent of whatever the
     // staff's "active store" cookie currently says.
@@ -1060,7 +1079,7 @@ export async function sellFromScaleConsignmentAction(
     // [...] } shorthand used before) so we have each ScaleOrderItem's own
     // id in hand to link it to the batch(es) it drew from below — same
     // restructuring as processScaleSaleAction and processSaleAction.
-    for (const { cart, baseQty, row } of resolved) {
+    for (const { cart, baseQty, row, line } of resolved) {
       const orderItem = await tx.scaleOrderItem.create({
         data: {
           scaleInventoryId: row.scaleInventoryId,
@@ -1068,7 +1087,15 @@ export async function sellFromScaleConsignmentAction(
           quantity: cart.enteredQty,
           unit: cart.enteredUnit,
           quantityInBaseUnit: baseQty,
-          priceAtTime: cart.price * baseQty,
+          priceAtTime: line.price * baseQty,
+          ...(line.discountValue != null
+            ? {
+                originalPrice: line.originalPrice * baseQty,
+                discountValue: line.discountValue,
+                discountType: line.discountType ?? null,
+                discountReason: line.discountReason ?? null,
+              }
+            : {}),
         },
       });
 
@@ -1163,6 +1190,11 @@ export async function processMergedSaleAction(
   const session = await getSessionUser();
   if (!session) throw new Error("Unauthorized");
   if (listCartItems.length === 0 && scaleCartItems.length === 0) throw new Error("Cart is empty");
+  for (const item of listCartItems) {
+    if (!isValidPositiveQty(item.qty)) {
+      throw new Error(`Invalid quantity for item ${item.id}.`);
+    }
+  }
 
   const ownerId = session.role === "owner" ? session.id : session.ownerId;
   if (!ownerId) throw new Error("No owner scope found for this account");
@@ -1176,23 +1208,9 @@ export async function processMergedSaleAction(
     throw new Error("Merged Cart is not enabled for this store.");
   }
 
-  // Re-check discountEnabled server-side (client UI already hides the
-  // discount option when it's off, but that's not a guarantee against a
-  // tampered request) and strip discount fields from both cart types if so.
-  if (!owner.discountEnabled) {
-    for (const item of listCartItems) {
-      delete item.discountValue;
-      delete item.discountType;
-      delete item.discountReason;
-      delete item.originalPrice;
-    }
-    for (const item of scaleCartItems) {
-      delete item.discountValue;
-      delete item.discountType;
-      delete item.discountReason;
-      delete item.originalPrice;
-    }
-  }
+  // discountEnabled is re-checked server-side inside resolveLinePrice below
+  // for every line, on both cart types — not trusted from the client.
+  const discountsAllowed = !!owner.discountEnabled;
 
   const activeStoreId = await getActiveStoreId();
 
@@ -1213,14 +1231,20 @@ export async function processMergedSaleAction(
     const inventoryRows = listCartItems.length
       ? await tx.inventory.findMany({ where: { id: { in: listCartItems.map((c) => c.id) } } })
       : [];
-    const resolvedList: { cart: MergedListCartItem; row: (typeof inventoryRows)[number] }[] = [];
+    const resolvedList: {
+      cart: MergedListCartItem;
+      row: (typeof inventoryRows)[number];
+      line: ReturnType<typeof resolveLinePrice>;
+    }[] = [];
     for (const cart of listCartItems) {
       const row = inventoryRows.find((r) => r.id === cart.id);
       if (!row) throw new Error(`Item ${cart.id} not found.`);
       if (row.quantity < cart.qty) {
         throw new Error(`Insufficient stock for ${row.name}. Available: ${row.quantity}`);
       }
-      resolvedList.push({ cart, row });
+      // SECURITY: price always comes from Inventory.price, never cart.price.
+      const line = resolveLinePrice(Number(row.price), discountsAllowed, cart);
+      resolvedList.push({ cart, row, line });
     }
 
     // --- Resolve + validate scale items against the staff's open consignments ---
@@ -1230,7 +1254,12 @@ export async function processMergedSaleAction(
           include: { consignment: true, scaleInventory: true },
         })
       : [];
-    const resolvedScale: { cart: MergedScaleCartItem; baseQty: number; row: (typeof consignmentItems)[number] }[] = [];
+    const resolvedScale: {
+      cart: MergedScaleCartItem;
+      baseQty: number;
+      row: (typeof consignmentItems)[number];
+      line: ReturnType<typeof resolveScaleLinePrice>;
+    }[] = [];
     for (const cart of scaleCartItems) {
       const row = consignmentItems.find((r) => r.id === cart.consignmentItemId);
       if (!row) throw new Error("Consigned item not found.");
@@ -1238,6 +1267,7 @@ export async function processMergedSaleAction(
       const isSharedAtOwnStore = row.consignment.staffId === null && row.consignment.storeId === activeStoreId;
       if (!isOwnConsignment && !isSharedAtOwnStore) throw new Error("Unauthorized for this consignment.");
       if (row.consignment.status !== "out") throw new Error("This consignment has already been settled.");
+      if (!row.scaleInventory) throw new Error("Consigned item's inventory record is missing.");
 
       const baseQty = convertToBaseUnit(cart.enteredQty, cart.enteredUnit, row.unit);
       if (baseQty <= 0) throw new Error(`Invalid quantity for ${row.scaleInventory?.name}.`);
@@ -1245,11 +1275,14 @@ export async function processMergedSaleAction(
       if (baseQty > remaining) {
         throw new Error(`Only ${remaining}${row.unit} of ${row.scaleInventory?.name} left to sell today.`);
       }
-      resolvedScale.push({ cart, baseQty, row });
+      // SECURITY: per-base-unit price always comes from ScaleInventory.price.
+      // Flat discounts are "naira off the whole line" for scale items.
+      const line = resolveScaleLinePrice(Number(row.scaleInventory.price), baseQty, discountsAllowed, cart);
+      resolvedScale.push({ cart, baseQty, row, line });
     }
 
-    const listTotal = resolvedList.reduce((sum, r) => sum + r.cart.price * r.cart.qty, 0);
-    const scaleTotal = resolvedScale.reduce((sum, r) => sum + r.cart.price * r.baseQty, 0);
+    const listTotal = resolvedList.reduce((sum, r) => sum + r.line.price * r.cart.qty, 0);
+    const scaleTotal = resolvedScale.reduce((sum, r) => sum + r.line.price * r.baseQty, 0);
     const total = listTotal + scaleTotal;
 
     if (isPartial && amountPaid! >= total) {
@@ -1299,19 +1332,19 @@ export async function processMergedSaleAction(
     // line's own id in hand to link it to the batch(es) it drew from below
     // — same restructuring as processSaleAction, processScaleSaleAction,
     // and sellFromScaleConsignmentAction.
-    for (const { cart, row } of resolvedList) {
+    for (const { cart, row, line } of resolvedList) {
       const orderItem = await tx.orderItem.create({
         data: {
           orderId: order.id,
           inventoryId: cart.id,
           quantity: cart.qty,
-          priceAtTime: cart.price,
-          ...(cart.discountValue
+          priceAtTime: line.price,
+          ...(line.discountValue != null
             ? {
-                originalPrice: cart.originalPrice,
-                discountValue: cart.discountValue,
-                discountType: cart.discountType ?? null,
-                discountReason: cart.discountReason ?? null,
+                originalPrice: line.originalPrice,
+                discountValue: line.discountValue,
+                discountType: line.discountType ?? null,
+                discountReason: line.discountReason ?? null,
               }
             : {}),
         },
@@ -1329,7 +1362,7 @@ export async function processMergedSaleAction(
       }
     }
 
-    for (const { cart, baseQty, row } of resolvedScale) {
+    for (const { cart, baseQty, row, line } of resolvedScale) {
       const scaleOrderItem = await tx.scaleOrderItem.create({
         data: {
           orderId: order.id,
@@ -1337,13 +1370,13 @@ export async function processMergedSaleAction(
           quantity: cart.enteredQty,
           unit: cart.enteredUnit,
           quantityInBaseUnit: baseQty,
-          priceAtTime: cart.price * baseQty,
-          ...(cart.discountValue
+          priceAtTime: line.price * baseQty,
+          ...(line.discountValue != null
             ? {
-                originalPrice: (cart.originalPrice ?? cart.price) * baseQty,
-                discountValue: cart.discountValue,
-                discountType: cart.discountType ?? null,
-                discountReason: cart.discountReason ?? null,
+                originalPrice: line.originalPrice * baseQty,
+                discountValue: line.discountValue,
+                discountType: line.discountType ?? null,
+                discountReason: line.discountReason ?? null,
               }
             : {}),
         },
@@ -1573,7 +1606,7 @@ export async function ownerReconcileScaleConsignmentAction(consignmentId: number
 // secret the route itself checks, verified here too, so direct calls
 // without it are rejected.
 export async function autoSettleScaleConsignmentForCron(consignmentId: number, cronSecret: string) {
-  if (!process.env.CRON_SECRET || cronSecret !== process.env.CRON_SECRET) {
+  if (!isValidCronSecret(cronSecret)) {
     throw new Error("Unauthorized");
   }
   return settleScaleConsignmentCore(consignmentId, "midnight");

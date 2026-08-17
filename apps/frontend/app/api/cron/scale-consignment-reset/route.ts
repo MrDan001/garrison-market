@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { runMidnightScaleConsignmentReset } from "@/lib/scale-consignment-reset";
+import { isValidCronAuthHeader } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,7 @@ export const dynamic = "force-dynamic";
 // $CRON_SECRET" on scheduled invocations, so this route stays locked to
 // Vercel's own scheduler and can't be hit by anyone who finds the URL.
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isValidCronAuthHeader(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

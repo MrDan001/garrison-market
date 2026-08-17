@@ -14,6 +14,8 @@ import { getActiveStoreId } from "./store-context";
 import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
 import { awardXp } from "./rush.actions";
 import { consumeStockBatchesFifo } from "./stock-batch.helpers";
+import { resolveLinePrice, isValidPositiveQty } from "./pricing.helpers";
+import { sanitizeOwnBlobUrl } from "./blob-validation";
 
 // Deep sterilization helper to turn Decimals and Dates into safe primitives
 function serializeData<T>(data: T): T {
@@ -458,9 +460,11 @@ export async function addItemAction(
   const category = (formData.get("category") as string) || null;
   const restockLevel = parseInt(formData.get("restockLevel") as string, 10);
 
-  const imageUrl = (formData.get("imageUrl") as string) || null;
-  const image2Url = (formData.get("image2Url") as string) || null;
-  const image3Url = (formData.get("image3Url") as string) || null;
+  // SECURITY: only accept image URLs that resolve to this app's own Blob
+  // storage — see lib/blob-validation.ts.
+  const imageUrl = sanitizeOwnBlobUrl(formData.get("imageUrl") as string | null);
+  const image2Url = sanitizeOwnBlobUrl(formData.get("image2Url") as string | null);
+  const image3Url = sanitizeOwnBlobUrl(formData.get("image3Url") as string | null);
   const description = (formData.get("description") as string)?.trim() || null;
   const sku = (formData.get("sku") as string)?.trim() || null;
 
@@ -684,15 +688,17 @@ export async function updateItemAction(formData: FormData) {
   const expiryDateRaw = formData.get("expiryDate") as string;
   updateData.expiryDate = trackExpiry && expiryDateRaw ? new Date(expiryDateRaw) : null;
 
-  const imageUrl = formData.get("imageUrl") as string | null;
+  // SECURITY: only accept image URLs that resolve to this app's own Blob
+  // storage — see lib/blob-validation.ts.
+  const imageUrl = sanitizeOwnBlobUrl(formData.get("imageUrl") as string | null);
   if (imageUrl) {
     updateData.image = imageUrl;
   }
-  const image2Url = formData.get("image2Url") as string | null;
+  const image2Url = sanitizeOwnBlobUrl(formData.get("image2Url") as string | null);
   if (image2Url) {
     updateData.image2 = image2Url;
   }
-  const image3Url = formData.get("image3Url") as string | null;
+  const image3Url = sanitizeOwnBlobUrl(formData.get("image3Url") as string | null);
   if (image3Url) {
     updateData.image3 = image3Url;
   }
@@ -763,6 +769,15 @@ export async function processSaleAction(
 
   const saleOwnerId = session.role === 'owner' ? session.id : session.ownerId!;
 
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    throw new Error("Cart is empty.");
+  }
+  for (const item of cartItems) {
+    if (!isValidPositiveQty(item.qty)) {
+      throw new Error(`Invalid quantity for item ${item.id}.`);
+    }
+  }
+
   // Re-check discountEnabled server-side — the staff UI already hides the
   // discount option when it's off, but that's a client-side nicety, not a
   // guarantee against a tampered request. Mirrors the same check in
@@ -771,16 +786,28 @@ export async function processSaleAction(
     where: { id: saleOwnerId },
     select: { discountEnabled: true },
   });
-  if (!ownerRecord?.discountEnabled) {
-    for (const item of cartItems) {
-      delete item.discountValue;
-      delete item.discountType;
-      delete item.discountReason;
-      delete item.originalPrice;
-    }
+  const discountsAllowed = !!ownerRecord?.discountEnabled;
+
+  // SECURITY: price is never taken from the client. `item.price` in the
+  // request body is only a UI echo — the real per-unit price always comes
+  // from Inventory.price, with any staff-entered discount re-applied
+  // server-side via resolveLinePrice. Without this, a tampered request
+  // could record a sale at any price the caller likes while stock still
+  // decrements correctly, hiding the fraud from every report.
+  const priceLookupRows = await prisma.inventory.findMany({
+    where: { id: { in: cartItems.map((i) => i.id) } },
+  });
+  const resolvedLines = new Map<number, ReturnType<typeof resolveLinePrice>>();
+  for (const item of cartItems) {
+    const row = priceLookupRows.find((r) => r.id === item.id);
+    if (!row) throw new Error(`Item ${item.id} not found.`);
+    resolvedLines.set(item.id, resolveLinePrice(Number(row.price), discountsAllowed, item));
   }
 
-  const total = cartItems.reduce((sum: number, item: any) => sum + (Number(item.price) * item.qty), 0);
+  const total = cartItems.reduce(
+    (sum: number, item: any) => sum + resolvedLines.get(item.id)!.price * item.qty,
+    0
+  );
 
   const cleanName = buyerName?.trim();
   const cleanPhone = buyerPhone?.trim();
@@ -853,18 +880,19 @@ export async function processSaleAction(
     // link it to the batch(es) it drew from below.
     const createdOrderItems = [];
     for (const item of cartItems) {
+      const resolved = resolvedLines.get(item.id)!;
       const orderItem = await tx.orderItem.create({
         data: {
           orderId: order.id,
           inventoryId: item.id,
           quantity: item.qty,
-          priceAtTime: Number(item.price),
-          ...(item.discountValue
+          priceAtTime: resolved.price,
+          ...(resolved.discountValue != null
             ? {
-                originalPrice: Number(item.originalPrice),
-                discountValue: Number(item.discountValue),
-                discountType: item.discountType ?? null,
-                discountReason: item.discountReason ?? null,
+                originalPrice: resolved.originalPrice,
+                discountValue: resolved.discountValue,
+                discountType: resolved.discountType ?? null,
+                discountReason: resolved.discountReason ?? null,
               }
             : {}),
         },

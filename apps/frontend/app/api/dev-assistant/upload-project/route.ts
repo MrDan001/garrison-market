@@ -32,6 +32,23 @@ const MAX_BINARY_FILE_BYTES = 15 * 1024 * 1024; // 15MB per binary file stored i
 const MAX_TOTAL_FILES = 600;
 const MAX_TOTAL_TEXT_CONTENT_BYTES = 8 * 1024 * 1024; // 8MB combined across all text files
 
+// SECURITY: adm-zip 0.6.0 (pinned in package.json) already fixes
+// CVE-2026-39244, the unbounded Buffer.alloc() from a forged size header —
+// it now bounds allocation to the compressed bytes actually present. That
+// closes the "tiny file declares 4GB" case, but a *real* high-ratio
+// DEFLATE entry (highly repetitive content can compress well over
+// 1000:1) can still legitimately decompress far past what this app ever
+// needs, and the existing MAX_BINARY_FILE_BYTES/MAX_TEXT_FILE_BYTES checks
+// below only run on `data.length` *after* entry.getData() has already
+// decompressed the whole thing into memory. Reading the entry's declared
+// uncompressed size from the central directory header — before calling
+// getData() — lets an oversized entry be skipped without ever paying for
+// the decompression. A generous combined ceiling across all entries in
+// the archive guards against many entries that each pass the per-entry
+// check individually but would sum to an excessive total.
+const MAX_DECLARED_ENTRY_BYTES = MAX_BINARY_FILE_BYTES; // 15MB — the larger of the two post-decompression caps
+const MAX_TOTAL_DECLARED_BYTES = 200 * 1024 * 1024; // 200MB combined declared size across the whole archive — well above any realistic codebase-context upload, just a hard ceiling on worst-case memory use
+
 const SKIP_DIR_SEGMENTS = new Set([
   "node_modules", ".git", ".next", "dist", "build", ".turbo",
   "coverage", ".vercel", ".cache", "out", ".idea", ".vscode",
@@ -102,6 +119,7 @@ export async function POST(req: NextRequest) {
   // or the single uploaded file — before deciding binary vs. text so both
   // paths share the same downstream logic.
   const rawEntries: { path: string; data: Buffer }[] = [];
+  let skippedDeclaredTooLarge = 0;
 
   if (isZip) {
     let zip: AdmZip;
@@ -110,12 +128,29 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: "That doesn't look like a valid zip file." }, { status: 400 });
     }
+    let totalDeclaredBytes = 0;
     for (const entry of zip.getEntries()) {
       if (entry.isDirectory) continue;
       const rawPath = entry.entryName.replace(/\\/g, "/");
       // Strip the top-level folder zips commonly wrap everything in.
       const path = rawPath.includes("/") ? rawPath.slice(rawPath.indexOf("/") + 1) : rawPath;
       if (!path || isSkippedPath(rawPath)) continue;
+
+      // SECURITY: check the declared uncompressed size BEFORE decompressing
+      // — see the MAX_DECLARED_ENTRY_BYTES comment above.
+      const declaredSize = entry.header.size;
+      if (declaredSize > MAX_DECLARED_ENTRY_BYTES) {
+        skippedDeclaredTooLarge++;
+        continue;
+      }
+      totalDeclaredBytes += declaredSize;
+      if (totalDeclaredBytes > MAX_TOTAL_DECLARED_BYTES) {
+        return NextResponse.json(
+          { error: "This archive's contents are too large once decompressed. Try a smaller project." },
+          { status: 400 }
+        );
+      }
+
       rawEntries.push({ path, data: entry.getData() });
     }
   } else {
@@ -226,6 +261,6 @@ export async function POST(req: NextRequest) {
     binaryCount: ingested.filter((f) => f.isBinary).length,
     textCount: ingested.filter((f) => !f.isBinary).length,
     skippedArchive,
-    skippedTooLarge,
+    skippedTooLarge: skippedTooLarge + skippedDeclaredTooLarge,
   });
 }

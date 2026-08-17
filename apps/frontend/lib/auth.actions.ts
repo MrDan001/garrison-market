@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { signToken, verifyToken, generateSessionToken } from "@/lib/auth";
 import { validatePassword } from "@/lib/password-validation";
+import { isOwnBlobUrl } from "@/lib/blob-validation";
 import { INACTIVITY_LIMIT_MS } from "@/lib/session-config";
 import {
   sendPasswordResetEmail,
@@ -293,7 +294,7 @@ export async function registerOwnerAction(formData: FormData) {
         shopCity: (data.shopCity as string) || null,
         shopState: (data.shopState as string) || null,
         productsSold: (data.productsSold as string) || null,
-        image: (data.imageUrl as string) || null,
+        image: isOwnBlobUrl(data.imageUrl as string) ? (data.imageUrl as string) : null,
         role: 'owner',
         status: 'pending',
         referralCode: cleanNewCodeForUser,
@@ -452,12 +453,20 @@ export async function resetPasswordAction(token: string, formData: FormData) {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
+    // SECURITY: invalidate any existing session on password reset, same
+    // reasoning as the authenticated change-password route — a reset is
+    // often done specifically because the account may be compromised, so
+    // any session already open (attacker's or otherwise) shouldn't survive
+    // it. Unlike change-password, there's no "current device" to keep
+    // signed in here — the UI already sends the person to /login after
+    // this succeeds, which mints a fresh session normally.
     await prisma.user.update({
       where: { id: user.id },
       data: {
         password: hashedPassword,
         resetToken: null,
         resetTokenExpiry: null,
+        currentSessionToken: null,
       },
     });
 

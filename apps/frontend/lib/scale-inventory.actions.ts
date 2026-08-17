@@ -12,6 +12,8 @@ import { assertSubscriptionActive, checkPlanLimit } from "./subscription-guard";
 import { convertToBaseUnit } from "./scale-units";
 import { awardXp } from "./rush.actions";
 import { consumeScaleStockBatchesFifo } from "./stock-batch.helpers";
+import { resolveScaleLinePrice } from "./pricing.helpers";
+import { sanitizeOwnBlobUrl } from "./blob-validation";
 
 // ============================================================================
 // Unit conversion — see lib/scale-units.ts. A ScaleInventory product is
@@ -71,9 +73,11 @@ export async function addScaleItemAction(
   const category = (formData.get("category") as string) || null;
   const restockLevelRaw = formData.get("restockLevel") as string;
   const restockLevel = restockLevelRaw ? parseFloat(restockLevelRaw) : null;
-  const imageUrl = (formData.get("imageUrl") as string) || null;
-  const image2Url = (formData.get("image2Url") as string) || null;
-  const image3Url = (formData.get("image3Url") as string) || null;
+  // SECURITY: only accept image URLs that resolve to this app's own Blob
+  // storage — see lib/blob-validation.ts.
+  const imageUrl = sanitizeOwnBlobUrl(formData.get("imageUrl") as string | null);
+  const image2Url = sanitizeOwnBlobUrl(formData.get("image2Url") as string | null);
+  const image3Url = sanitizeOwnBlobUrl(formData.get("image3Url") as string | null);
   const description = (formData.get("description") as string)?.trim() || null;
   const sku = (formData.get("sku") as string)?.trim() || null;
 
@@ -298,11 +302,13 @@ export async function updateScaleItemAction(
   const expiryDateRaw = formData.get("expiryDate") as string;
   updateData.expiryDate = trackExpiry && expiryDateRaw ? new Date(expiryDateRaw) : null;
 
-  const imageUrl = formData.get("imageUrl") as string | null;
+  // SECURITY: only accept image URLs that resolve to this app's own Blob
+  // storage — see lib/blob-validation.ts.
+  const imageUrl = sanitizeOwnBlobUrl(formData.get("imageUrl") as string | null);
   if (imageUrl) updateData.image = imageUrl;
-  const image2Url = formData.get("image2Url") as string | null;
+  const image2Url = sanitizeOwnBlobUrl(formData.get("image2Url") as string | null);
   if (image2Url) updateData.image2 = image2Url;
-  const image3Url = formData.get("image3Url") as string | null;
+  const image3Url = sanitizeOwnBlobUrl(formData.get("image3Url") as string | null);
   if (image3Url) updateData.image3 = image3Url;
 
   const updated = await prisma.scaleInventory.update({ where: { id }, data: updateData });
@@ -479,20 +485,13 @@ export async function processScaleSaleAction(
     select: { discountEnabled: true },
   });
   const discountsAllowed = ownerRecord?.discountEnabled ?? false;
-  if (!discountsAllowed) {
-    for (const item of cartItems) {
-      delete item.discountValue;
-      delete item.discountType;
-      delete item.discountReason;
-      delete item.originalPrice;
-    }
-  }
 
   // Resolve base units + validate stock BEFORE creating anything.
   const resolved: {
     item: ScaleCartItem;
     baseQty: number;
     inventory: Awaited<ReturnType<typeof prisma.scaleInventory.findUnique>>;
+    line: ReturnType<typeof resolveScaleLinePrice>;
   }[] = [];
 
   for (const item of cartItems) {
@@ -505,10 +504,17 @@ export async function processScaleSaleAction(
       throw new Error(`Insufficient stock for ${inventory.name}. Available: ${Number(inventory.quantity)}${inventory.unit}`);
     }
 
-    resolved.push({ item, baseQty, inventory });
+    // SECURITY: per-base-unit price always comes from ScaleInventory.price,
+    // never from item.price on the request — see pricing.helpers.ts. Flat
+    // discounts on scale items are "naira off the whole line", per the
+    // client's computeDiscountedUnitPrice — resolveScaleLinePrice mirrors
+    // that (unlike the plain per-unit-flat piece-inventory formula).
+    const line = resolveScaleLinePrice(Number(inventory.price), baseQty, discountsAllowed, item);
+
+    resolved.push({ item, baseQty, inventory, line });
   }
 
-  const total = resolved.reduce((sum, r) => sum + r.item.price * r.baseQty, 0);
+  const total = resolved.reduce((sum, r) => sum + r.line.price * r.baseQty, 0);
   const cleanName = buyerName?.trim();
   const cleanPhone = buyerPhone?.trim();
   const saleStoreId = activeStore.id;
@@ -558,7 +564,7 @@ export async function processScaleSaleAction(
     // [...] } shorthand used before) so we have each ScaleOrderItem's own
     // id in hand to link it to the ScaleStockBatch(es) it drew from below
     // — same restructuring as processSaleAction in business.actions.ts.
-    for (const { item, baseQty, inventory } of resolved) {
+    for (const { item, baseQty, line } of resolved) {
       const orderItem = await tx.scaleOrderItem.create({
         data: {
           orderId: order.id,
@@ -566,16 +572,15 @@ export async function processScaleSaleAction(
           quantity: item.enteredQty,
           unit: item.enteredUnit,
           quantityInBaseUnit: baseQty,
-          // ✅ FIXED: priceAtTime now strictly stores the unit price per base unit, 
-          // matching standard inventory behavior. Total calculation happens in memory 
-          // or via dedicated fields where needed.
-          priceAtTime: item.price,
-          ...(item.discountValue
+          // priceAtTime stores the unit price per base unit, resolved
+          // server-side above — never trusted from the request.
+          priceAtTime: line.price,
+          ...(line.discountValue != null
             ? {
-                originalPrice: item.originalPrice ?? item.price,
-                discountValue: item.discountValue,
-                discountType: item.discountType ?? null,
-                discountReason: item.discountReason ?? null,
+                originalPrice: line.originalPrice,
+                discountValue: line.discountValue,
+                discountType: line.discountType ?? null,
+                discountReason: line.discountReason ?? null,
               }
             : {}),
         },

@@ -134,11 +134,26 @@ export async function syncPaymentDirectly(reference: string) {
   try {
     if (!reference) return { error: "No reference provided" };
 
+    // SECURITY: this had no session check at all — anyone who could reach
+    // this action (its ID ships to the client since /owner/billing/success
+    // calls it directly) could trigger a live Paystack verify call for any
+    // reference string, and force-finalize any pending payment early. The
+    // impact was capped by the Paystack-side re-verification below (it can
+    // only finalize a payment that genuinely succeeded, always to its real
+    // owner), but there was no reason to allow it unauthenticated — it let
+    // anyone spam verify calls against our Paystack key at zero cost to
+    // themselves, and confirm/deny the existence of arbitrary references.
+    const session = await getSessionUser();
+    if (!session) return { error: "Unauthorized" };
+    const scopeOwnerId = session.role === "owner" ? session.id : session.ownerId;
+    if (!scopeOwnerId) return { error: "Unauthorized" };
+
     const payment = await prisma.payment.findUnique({
       where: { reference },
     });
 
     if (!payment) return { error: "Transaction record not found locally." };
+    if (payment.ownerId !== scopeOwnerId) return { error: "Unauthorized" };
     if (payment.status === "success") return { success: true, status: "already_processed" };
 
     // Fetch live ground-truth check from Paystack APIs
