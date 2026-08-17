@@ -18,6 +18,14 @@ import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import WaitlistForm from "./WaitlistForm";
 import { Users } from "lucide-react";
 
+// Forces this route to be rendered fresh on every request instead of
+// statically cached. Necessary because this page and /register each
+// redirect to the other based on the same DB flag — if both were
+// statically cached, they revalidate on independent schedules and can
+// disagree for a window after a toggle, producing a redirect loop
+// (ERR_TOO_MANY_REDIRECTS) between the two stale cached copies.
+export const dynamic = "force-dynamic";
+
 const display = Oswald({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
 const body = Inter({ subsets: ["latin"], variable: "--font-body" });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
