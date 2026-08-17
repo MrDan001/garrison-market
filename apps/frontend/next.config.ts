@@ -49,14 +49,23 @@
 //     silently break every photo upload while looking completely
 //     unrelated to CSP in the error console.
 
+//   - script-src conditionally adds 'unsafe-eval' in development only
+//     (see isDev below). React's dev-mode debugging tools (component
+//     stack reconstruction, Turbopack HMR) call eval() under the hood —
+//     without this, `next dev` throws "eval() is not supported in this
+//     environment" in the browser console and hot reload/dev overlays
+//     break. React never calls eval() in a production build, so this
+//     gap is intentionally not present in the deployed CSP.
+
 import type { NextConfig } from "next";
 import path from "path";
 
 const BLOB_HOSTNAME = "fg3uwdlr4t2605wl.public.blob.vercel-storage.com";
+const isDev = process.env.NODE_ENV !== "production";
 
 const cspDirectives = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline' https://connect.facebook.net`,
+  `script-src 'self' 'unsafe-inline' https://connect.facebook.net${isDev ? " 'unsafe-eval'" : ""}`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: https://${BLOB_HOSTNAME} https://www.facebook.com`,
   `font-src 'self' data:`,
