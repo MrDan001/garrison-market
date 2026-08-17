@@ -25,6 +25,12 @@ import { redirect } from "next/navigation";
 import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import RegisterForm from "./RegisterForm";
 
+// See the matching comment in app/waitlist/page.tsx — this page and
+// /waitlist redirect to each other based on the same flag, so both
+// must read it fresh on every request rather than risk two stale
+// static caches disagreeing and looping.
+export const dynamic = "force-dynamic";
+
 export default async function RegisterPage() {
   const open = await isRegistrationOpen();
   if (!open) {
