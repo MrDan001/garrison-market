@@ -39,8 +39,13 @@ jobs:
           cache: npm
           cache-dependency-path: apps/frontend/package-lock.json
 
+      # The branch's lockfile predates the ESLint 9/Next 16 toolchain update.
+      # Refresh it in CI before installation so npm ci receives a consistent lock.
+      - name: Refresh dependency lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
