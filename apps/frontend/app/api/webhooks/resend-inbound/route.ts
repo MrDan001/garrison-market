@@ -3,7 +3,13 @@ import { Resend } from "resend";
 import prisma from "@/lib/prisma";
 import { createAdminNotification } from "@/lib/admin-notification.actions";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResendClient(): Resend {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+  return new Resend(apiKey);
+}
 
 function parseReplyAddress(address: string): { messageId: number; ownerId: number } | null {
   const match = address.match(/reply\+msg(\d+)-owner(\d+)@/);
@@ -55,6 +61,7 @@ export async function POST(request: NextRequest) {
 
   let event: any;
   try {
+    const resend = getResendClient();
     event = resend.webhooks.verify({
       payload: rawBody,
       headers: {
@@ -65,7 +72,7 @@ export async function POST(request: NextRequest) {
       webhookSecret: process.env.RESEND_WEBHOOK_SECRET || "",
     });
   } catch (err) {
-    console.error("[resend-inbound] Invalid webhook signature:", err);
+    console.error("[resend-inbound] Invalid webhook signature or missing Resend API key:", err);
     return NextResponse.json({ message: "Invalid signature." }, { status: 401 });
   }
 
@@ -74,6 +81,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const resend = getResendClient();
     const toList: string[] = Array.isArray(event.data?.to)
       ? event.data.to
       : [event.data?.to].filter(Boolean);
