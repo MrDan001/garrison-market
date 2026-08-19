@@ -21,6 +21,9 @@ jobs:
     name: Validate security fix
     runs-on: ubuntu-latest
 
+    env:
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
     defaults:
       run:
         working-directory: apps/frontend
