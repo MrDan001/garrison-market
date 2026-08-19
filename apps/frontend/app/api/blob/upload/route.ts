@@ -5,17 +5,23 @@ import { getSessionUser } from "@/lib/auth.actions";
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
 
+  // 1. Explicitly retrieve token from environment
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) {
+    console.error("BLOB_READ_WRITE_TOKEN environment variable is missing.");
+    return NextResponse.json(
+      { error: "Storage configuration error: Missing Vercel Blob token." },
+      { status: 500 }
+    );
+  }
+
   try {
     const jsonResponse = await handleUpload({
       body,
       request,
+      // 2. Explicitly pass token to handleUpload
+      token,
       onBeforeGenerateToken: async () => {
-        // NOTE: relaxed from "owner only" to "any authenticated user" —
-        // this route is now shared by inventory uploads (owner-only,
-        // enforced inside addItemAction/updateItemAction) AND staff profile
-        // photo uploads. The actual save-to-database authorization already
-        // happens in each specific server action, so gatekeeping role here
-        // too was redundant and blocked legitimate staff uploads.
         const session = await getSessionUser();
         if (!session) {
           throw new Error("Unauthorized");

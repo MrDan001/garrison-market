@@ -48,6 +48,18 @@
 //     connect-src (not img-src) governs. Missing connect-src here would
 //     silently break every photo upload while looking completely
 //     unrelated to CSP in the error console.
+//   - connect-src also needs https://vercel.com: before the actual PUT to
+//     the Blob storage hostname above, @vercel/blob/client's upload()
+//     first calls https://vercel.com/api/blob/... directly from the
+//     browser to get a scoped client upload token (this is internal to
+//     the @vercel/blob package, not something this app calls itself —
+//     see put.ts/api.ts in the package's client bundle). That's a
+//     *second* host the browser connects to, distinct from the Blob
+//     storage hostname. Without it here, every client-side upload
+//     (inventory, profile, staff profile, registration photo) is blocked
+//     by the browser before the request ever leaves — Discovered via a
+//     CSP console error reading "Connecting to
+//     'https://vercel.com/api/blob/?pathname=...' violates ... connect-src".
 
 //   - script-src conditionally adds 'unsafe-eval' in development only
 //     (see isDev below). React's dev-mode debugging tools (component
@@ -69,7 +81,7 @@ const cspDirectives = [
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: https://${BLOB_HOSTNAME} https://www.facebook.com`,
   `font-src 'self' data:`,
-  `connect-src 'self' https://${BLOB_HOSTNAME} https://www.facebook.com https://connect.facebook.net`,
+  `connect-src 'self' https://${BLOB_HOSTNAME} https://vercel.com https://www.facebook.com https://connect.facebook.net`,
   `worker-src 'self'`,
   `manifest-src 'self'`,
   `object-src 'none'`,

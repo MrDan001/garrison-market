@@ -7,6 +7,16 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 // Guardrails: content type, file size, and (added after a pentest flagged
 // this as an open abuse vector) a per-IP rate limit below.
 export async function POST(request: Request): Promise<NextResponse> {
+  // 1. Explicitly retrieve token from environment
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) {
+    console.error("BLOB_READ_WRITE_TOKEN environment variable is missing.");
+    return NextResponse.json(
+      { error: "Storage configuration error: Missing Vercel Blob token." },
+      { status: 500 }
+    );
+  }
+
   const ip = await getClientIp();
   const limit = await checkRateLimit(`blob-register:ip:${ip}`, { max: 20, windowMs: 60 * 60 * 1000 });
   if (!limit.allowed) {
@@ -22,6 +32,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     const jsonResponse = await handleUpload({
       body,
       request,
+      // 2. Explicitly pass token to handleUpload
+      token,
       onBeforeGenerateToken: async () => {
         return {
           allowedContentTypes: ["image/jpeg", "image/png", "image/webp"],
