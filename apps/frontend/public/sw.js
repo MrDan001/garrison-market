@@ -16,6 +16,17 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only pass through same-origin GET requests. Anything else — and
+  // specifically cross-origin PUT/POST with a large binary body, like the
+  // direct browser -> Vercel Blob storage upload used for product/profile
+  // images — is left completely un-intercepted. Routing large streamed
+  // upload bodies through a service worker's fetch handler is a known
+  // source of silent hangs on Android Chrome; skipping respondWith() here
+  // lets the browser handle those requests natively instead.
+  const url = new URL(event.request.url);
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) {
+    return;
+  }
   event.respondWith(fetch(event.request));
 });
 
