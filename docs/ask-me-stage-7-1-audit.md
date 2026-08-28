@@ -38,6 +38,12 @@ Stage 6 previously copied the raw current question into the system prompt as a `
 
 The route now calls Stage 6 without embedding the raw question in the system prompt.
 
+### Fixed — Duplicate Stage 5 database work
+
+The Ask Me route was executing Stage 5 directly while Stage 4 was also executing Stage 5 internally. This meant the recommendation layer could run twice for a single request, increasing Prisma queries and latency unnecessarily.
+
+Stage 4 is now responsible only for Rush context. The route remains responsible for the single Stage 5 recommendation call. This removes the duplicate recommendation/database pass without changing the final context contract.
+
 ### Existing protection confirmed — Active-store ownership
 
 `getActiveStoreId()` resolves a staff member's store from their authenticated `staffStoreId`. For owners, the cookie-selected store is revalidated against the authenticated owner's ID. `/api/ask-me` performs an additional store ownership check before business data is queried.
@@ -58,6 +64,10 @@ The following are deliberately **not** treated as passed merely from static insp
 - Provider outage/rate-limit behavior against the deployed endpoint.
 - Full browser verification of Ask Me UI submission, errors, history and image attachment.
 - Performance profiling of the multiple parallel Prisma queries on large stores.
+
+### Live verification access limitation
+
+The connected Vercel account can identify the user's `mifi-tech` team, but the available Vercel project/deployment API currently returns `403 Forbidden`/project-not-found for the Garrison Market project. Therefore no live authenticated production request was fabricated or claimed as tested. The remaining live tests require access to the actual deployment/project or an authenticated local environment with the production-equivalent database/session setup.
 
 ## Regression tests added
 
