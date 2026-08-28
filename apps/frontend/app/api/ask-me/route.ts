@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth.actions";
 import { getActiveStoreId } from "@/lib/store-context";
 import prisma from "@/lib/prisma";
 
-const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 const MODEL = "qwen/qwen3.6-27b";
 const MAX_HISTORY = 8;
 const MAX_CHARS = 1800;
@@ -114,7 +114,13 @@ async function context(role: Role, ownerId: number, storeId: number, staffId: nu
 function systemPrompt(role: Role, data: string) {
   return `${role === "owner" ? "You are the private Garrison Market assistant for the authenticated store owner." : "You are the Garrison Market staff assistant."}\nUse only the supplied live data for business facts. Never invent numbers. Never mix stores. Staff must never receive owner-only financials or other staff/store data. Answer directly and concisely.\n\nLIVE DATA:\n${data}`;
 }
-const extract = (p: any) => typeof p?.choices?.[0]?.message?.content === "string" ? p.choices[0].message.content.trim() : "";
+
+const extract = (p: any) => {
+  const content = p?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) return content.map((part: any) => typeof part?.text === "string" ? part.text : "").join("").trim();
+  return "";
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -124,7 +130,7 @@ export async function POST(request: NextRequest) {
     const history: Message[] = Array.isArray(body?.history) ? body.history.slice(-MAX_HISTORY).map((m:any) => ({ role:m?.role === "assistant" ? "assistant" : "user", content:String(m?.content ?? "").slice(0,MAX_CHARS) })) : [];
     const imageDataUrl = typeof body?.imageDataUrl === "string" ? body.imageDataUrl : undefined;
     if (!history.length && !imageDataUrl) return NextResponse.json({ success:false, error:"Please ask a question." }, { status:400 });
-    if (imageDataUrl && (imageDataUrl.length > MAX_IMAGE || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl))) return NextResponse.json({ success:false, error:"Please attach a JPEG, PNG, or WebP image under 4MB." }, { status:400 });
+    if (imageDataUrl && (imageDataUrl.length > MAX_IMAGE || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl))) return NextResponse.json({ success:false, error:"Please attach a JPEG, PNG, or WebP image under 6MB." }, { status:400 });
     const storeId = Number(await getActiveStoreId());
     if (!storeId) return NextResponse.json({ success:false, error:"No active store is assigned to this account." }, { status:403 });
     const ownerId = Number(session.role === "owner" ? session.id : session.ownerId);
@@ -140,22 +146,48 @@ export async function POST(request: NextRequest) {
     const q = history.at(-1)?.content.trim() ?? "";
     if (session.role === "staff" && staffRestricted(q)) return NextResponse.json({ success:true, reply:"I can help with staff-safe store information, inventory and your sales. That information is restricted to the store owner." });
     if (!imageDataUrl) { const answer = await directAnswer(session.role, ownerId, storeId, staffId, q); if (answer) return NextResponse.json({ success:true, reply:answer }); }
-    if (!process.env.GROQ_API_KEY) return NextResponse.json({ success:false, error:"Ask Me is not configured on the server." }, { status:503 });
+    if (!process.env.OPENROUTER_API_KEY) return NextResponse.json({ success:false, error:"Ask Me is not configured on the server. Add OPENROUTER_API_KEY to the deployment environment." }, { status:503 });
     const data = await context(session.role, ownerId, storeId, staffId, q);
     const messages:any[] = [{ role:"system", content:systemPrompt(session.role, data) }, ...history];
     if (imageDataUrl) { const last = messages.at(-1); if (last?.role === "user") last.content = [{ type:"text", text:last.content || "Analyze this image using the supplied store data." }, { type:"image_url", image_url:{url:imageDataUrl} }]; }
-    const requestBody = { model:MODEL, messages, temperature:0.7, max_completion_tokens:1200, reasoning_effort:"none", stream:false };
+    const requestBody = { model:MODEL, messages, temperature:0.7, max_tokens:1200, stream:false };
     let response:Response | null = null, raw = "";
     for (let attempt=0; attempt<2; attempt++) {
-      const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 25000);
-      try { response = await fetch(GROQ_ENDPOINT, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${process.env.GROQ_API_KEY}` }, body:JSON.stringify(requestBody), signal:controller.signal, cache:"no-store" }); raw = await response.text(); }
-      finally { clearTimeout(timeout); }
-      if (response.status !== 429 || attempt === 1) break;
+      const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 30000);
+      try {
+        response = await fetch(OPENROUTER_ENDPOINT, {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            Authorization:`Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "https://garrison-market.vercel.app",
+            "X-Title": "Garrison Market Ask Me"
+          },
+          body:JSON.stringify(requestBody),
+          signal:controller.signal,
+          cache:"no-store"
+        });
+        raw = await response.text();
+      } finally { clearTimeout(timeout); }
+      if (![429,500,502,503,504].includes(response?.status ?? 0) || attempt === 1) break;
       await new Promise(r => setTimeout(r, 1200));
     }
-    if (!response?.ok) { console.error("ASK_ME_PROVIDER_ERROR", response?.status, raw.slice(0,2000)); return NextResponse.json({ success:false, error:response?.status === 429 ? "The AI provider is temporarily rate-limited. Please try again shortly." : "Ask Me's AI service could not process that request." }, { status:502 }); }
-    let payload:any; try { payload = JSON.parse(raw); } catch { return NextResponse.json({ success:false, error:"Ask Me received an invalid AI response." }, { status:502 }); }
-    const reply = extract(payload); if (!reply) return NextResponse.json({ success:false, error:"Ask Me received an empty AI response." }, { status:502 });
+    if (!response?.ok) {
+      console.error("ASK_ME_OPENROUTER_ERROR", response?.status, raw.slice(0,2000));
+      let providerMessage = "";
+      try { providerMessage = String(JSON.parse(raw)?.error?.message ?? "").slice(0,300); } catch {}
+      return NextResponse.json({ success:false, error:response?.status === 429 ? "The AI provider is temporarily rate-limited. Please try again shortly." : providerMessage ? `Ask Me's AI service returned an error: ${providerMessage}` : "Ask Me's AI service could not process that request." }, { status:502 });
+    }
+    let payload:any;
+    try { payload = JSON.parse(raw); } catch { return NextResponse.json({ success:false, error:"Ask Me received an invalid AI response." }, { status:502 }); }
+    const reply = extract(payload);
+    if (!reply) {
+      console.error("ASK_ME_EMPTY_RESPONSE", raw.slice(0,2000));
+      return NextResponse.json({ success:false, error:"Ask Me received an empty AI response." }, { status:502 });
+    }
     return NextResponse.json({ success:true, reply });
-  } catch (error) { console.error("ASK_ME_API_ERROR", error); return NextResponse.json({ success:false, error:"Ask Me could not complete that request. Please try again." }, { status:500 }); }
+  } catch (error) {
+    console.error("ASK_ME_API_ERROR", error);
+    return NextResponse.json({ success:false, error:"Ask Me could not complete that request. Please try again." }, { status:500 });
+  }
 }
