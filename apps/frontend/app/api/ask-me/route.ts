@@ -8,6 +8,7 @@ import {
   type AssistantRole,
 } from "@/lib/store-assistant-intelligence";
 import { buildStoreAssistantStage2 } from "@/lib/store-assistant-stage2";
+import { buildStoreAssistantStage3, getStage3BlockedReply } from "@/lib/store-assistant-stage3";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 // OpenRouter's router selects an available model/provider for the request.
@@ -172,9 +173,13 @@ export async function POST(request: NextRequest) {
     const direct = await directAnswer(role, ownerId, storeId, staffId, question);
     if (direct) return NextResponse.json({ success: true, reply: direct, products: [] });
 
+    const blocked = getStage3BlockedReply(role, question);
+    if (blocked) return NextResponse.json({ success: true, reply: blocked, products: [] });
+
     const liveContext = await buildStoreAssistantIntelligence(role, ownerId, storeId, staffId, question);
     const stage2Analysis = await buildStoreAssistantStage2(role, ownerId, storeId, staffId, question);
-    const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}`);
+    const stage3Access = buildStoreAssistantStage3(role, question);
+    const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}`);
     const userContent: any = imageDataUrl
       ? [{ type: "text", text: question || "Please analyze this image in the context of my Garrison Market store." }, { type: "image_url", image_url: { url: imageDataUrl } }]
       : question;
