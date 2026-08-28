@@ -52,22 +52,31 @@ Stage 4 is now responsible only for Rush context. The route remains responsible 
 
 Orders, order items, clock events and Rush profiles used for staff context are scoped to the authenticated staff user. Owner-only debts, expenses, stock losses/returns and store-wide staff analytics are only queried in owner branches.
 
+## Production smoke tests completed
+
+The current production deployment is `dpl_DARqrdXqErK6wdPrz6YsaPr1HC1e`, serving commit `158c4f0754e602cbaf7c694ee24e4d4667af147f`.
+
+- Production homepage `https://www.gmstock.co/` returned HTTP 200 and rendered the expected Garrison Market application shell.
+- `GET /api/ask-me` returned HTTP 405 Method Not Allowed, which is expected because Ask Me is a POST-only endpoint.
+- Vercel runtime logs for the deployment showed no 5xx responses in the checked 30-minute window.
+- The deployment status is READY and Vercel reported deployment completion successfully.
+
+These are production smoke checks only; they do not prove authenticated Ask Me behavior.
+
 ## Remaining audit work
 
-The following are deliberately **not** treated as passed merely from static inspection:
+The following are deliberately **not** treated as passed merely from static inspection or unauthenticated smoke testing:
 
 - Live owner-vs-staff end-to-end API tests using real authenticated sessions.
 - Cross-store attempts using a modified `activeStoreId` cookie.
 - Cross-owner attempts using direct API requests.
 - Follow-up conversation tests where a safe question is followed by an owner-only rephrasing.
-- Empty-store / empty-sales / empty-inventory behavior.
+- Empty-store / empty-sales / empty-inventory behavior using real accounts.
 - Provider outage/rate-limit behavior against the deployed endpoint.
 - Full browser verification of Ask Me UI submission, errors, history and image attachment.
 - Performance profiling of the multiple parallel Prisma queries on large stores.
 
-### Live verification access limitation
-
-The connected Vercel account can identify the user's `mifi-tech` team, but the available Vercel project/deployment API currently returns `403 Forbidden`/project-not-found for the Garrison Market project. Therefore no live authenticated production request was fabricated or claimed as tested. The remaining live tests require access to the actual deployment/project or an authenticated local environment with the production-equivalent database/session setup.
+The connected Vercel tooling can inspect the deployment and production logs, but it does not provide an authenticated Garrison Market owner/staff application session. No credentials are requested or stored for this audit, so the authenticated matrix must be exercised with a legitimate test session outside this connector before it can be marked passed.
 
 ## Regression tests added
 
