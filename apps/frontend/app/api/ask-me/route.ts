@@ -9,8 +9,9 @@ import {
 } from "@/lib/store-assistant-context";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-const TEXT_MODEL = "openai/gpt-oss-120b:free";
-const IMAGE_MODEL = "openrouter/free";
+// Use OpenRouter's free router for both text and image requests. It selects a
+// currently available free model and filters for the capabilities the request needs.
+const OPENROUTER_MODEL = "openrouter/free";
 const MAX_HISTORY = 10;
 const MAX_CHARS = 2400;
 const MAX_IMAGE_CHARS = 3_500_000;
@@ -79,7 +80,7 @@ function extractText(payload: any) {
   return "";
 }
 
-async function askOpenRouter(messages: any[], hasImage: boolean) {
+async function askOpenRouter(messages: any[]) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return { reply: "", error: "Ask Me is not configured yet: OPENROUTER_API_KEY is missing." };
 
@@ -94,7 +95,7 @@ async function askOpenRouter(messages: any[], hasImage: boolean) {
         "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "https://garrison-market.vercel.app",
         "X-Title": "Garrison Market Ask Me",
       },
-      body: JSON.stringify({ model: hasImage ? IMAGE_MODEL : TEXT_MODEL, messages, temperature: 0.2, max_tokens: 1200, stream: false }),
+      body: JSON.stringify({ model: OPENROUTER_MODEL, messages, max_tokens: 1200, stream: false }),
       cache: "no-store",
       signal: controller.signal,
     });
@@ -105,8 +106,14 @@ async function askOpenRouter(messages: any[], hasImage: boolean) {
 
     if (!response.ok) {
       console.error("ASK_ME_OPENROUTER_ERROR", response.status, raw.slice(0, 3000));
+      if (response.status === 401) {
+        return { reply: "", error: "Ask Me could not authenticate with OpenRouter. Please check the OPENROUTER_API_KEY in Vercel." };
+      }
       if (response.status === 402) {
-        return { reply: "", error: "OpenRouter rejected this request (402). The free AI provider may be temporarily unavailable or the account may have reached its current free-model limit. Please try again shortly." };
+        return { reply: "", error: "OpenRouter rejected this request (402). The selected free AI route may be temporarily unavailable or the account may have reached its current limit. Please try again shortly." };
+      }
+      if (response.status === 404) {
+        return { reply: "", error: "OpenRouter could not find the requested AI route. Ask Me has been configured to use OpenRouter's live free-model router; please redeploy this version." };
       }
       if (response.status === 429) {
         return { reply: "", error: "Ask Me is temporarily rate-limited by the AI provider. Please try again in a moment." };
@@ -177,7 +184,7 @@ export async function POST(request: NextRequest) {
       { role: "user", content: userContent },
     ];
 
-    const ai = await askOpenRouter(messages, Boolean(imageDataUrl));
+    const ai = await askOpenRouter(messages);
     if (!ai.reply) return NextResponse.json({ success: false, error: ai.error || "Ask Me could not produce an answer." }, { status: 502 });
 
     return NextResponse.json({ success: true, reply: ai.reply, products: [] });
