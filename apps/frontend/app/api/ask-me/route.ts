@@ -8,7 +8,7 @@ const MODEL = "qwen/qwen3.6-27b";
 const MAX_HISTORY = 8;
 const MAX_CHARS = 1800;
 const MAX_CONTEXT = 24000;
-const MAX_IMAGE = 4 * 1024 * 1024;
+const MAX_IMAGE = 6_000_000;
 
 const money = (v: unknown) => {
   const n = Number(v ?? 0);
@@ -19,7 +19,6 @@ const has = (s: string, words: string[]) => words.some(w => s.includes(w));
 
 type Role = "owner" | "staff";
 type Intent = "sales" | "profit" | "inventory" | "products" | "customers" | "debts" | "expenses" | "staff" | "losses" | "returns" | "store" | "general";
-
 type Message = { role: "user" | "assistant"; content: string };
 
 function intent(q: string): Intent {
@@ -86,7 +85,7 @@ async function contextFor(role: Role, ownerId: number, storeId: number, staffId:
     const low = inventory.filter(p => p.restockLevel != null && Number(p.quantity) <= Number(p.restockLevel));
     const base = `STAFF-SAFE STORE DATA\nStore: ${store?.name ?? "Unknown"}\nStore type: ${store?.storeType ?? "standard"}\n\nINVENTORY\n${inventory.map(p => `${p.name} | qty=${p.quantity} | price=${money(p.price)} | category=${p.category ?? "—"} | restock=${p.restockLevel ?? "—"} | expiry=${date(p.expiryDate)} | sku=${p.sku ?? "—"}`).join("\n") || "None"}\n\nLOW STOCK\n${low.map(p => `${p.name} — ${p.quantity} left`).join("\n") || "None"}\n\nYOUR SALES (30 DAYS)\n${ownOrders.map(o => `${date(o.date)} — ${money(o.total)} — ${o.paymentMethod}`).join("\n") || "None"}`;
     if (type === "losses" && owner?.wastageVisibleToStaff) {
-      const losses = await prisma.stockLoss.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 60, select: { quantity: true, reason: true, note: true, createdAt: true, inventory: { select: { name: true } } } });
+      const losses = await prisma.stockLoss.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 60, select: { quantity: true, reason: true, note: true, createdAt: true, inventory: { select: { name: true } } });
       return `${base}\n\nAUTHORIZED WASTAGE\n${losses.map(x => `${x.inventory.name} — ${x.quantity} — ${x.reason} — ${x.note ?? ""}`).join("\n") || "None"}`;
     }
     return base;
@@ -103,11 +102,11 @@ async function contextFor(role: Role, ownerId: number, storeId: number, staffId:
     return `CUSTOMERS\n${rows.map(c => `${c.name} | phone=${c.phone} | updated=${date(c.updatedAt)}`).join("\n") || "None"}`;
   }
   if (type === "debts") {
-    const rows = await prisma.debt.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 160, select: { totalAmount: true, amountPaid: true, status: true, createdAt: true, settledAt: true, customer: { select: { name: true, phone: true } } } });
+    const rows = await prisma.debt.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 160, select: { totalAmount: true, amountPaid: true, status: true, createdAt: true, settledAt: true, customer: { select: { name: true, phone: true } } });
     return `OWNER-ONLY DEBTS\n${rows.map(d => `${d.customer.name} | phone=${d.customer.phone} | owed=${money(Number(d.totalAmount)-Number(d.amountPaid))} | total=${money(d.totalAmount)} | paid=${money(d.amountPaid)} | status=${d.status} | created=${date(d.createdAt)}`).join("\n") || "None"}`;
   }
   if (type === "expenses") {
-    const rows = await prisma.expense.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 160, select: { amount: true, note: true, createdAt: true, category: { select: { name: true } } } });
+    const rows = await prisma.expense.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 160, select: { amount: true, note: true, createdAt: true, category: { select: { name: true } } });
     return `OWNER-ONLY EXPENSES\n${rows.map(e => `${date(e.createdAt)} | ${money(e.amount)} | ${e.category?.name ?? "Uncategorised"} | ${e.note ?? ""}`).join("\n") || "None"}`;
   }
   if (type === "losses") {
