@@ -13,31 +13,15 @@ import {
 } from "@/lib/store-assistant.actions";
 import { ASK_ME_STARTERS } from "@/lib/store-assistant-knowledge";
 
-/**
- * Shared "Ask Me" AI chat UI — used inside both StaffSupportBubble and
- * OwnerSupportBubble. Unlike ChatPanel (which polls a real two-person
- * thread on the server), this holds its own conversation in local
- * component state and calls askStoreAssistant() directly: there's no
- * "other party" to poll for, no typing indicator, and nothing persisted —
- * closing the chat bubble clears the conversation, which is fine since
- * every answer is re-derivable from the knowledge base at any time. The
- * same applies to attached/generated images — neither is ever saved
- * anywhere, they only exist for the current chat session.
- */
-
 interface Message {
   role: "user" | "assistant";
   content: string;
   isError?: boolean;
   products?: AskMeProduct[];
   generatedImage?: AskMeGeneratedImage;
-  attachedImage?: string; // data URL preview of a photo the user sent
+  attachedImage?: string;
 }
 
-// Client-side pre-check only — the server independently re-validates size
-// and MIME type regardless of what's enforced here (see
-// store-assistant.actions.ts). This just avoids a slow upload + a round
-// trip for an image the server would reject anyway.
 const MAX_ATTACH_BYTES = 4 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
@@ -57,40 +41,100 @@ function UserAvatar() {
   );
 }
 
-const NAIRA = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
+const NAIRA = new Intl.NumberFormat("en-NG", {
+  style: "currency",
+  currency: "NGN",
+  maximumFractionDigits: 0,
+});
 
-// Parses the assistant's reply for [Label](/path) markdown-style links and
-// renders each as a real, tappable in-app link (client-side navigation via
-// next/link — no full page reload). Only paths starting with "/" are ever
-// treated as links; anything else in that bracket-paren shape is left as
-// plain text, since link targets come from an LLM and an internal-only
-// allowlist is the safest way to render them.
-function renderMessageContent(content: string, onNavigate?: () => void) {
-  const pattern = /\[([^\]]+)\]\((\/[^\s()]*)\)/g;
+/**
+ * Render the small markdown subset produced by Ask Me.
+ * Supports **bold** text and internal [links](/paths), while preserving
+ * normal whitespace/newlines. This prevents markdown markers from appearing
+ * literally in the chat bubble.
+ */
+function renderMessageContent(content: string, onNavigate?: () => void): ReactNode[] {
+  const pattern = /(\*\*[^*]+\*\*|\[[^\]]+\]\(\/[^\s()]*\))/g;
   const parts: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
 
+  const renderInline = (text: string, prefix: string): ReactNode[] => {
+    const inlinePattern = /(\*\*[^*]+\*\*|\[[^\]]+\]\(\/[^\s()]*\))/g;
+    const result: ReactNode[] = [];
+    let start = 0;
+    let inlineMatch: RegExpExecArray | null;
+    let inlineKey = 0;
+
+    while ((inlineMatch = inlinePattern.exec(text)) !== null) {
+      if (inlineMatch.index > start) result.push(text.slice(start, inlineMatch.index));
+      const token = inlineMatch[0];
+
+      if (token.startsWith("**") && token.endsWith("**")) {
+        result.push(
+          <strong key={`${prefix}-b-${inlineKey++}`} className="font-bold text-inherit">
+            {token.slice(2, -2)}
+          </strong>
+        );
+      } else {
+        const linkMatch = /^\[([^\]]+)\]\((\/[^\s()]*)\)$/.exec(token);
+        if (linkMatch) {
+          result.push(
+            <Link
+              key={`${prefix}-l-${inlineKey++}`}
+              href={linkMatch[2]}
+              onClick={() => onNavigate?.()}
+              className="font-semibold underline decoration-2 underline-offset-2 text-violet-600 dark:text-violet-400 hover:text-violet-500"
+            >
+              {linkMatch[1]}
+            </Link>
+          );
+        } else {
+          result.push(token);
+        }
+      }
+      start = inlineMatch.index + token.length;
+    }
+
+    if (start < text.length) result.push(text.slice(start));
+    return result;
+  };
+
   while ((match = pattern.exec(content)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(content.slice(lastIndex, match.index));
+      parts.push(...renderInline(content.slice(lastIndex, match.index), `p-${key++}`));
     }
-    parts.push(
-      <Link
-        key={key++}
-        href={match[2]}
-        onClick={() => onNavigate?.()}
-        className="font-semibold underline decoration-2 underline-offset-2 text-violet-600 dark:text-violet-400 hover:text-violet-500"
-      >
-        {match[1]}
-      </Link>
-    );
-    lastIndex = match.index + match[0].length;
+
+    const token = match[0];
+    if (token.startsWith("**") && token.endsWith("**")) {
+      parts.push(
+        <strong key={`b-${key++}`} className="font-bold text-inherit">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else {
+      const linkMatch = /^\[([^\]]+)\]\((\/[^\s()]*)\)$/.exec(token);
+      if (linkMatch) {
+        parts.push(
+          <Link
+            key={`l-${key++}`}
+            href={linkMatch[2]}
+            onClick={() => onNavigate?.()}
+            className="font-semibold underline decoration-2 underline-offset-2 text-violet-600 dark:text-violet-400 hover:text-violet-500"
+          >
+            {linkMatch[1]}
+          </Link>
+        );
+      }
+    }
+    lastIndex = match.index + token.length;
   }
+
   if (lastIndex < content.length) {
-    parts.push(content.slice(lastIndex));
+    parts.push(...renderInline(content.slice(lastIndex), `tail-${key++}`));
   }
+
   return parts;
 }
 
@@ -136,7 +180,13 @@ function GeneratedImageCard({ image }: { image: AskMeGeneratedImage }) {
   );
 }
 
-export default function AskMePanel({ role, onNavigate }: { role: "owner" | "staff"; onNavigate?: () => void }) {
+export default function AskMePanel({
+  role,
+  onNavigate,
+}: {
+  role: "owner" | "staff";
+  onNavigate?: () => void;
+}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -152,7 +202,6 @@ export default function AskMePanel({ role, onNavigate }: { role: "owner" | "staf
   const handleFileSelect = (file: File | undefined) => {
     setAttachError(null);
     if (!file) return;
-
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
       setAttachError("Please attach a JPEG, PNG, or WebP image.");
       return;
@@ -161,7 +210,6 @@ export default function AskMePanel({ role, onNavigate }: { role: "owner" | "staf
       setAttachError("That image is too large — please attach something under 4MB.");
       return;
     }
-
     const reader = new FileReader();
     reader.onload = () => setAttachedImage(reader.result as string);
     reader.onerror = () => setAttachError("Couldn't read that image — please try another.");
@@ -289,7 +337,11 @@ export default function AskMePanel({ role, onNavigate }: { role: "owner" | "staf
           <div className="px-3 pt-2.5 flex items-center gap-2">
             {attachedImage && (
               <div className="relative">
-                <img src={attachedImage} alt="Attached preview" className="h-12 w-12 rounded-lg object-cover border border-slate-300 dark:border-slate-700" />
+                <img
+                  src={attachedImage}
+                  alt="Attached preview"
+                  className="h-12 w-12 rounded-lg object-cover border border-slate-300 dark:border-slate-700"
+                />
                 <button
                   onClick={() => setAttachedImage(null)}
                   className="absolute -top-1.5 -right-1.5 h-4.5 w-4.5 rounded-full bg-slate-700 text-white flex items-center justify-center"
@@ -302,6 +354,7 @@ export default function AskMePanel({ role, onNavigate }: { role: "owner" | "staf
             {attachError && <p className="text-[11px] text-amber-600 dark:text-amber-400">{attachError}</p>}
           </div>
         )}
+
         <div className="p-3 flex items-center gap-2">
           <input
             ref={fileInputRef}
