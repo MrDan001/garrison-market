@@ -20,7 +20,7 @@
       }
     ],
     "paths": {
-      "@/lib/store-assistant.actions": ["./lib/shop-business-assistant-secure.actions"],
+      "@/lib/store-assistant.actions": ["./lib/store-assistant.actions"],
       "@/*": ["./*"]
     }
   },
