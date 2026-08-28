@@ -7,13 +7,8 @@ const moneyNumber = (value: unknown) => {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
 };
-
-const money = (value: unknown) => new Intl.NumberFormat("en-NG", {
-  style: "currency", currency: "NGN", maximumFractionDigits: 0,
-}).format(moneyNumber(value));
-
+const money = (value: unknown) => new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(moneyNumber(value));
 function since(days: number) { return new Date(Date.now() - days * 86_400_000); }
-
 function periodDays(question: string) {
   const q = question.toLowerCase();
   if (q.includes("today")) return 1;
@@ -23,7 +18,6 @@ function periodDays(question: string) {
   if (q.includes("year")) return 365;
   return 14;
 }
-
 function periodLabel(days: number) {
   if (days === 1) return "today";
   if (days === 7) return "this week";
@@ -46,15 +40,15 @@ export async function buildStoreAssistantContext(role: AssistantRole, ownerId: n
   const staffForOwner = role === "owner"
     ? await prisma.user.findMany({ where: { staffStoreId: storeId, role: "staff" }, orderBy: { fullName: "asc" }, take: 100, select: { id: true, fullName: true, email: true, status: true } })
     : await prisma.user.findMany({ where: { id: userId, staffStoreId: storeId, role: "staff" }, take: 1, select: { id: true, fullName: true, email: true, status: true } });
-
   const rushUserIds = staffForOwner.map((staff) => staff.id);
 
-  const [salesAgg, recentOrders, inventory, scaleInventory, customerCount, rushProfiles, clockEvents, debts, expenses, health] = await Promise.all([
+  const [salesAgg, recentOrders, inventory, scaleInventory, customerCount, topProductRows, rushProfiles, clockEvents, debts, expenses, health] = await Promise.all([
     prisma.order.aggregate({ where: { ownerId, storeId, date: { gte: from } }, _sum: { total: true }, _count: true }),
     prisma.order.findMany({ where: { ownerId, storeId, date: { gte: recentFrom } }, orderBy: { date: "desc" }, take: 600, select: { total: true, date: true, staffId: true, paymentMethod: true } }),
     prisma.inventory.findMany({ where: { ownerId, OR: [{ storeId }, { storeId: null }] }, orderBy: { quantity: "asc" }, take: 160, select: { name: true, quantity: true, price: true, costPrice: true, restockLevel: true, category: true, expiryDate: true } }),
     prisma.scaleInventory.findMany({ where: { ownerId, OR: [{ storeId }, { storeId: null }] }, orderBy: { quantity: "asc" }, take: 120, select: { name: true, quantity: true, unit: true, price: true, costPrice: true, restockLevel: true, category: true, expiryDate: true } }),
     prisma.customer.count({ where: { ownerId, storeId } }),
+    prisma.orderItem.findMany({ where: { order: { ownerId, storeId, date: { gte: recentFrom } } }, select: { quantity: true, inventory: { select: { name: true, price: true } } }, take: 2500 }),
     role === "owner"
       ? prisma.rushProfile.findMany({
           where: { storeId, userId: { in: rushUserIds } },
@@ -80,17 +74,14 @@ export async function buildStoreAssistantContext(role: AssistantRole, ownerId: n
     computeHealthForStore(storeId, ownerId).catch(() => null),
   ]);
 
+  const productTotals = new Map<string, number>();
+  for (const row of topProductRows) productTotals.set(row.inventory.name, (productTotals.get(row.inventory.name) ?? 0) + moneyNumber(row.quantity));
+  const topProducts = [...productTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+
   const staffStats = staffForOwner.map((staff) => {
     const staffOrders = recentOrders.filter((order) => order.staffId === staff.id);
     const attendance = clockEvents.filter((event) => event.userId === staff.id);
-    return {
-      name: staff.fullName || staff.email,
-      status: staff.status,
-      sales30d: staffOrders.reduce((sum, order) => sum + moneyNumber(order.total), 0),
-      orders30d: staffOrders.length,
-      attendance30d: attendance.length,
-      onTime30d: attendance.filter((event) => event.onTime).length,
-    };
+    return { name: staff.fullName || staff.email, status: staff.status, sales30d: staffOrders.reduce((sum, order) => sum + moneyNumber(order.total), 0), orders30d: staffOrders.length, attendance30d: attendance.length, onTime30d: attendance.filter((event) => event.onTime).length };
   });
 
   const rushRows: any[] = Array.isArray(rushProfiles) ? rushProfiles : (rushProfiles ? [rushProfiles] : []);
@@ -115,6 +106,7 @@ export async function buildStoreAssistantContext(role: AssistantRole, ownerId: n
     `PERIOD ASKED: ${periodLabel(days)}`,
     `SALES: ${money(salesAgg._sum.total)} across ${salesAgg._count} order(s)`,
     `CUSTOMERS: ${customerCount}`,
+    `TOP SELLING PRODUCTS (30d): ${topProducts.map(([name, qty], index) => `${index + 1}. ${name} — ${qty} unit(s)`).join("; ") || "no recorded product sales"}`,
     `STANDARD INVENTORY: ${inventory.length} items`,
     `STANDARD LOW STOCK: ${lowStock.slice(0, 30).map((item) => `${item.name} (${item.quantity} left)`).join("; ") || "none"}`,
     `STANDARD OUT OF STOCK: ${outOfStock.slice(0, 30).join(", ") || "none"}`,
@@ -148,6 +140,7 @@ export async function buildStoreAssistantContext(role: AssistantRole, ownerId: n
     lines.push(`CURRENT STAFF: ${me ? `${me.fullName || me.email}|status=${me.status}` : `userId=${userId}`}`);
     lines.push(`MY SALES (30d): ${money(mySales)} across ${myOrders.length} order(s)`);
     lines.push(`MY ATTENDANCE (30d): ${myClock.length} clock event(s), ${myClock.filter((event) => event.onTime).length} on-time`);
+    lines.push(`MY TOP PRODUCTS (30d): ${topProducts.slice(0, 5).map(([name, qty], index) => `${index + 1}. ${name} — ${qty} unit(s)`).join("; ") || "none"}`);
     lines.push(`MY RUSH: ${myRush ? `level=${myRush.level}|xp=${myRush.totalXp}|xpIntoLevel=${myRush.xpIntoLevel}|currentStreak=${myRush.currentStreak}|longestStreak=${myRush.longestStreak}|lastActive=${myRush.lastActiveDate?.toISOString() ?? "—"}|shield=${myRush.streakShieldActive}|badges=${JSON.stringify(myRush.badges)}|quests=${JSON.stringify(myRush.questProgress)}|rewards=${JSON.stringify(myRush.rewardSpins)}` : "No Rush profile found yet."}`);
     lines.push("STAFF PRIVACY: Discuss only this staff member's own operational performance, attendance and Rush data plus general store operations. Never reveal owner-only financials, debtor balances, private expenses, payroll, supplier/private owner data, or another staff member's private performance/Rush data.");
   }
