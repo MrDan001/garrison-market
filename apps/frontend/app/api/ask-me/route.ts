@@ -7,6 +7,7 @@ import {
   buildStoreAssistantIntelligence,
   type AssistantRole,
 } from "@/lib/store-assistant-intelligence";
+import { buildStoreAssistantStage2 } from "@/lib/store-assistant-stage2";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 // OpenRouter's router selects an available model/provider for the request.
@@ -172,7 +173,8 @@ export async function POST(request: NextRequest) {
     if (direct) return NextResponse.json({ success: true, reply: direct, products: [] });
 
     const liveContext = await buildStoreAssistantIntelligence(role, ownerId, storeId, staffId, question);
-    const system = assistantSystemPrompt(role, liveContext);
+    const stage2Analysis = await buildStoreAssistantStage2(role, ownerId, storeId, staffId, question);
+    const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}`);
     const userContent: any = imageDataUrl
       ? [{ type: "text", text: question || "Please analyze this image in the context of my Garrison Market store." }, { type: "image_url", image_url: { url: imageDataUrl } }]
       : question;
