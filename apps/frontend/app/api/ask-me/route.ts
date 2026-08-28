@@ -9,9 +9,9 @@ import {
 } from "@/lib/store-assistant-intelligence";
 import { buildStoreAssistantStage2 } from "@/lib/store-assistant-stage2";
 import { buildStoreAssistantStage3, getStage3BlockedReply } from "@/lib/store-assistant-stage3";
+import { buildStoreAssistantStage4 } from "@/lib/store-assistant-stage4";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-// OpenRouter's router selects an available model/provider for the request.
 const OPENROUTER_MODEL = "openrouter/free";
 const MAX_HISTORY = 10;
 const MAX_CHARS = 2400;
@@ -107,18 +107,10 @@ async function askOpenRouter(messages: any[]) {
 
     if (!response.ok) {
       console.error("ASK_ME_OPENROUTER_ERROR", response.status, raw.slice(0, 3000));
-      if (response.status === 401) {
-        return { reply: "", error: "Ask Me could not authenticate with OpenRouter. Please check the OPENROUTER_API_KEY in Vercel." };
-      }
-      if (response.status === 402) {
-        return { reply: "", error: "OpenRouter rejected this request (402). The selected free AI route may be temporarily unavailable or the account may have reached its current limit. Please try again shortly." };
-      }
-      if (response.status === 404) {
-        return { reply: "", error: "OpenRouter could not find the requested AI route. Ask Me has been configured to use OpenRouter's live free-model router; please redeploy this version." };
-      }
-      if (response.status === 429) {
-        return { reply: "", error: "Ask Me is temporarily rate-limited by the AI provider. Please try again in a moment." };
-      }
+      if (response.status === 401) return { reply: "", error: "Ask Me could not authenticate with OpenRouter. Please check the OPENROUTER_API_KEY in Vercel." };
+      if (response.status === 402) return { reply: "", error: "OpenRouter rejected this request (402). The selected free AI route may be temporarily unavailable or the account may have reached its current limit. Please try again shortly." };
+      if (response.status === 404) return { reply: "", error: "OpenRouter could not find the requested AI route. Ask Me has been configured to use OpenRouter's live free-model router; please redeploy this version." };
+      if (response.status === 429) return { reply: "", error: "Ask Me is temporarily rate-limited by the AI provider. Please try again in a moment." };
       return { reply: "", error: `The AI provider returned an error (${response.status}). Please try again.` };
     }
 
@@ -131,10 +123,7 @@ async function askOpenRouter(messages: any[]) {
     return { reply, error: "" };
   } catch (error) {
     console.error("ASK_ME_OPENROUTER_FETCH_ERROR", error);
-    return {
-      reply: "",
-      error: error instanceof Error && error.name === "AbortError" ? "The AI service took too long to respond. Please try again." : "Ask Me could not reach the AI service. Please try again.",
-    };
+    return { reply: "", error: error instanceof Error && error.name === "AbortError" ? "The AI service took too long to respond. Please try again." : "Ask Me could not reach the AI service. Please try again." };
   } finally {
     clearTimeout(timeout);
   }
@@ -143,9 +132,7 @@ async function askOpenRouter(messages: any[]) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getSessionUser();
-    if (!session || (session.role !== "owner" && session.role !== "staff")) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session || (session.role !== "owner" && session.role !== "staff")) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json().catch(() => null);
     const rawHistory = Array.isArray(body?.history) ? body.history : [];
@@ -179,7 +166,8 @@ export async function POST(request: NextRequest) {
     const liveContext = await buildStoreAssistantIntelligence(role, ownerId, storeId, staffId, question);
     const stage2Analysis = await buildStoreAssistantStage2(role, ownerId, storeId, staffId, question);
     const stage3Access = buildStoreAssistantStage3(role, question);
-    const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}`);
+    const stage4Rush = await buildStoreAssistantStage4(role, question);
+    const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}\n\n${stage4Rush}`);
     const userContent: any = imageDataUrl
       ? [{ type: "text", text: question || "Please analyze this image in the context of my Garrison Market store." }, { type: "image_url", image_url: { url: imageDataUrl } }]
       : question;
