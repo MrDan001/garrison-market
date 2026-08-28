@@ -41,19 +41,29 @@ function limited(id: number) {
 }
 
 function questionType(q: string) {
-  const s = lower(q);
-  if (has(s, ["profit", "margin", "earn"])) return "profit";
-  if (has(s, ["owe", "debt", "debtor", "credit sale", "part-payment", "part payment"])) return "debts";
-  if (has(s, ["expense", "spend", "expenditure"])) return "expenses";
-  if (has(s, ["staff", "employee", "who sold", "salesperson", "attendance"])) return "staff";
-  if (has(s, ["customer", "buyer", "client"])) return "customers";
-  if (has(s, ["stock", "inventory", "restock", "out of stock", "expiry", "expire"])) return "inventory";
-  if (has(s, PRODUCT_WORDS) || has(s, ["product", "item"])) return "products";
+  const s = lower(q).replace(/\s+/g, " ").trim();
+  if (has(s, ["profit", "margin", "net profit", "gross profit", "profitability"])) return "profit";
+  if (has(s, ["owe", "owes", "debt", "debtor", "credit sale", "part-payment", "part payment"])) return "debts";
+  if (has(s, ["expense", "expenses", "spend", "spent", "expenditure", "cost of running"])) return "expenses";
+  if (has(s, ["staff", "employee", "who sold", "salesperson", "attendance", "employee performance"])) return "staff";
+  if (has(s, ["customer", "customers", "buyer", "client"])) return "customers";
+  if (has(s, ["stock", "inventory", "restock", "out of stock", "expiry", "expire", "low stock"])) return "inventory";
+  if (has(s, PRODUCT_WORDS) || has(s, ["product", "products", "item", "items"])) return "products";
   if (has(s, ["wastage", "waste", "damaged", "shrink", "stock loss"])) return "losses";
   if (has(s, ["return", "refund", "supplier"])) return "returns";
   if (has(s, ["store", "shop", "address", "phone", "opening"])) return "store";
-  if (has(s, ["sale", "revenue", "turnover", "sold", "sales"])) return "sales";
+  if (has(s, ["sale", "sales", "revenue", "turnover", "sold", "selling", "how much did we make", "how much have we made", "what did we make", "made today", "made this week", "made this month"])) return "sales";
   return "general";
+}
+
+function salesDays(q: string) {
+  const s = lower(q);
+  if (has(s, ["today", "this day", "daily"])) return 1;
+  if (has(s, ["yesterday"])) return 1;
+  if (has(s, ["this week", "this-week", "weekly", "last 7 days", "past 7 days", "week so far"])) return 7;
+  if (has(s, ["this month", "this-month", "monthly", "last 30 days", "past 30 days", "month so far"])) return 30;
+  if (has(s, ["this year", "this-year", "yearly", "last 365 days", "past year", "year so far"])) return 365;
+  return 14;
 }
 
 async function salesContext(ownerId: number, storeId: number, days = 14): Promise<string> {
@@ -79,7 +89,9 @@ async function salesContext(ownerId: number, storeId: number, days = 14): Promis
   }
   const top = [...products.values()].sort((a, b) => b.units - a.units).slice(0, 10).map((p, i) => `${i + 1}. ${p.name} — ${p.units} units — ${money(p.revenue)}`).join("\n") || "None";
   const staffLines = [...staff.entries()].map(([id, s]) => `staffId=${id} — ${money(s.total)} — ${s.orders} sale(s)`).join("\n") || "None";
-  return `SALES\nCurrent ${days} days: ${money(current._sum.total)} across ${current._count} sales\nPrevious ${days} days: ${money(prior._sum.total)} across ${prior._count} sales\nRecorded gross profit estimate: ${gross !== 0 ? money(gross) : "not reliably calculable"}\n\nTOP PRODUCTS\n${top}\n\nSTAFF SALES\n${staffLines}`;
+  const currentLabel = days === 1 ? "Today" : `Current ${days} days`;
+  const previousLabel = days === 1 ? "Previous day" : `Previous ${days} days`;
+  return `SALES\n${currentLabel}: ${money(current._sum.total)} across ${current._count} sales\n${previousLabel}: ${money(prior._sum.total)} across ${prior._count} sales\nRecorded gross profit estimate: ${gross !== 0 ? money(gross) : "not reliably calculable"}\n\nTOP PRODUCTS\n${top}\n\nSTAFF SALES\n${staffLines}`;
 }
 
 async function inventoryContext(ownerId: number, storeId: number): Promise<string> {
@@ -100,24 +112,24 @@ async function staffContext(ownerId: number, storeId: number, staffId: number): 
   return `STAFF OPERATIONAL DATA\nStore=${store?.name ?? "Unknown"}\nYour recent sale count=${orders.length}\n\nINVENTORY\n${inventory.map((p) => `${p.name} | qty=${p.quantity} | price=${money(p.price)} | category=${p.category ?? "—"} | restock=${p.restockLevel ?? "—"} | expiry=${fmtDate(p.expiryDate)} | sku=${p.sku ?? "—"} | barcode=${p.barcode ?? "—"}`).join("\n") || "None"}\n\nLOW STOCK\n${low.map((p) => `${p.name} — ${p.quantity} left`).join("\n") || "None"}\n\nYOUR RECENT SALES\n${orders.map((o) => `${fmtDate(o.date)} — ${money(o.total)} — ${o.paymentMethod}`).join("\n") || "None"}`;
 }
 
-async function ownerContext(ownerId: number, storeId: number, type: string): Promise<string> {
-  if (type === "sales") return salesContext(ownerId, storeId, 14);
+async function ownerContext(ownerId: number, storeId: number, type: string, question = ""): Promise<string> {
+  if (type === "sales") return salesContext(ownerId, storeId, salesDays(question));
   if (type === "products") return `${await salesContext(ownerId, storeId, 30)}\n\n${await inventoryContext(ownerId, storeId)}`;
   if (type === "inventory") return inventoryContext(ownerId, storeId);
-  if (type === "profit") return `${await salesContext(ownerId, storeId, 30)}\n\nOWNER PROFIT NOTE\nProfit must account for recorded product costs and applicable expenses. Do not call the gross estimate net profit.`;
-  if (type === "staff") return salesContext(ownerId, storeId, 14);
+  if (type === "profit") return `${await salesContext(ownerId, storeId, salesDays(question))}\n\nOWNER PROFIT NOTE\nProfit must account for recorded product costs and applicable expenses. Do not call the gross estimate net profit.`;
+  if (type === "staff") return salesContext(ownerId, storeId, salesDays(question));
   if (type === "store") { const s = await prisma.store.findFirst({ where: { id: storeId, ownerId }, select: { name: true, storeType: true, phoneNumber: true, address: true, city: true, state: true, shiftStartTime: true } }); return `STORE\n${s ? JSON.stringify(s) : "No store record found."}`; }
   if (type === "customers") { const rows = await prisma.customer.findMany({ where: { ownerId, storeId }, orderBy: { updatedAt: "desc" }, take: 100, select: { name: true, createdAt: true, updatedAt: true } }); return `CUSTOMERS\n${rows.map((c) => `${c.name} — updated ${fmtDate(c.updatedAt)}`).join("\n") || "No customers."}`; }
   if (type === "debts") { const rows = await prisma.debt.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 120 }); return `DEBTS OWNER ONLY\n${rows.map((d: any) => JSON.stringify(d)).join("\n") || "No debt records."}`; }
   if (type === "expenses") { const rows = await prisma.expense.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 120 }); return `EXPENSES OWNER ONLY\n${rows.map((e: any) => JSON.stringify(e)).join("\n") || "No expense records."}`; }
   if (type === "losses") { const rows = await prisma.stockLoss.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 100, select: { quantity: true, reason: true, note: true, createdAt: true, inventory: { select: { name: true } } } }); return `STOCK LOSSES\n${rows.map((x) => `${x.inventory.name} — ${x.quantity} — ${x.reason} — ${x.note ?? ""} — ${fmtDate(x.createdAt)}`).join("\n") || "No recorded losses."}`; }
   if (type === "returns") { const rows = await prisma.stockReturn.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 100, select: { quantity: true, supplierName: true, reason: true, refundAmount: true, createdAt: true, inventory: { select: { name: true } } } }); return `STOCK RETURNS OWNER ONLY\n${rows.map((x) => `${x.inventory.name} — ${x.quantity} — supplier=${x.supplierName ?? "—"} — refund=${money(x.refundAmount)} — ${fmtDate(x.createdAt)}`).join("\n") || "No recorded returns."}`; }
-  return `${await ownerContext(ownerId, storeId, "store")}\n\n${await inventoryContext(ownerId, storeId)}`;
+  return "No live business dataset was selected for this question.";
 }
 
 async function targetedContext(role: Role, ownerId: number, storeId: number, staffId: number, question: string): Promise<string> {
   if (role === "staff") return staffContext(ownerId, storeId, staffId);
-  return ownerContext(ownerId, storeId, questionType(question));
+  return ownerContext(ownerId, storeId, questionType(question), question);
 }
 
 function systemPrompt(role: Role, context: string, knowledge: string, question: string) {
