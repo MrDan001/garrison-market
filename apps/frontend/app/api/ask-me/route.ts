@@ -4,7 +4,7 @@ import { getActiveStoreId } from "@/lib/store-context";
 import prisma from "@/lib/prisma";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "openai/gpt-4o-mini";
+const MODEL = "openrouter/free";
 const MAX_HISTORY = 10;
 const MAX_CHARS = 2400;
 const MAX_CONTEXT = 26000;
