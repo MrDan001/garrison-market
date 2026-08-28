@@ -1,0 +1,32 @@
+name: Ask Me Stage 7.1 E2E
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ask-me-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    env:
+      ASK_ME_E2E_BASE_URL: ${{ secrets.ASK_ME_E2E_BASE_URL }}
+      ASK_ME_E2E_OWNER_A_COOKIE: ${{ secrets.ASK_ME_E2E_OWNER_A_COOKIE }}
+      ASK_ME_E2E_STAFF_A_COOKIE: ${{ secrets.ASK_ME_E2E_STAFF_A_COOKIE }}
+      ASK_ME_E2E_OWNER_B_COOKIE: ${{ secrets.ASK_ME_E2E_OWNER_B_COOKIE }}
+      ASK_ME_E2E_STAFF_B_COOKIE: ${{ secrets.ASK_ME_E2E_STAFF_B_COOKIE }}
+      ASK_ME_E2E_STORE_B_ID: ${{ secrets.ASK_ME_E2E_STORE_B_ID }}
+      ASK_ME_E2E_STORE_B_SENTINEL: ${{ secrets.ASK_ME_E2E_STORE_B_SENTINEL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Ask Me authenticated security matrix
+        run: node scripts/ask-me-e2e.mjs
