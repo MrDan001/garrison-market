@@ -81,6 +81,37 @@ function extractText(payload: any) {
   return "";
 }
 
+function isRushTopic(text: string) {
+  return /\b(rush|xp|experience|streak|spin|wheel|quest|restock run|sales sprint|leaderboard|badge|reward|level|clock in|clock out|on time|mvp)\b/i.test(text);
+}
+
+/**
+ * Short follow-ups such as "show me", "yes", or "what about that?" often
+ * contain no topic by themselves. Keep the normal conversation history for
+ * the model, but also give the deterministic Rush context layer the previous
+ * Rush question so it can fetch the right live data instead of silently
+ * falling through to a generic AI request.
+ */
+function buildRushContextQuestion(question: string, history: ChatMessage[]) {
+  const q = question.trim();
+  const previousUserQuestion = [...history]
+    .reverse()
+    .find((message) => message.role === "user" && message.content.trim())?.content.trim() ?? "";
+
+  if (!previousUserQuestion || !isRushTopic(previousUserQuestion)) return q;
+
+  const normalized = q.toLowerCase();
+  const explicitRush = isRushTopic(q);
+  const shortFollowUp = q.length <= 80 && (
+    /^(show|show me|yes|yes please|okay|ok|sure|go ahead|do it|what about (that|it)|and then\??|then what\??|tell me more|more|how\??|why\??|which ones\??|what ones\??)[!?. ]*$/i.test(normalized) ||
+    !explicitRush && /^(what|which|how|why|when|where|who|can|could|tell|give|list)\b/i.test(normalized)
+  );
+
+  return shortFollowUp
+    ? `Previous Rush question: ${previousUserQuestion}\nCurrent Rush follow-up: ${q}`
+    : q;
+}
+
 async function askOpenRouter(messages: any[]) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return { reply: "", error: "Ask Me is not configured yet: OPENROUTER_API_KEY is missing." };
@@ -166,7 +197,8 @@ export async function POST(request: NextRequest) {
     const liveContext = await buildStoreAssistantIntelligence(role, ownerId, storeId, staffId, question);
     const stage2Analysis = await buildStoreAssistantStage2(role, ownerId, storeId, staffId, question);
     const stage3Access = buildStoreAssistantStage3(role, question);
-    const stage4Rush = await buildStoreAssistantStage4(role, question);
+    const stage4Question = buildRushContextQuestion(question, history);
+    const stage4Rush = await buildStoreAssistantStage4(role, stage4Question);
     const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}\n\n${stage4Rush}`);
     const userContent: any = imageDataUrl
       ? [{ type: "text", text: question || "Please analyze this image in the context of my Garrison Market store." }, { type: "image_url", image_url: { url: imageDataUrl } }]
