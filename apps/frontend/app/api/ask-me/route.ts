@@ -21,6 +21,36 @@ function money(value: unknown) { const n = Number(value ?? 0); return Number.isF
 function periodDays(question: string) { const q = question.toLowerCase(); if (q.includes("today")) return 1; if (q.includes("yesterday")) return 2; if (q.includes("week")) return 7; if (q.includes("month")) return 30; if (q.includes("year")) return 365; return 14; }
 function since(days: number) { return new Date(Date.now() - days * 86_400_000); }
 
+/**
+ * Staff privacy is enforced on the server immediately before model assembly.
+ * Individual stages intentionally collect richer owner context, so this final
+ * boundary prevents a future stage from accidentally putting owner-only
+ * financial/inventory detail back into the staff model prompt.
+ */
+function redactStaffContext(context: string) {
+  const blockedLinePrefixes = [
+    "STANDARD INVENTORY DETAIL:",
+    "SCALE INVENTORY DETAIL:",
+    "RECENT REPORTS (30d):",
+    "KNOWN-COST PRODUCT REVENUE:",
+    "KNOWN PRODUCT COST:",
+    "ESTIMATED GROSS PROFIT FROM KNOWN COSTS:",
+    "ESTIMATED GROSS MARGIN FROM KNOWN COSTS:",
+    "TOP PRODUCTS BY ESTIMATED GROSS PROFIT:",
+    "INVENTORY RETAIL VALUE:",
+    "INVENTORY COST VALUE:",
+    "RUSH SHOP HEALTH:",
+    "RUSH SHOP HEALTH BREAKDOWN:",
+    "BUSINESS SIGNALS:",
+    "RECOMMENDED ACTIONS:",
+  ];
+
+  return context
+    .split("\n")
+    .filter((line) => !blockedLinePrefixes.some((prefix) => line.trimStart().startsWith(prefix)))
+    .join("\n");
+}
+
 async function directAnswer(role: AssistantRole, ownerId: number, storeId: number, staffId: number, question: string) {
   const q = question.toLowerCase().trim();
   if (isGreeting(q)) return "Hello! I’m Ask Me, your Garrison Market assistant. I can work with this store’s live business data, staff activity and Rush information while respecting owner/staff privacy.";
@@ -88,8 +118,14 @@ export async function POST(request: NextRequest) {
     const stage3Access = buildStoreAssistantStage3(role, question);
     const stage4Question = buildRushContextQuestion(question, history); const stage4Rush = await buildStoreAssistantStage4(role, stage4Question);
     const stage5Recommendations = await buildStoreAssistantStage5(role, ownerId, storeId, staffId, question);
-    const stage6Reliability = buildStoreAssistantStage6(role, question);
-    const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}\n\n${stage4Rush}\n\n${stage5Recommendations}\n\n${stage6Reliability}`);
+    // The question is already supplied as an untrusted user message. Do not
+    // duplicate it inside the system prompt where prompt-injection text would
+    // gain system-message placement.
+    const stage6Reliability = buildStoreAssistantStage6(role, "");
+    const combinedContext = role === "staff"
+      ? redactStaffContext(`${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}\n\n${stage4Rush}\n\n${stage5Recommendations}\n\n${stage6Reliability}`)
+      : `${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}\n\n${stage4Rush}\n\n${stage5Recommendations}\n\n${stage6Reliability}`;
+    const system = assistantSystemPrompt(role, combinedContext);
     const userContent: any = imageDataUrl ? [{ type: "text", text: question || "Please analyze this image in the context of my Garrison Market store." }, { type: "image_url", image_url: { url: imageDataUrl } }] : question;
     const messages: any[] = [{ role: "system", content: system }, ...history.slice(-8, -1), { role: "user", content: userContent }];
     const ai = await askOpenRouter(messages); if (!ai.reply) return NextResponse.json({ success: false, error: ai.error || "Ask Me could not produce an answer." }, { status: 502 });
