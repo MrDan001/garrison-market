@@ -56,7 +56,7 @@ function questionType(q: string) {
   return "general";
 }
 
-async function salesContext(ownerId: number, storeId: number, days = 14) {
+async function salesContext(ownerId: number, storeId: number, days = 14): Promise<string> {
   const since = new Date(Date.now() - days * 86400000);
   const previous = new Date(Date.now() - days * 2 * 86400000);
   const [current, prior, orders] = await Promise.all([
@@ -82,7 +82,7 @@ async function salesContext(ownerId: number, storeId: number, days = 14) {
   return `SALES\nCurrent ${days} days: ${money(current._sum.total)} across ${current._count} sales\nPrevious ${days} days: ${money(prior._sum.total)} across ${prior._count} sales\nRecorded gross profit estimate: ${gross !== 0 ? money(gross) : "not reliably calculable"}\n\nTOP PRODUCTS\n${top}\n\nSTAFF SALES\n${staffLines}`;
 }
 
-async function inventoryContext(ownerId: number, storeId: number) {
+async function inventoryContext(ownerId: number, storeId: number): Promise<string> {
   const rows = await prisma.inventory.findMany({ where: { ownerId, storeId }, orderBy: { quantity: "asc" }, take: 180, select: { name: true, quantity: true, price: true, category: true, restockLevel: true, expiryDate: true, sku: true, barcode: true } });
   const now = Date.now();
   const low = rows.filter((p) => p.restockLevel != null && Number(p.quantity) <= Number(p.restockLevel));
@@ -90,7 +90,7 @@ async function inventoryContext(ownerId: number, storeId: number) {
   return `INVENTORY\n${rows.map((p) => `${p.name} | qty=${p.quantity} | price=${money(p.price)} | category=${p.category ?? "—"} | restock=${p.restockLevel ?? "—"} | expiry=${fmtDate(p.expiryDate)} | sku=${p.sku ?? "—"} | barcode=${p.barcode ?? "—"}`).join("\n") || "None"}\n\nLOW STOCK\n${low.map((p) => `${p.name} — ${p.quantity} left; restock level ${p.restockLevel}`).join("\n") || "None"}\n\nEXPIRING WITHIN 30 DAYS\n${expiring.map((p) => `${p.name} — ${p.quantity} — expires ${fmtDate(p.expiryDate)}`).join("\n") || "None"}`;
 }
 
-async function staffContext(ownerId: number, storeId: number, staffId: number) {
+async function staffContext(ownerId: number, storeId: number, staffId: number): Promise<string> {
   const [store, inventory, orders] = await Promise.all([
     prisma.store.findFirst({ where: { id: storeId, ownerId }, select: { name: true, storeType: true } }),
     prisma.inventory.findMany({ where: { ownerId, storeId }, orderBy: { quantity: "asc" }, take: 180, select: { name: true, quantity: true, price: true, category: true, restockLevel: true, expiryDate: true, sku: true, barcode: true } }),
@@ -100,7 +100,7 @@ async function staffContext(ownerId: number, storeId: number, staffId: number) {
   return `STAFF OPERATIONAL DATA\nStore=${store?.name ?? "Unknown"}\nYour recent sale count=${orders.length}\n\nINVENTORY\n${inventory.map((p) => `${p.name} | qty=${p.quantity} | price=${money(p.price)} | category=${p.category ?? "—"} | restock=${p.restockLevel ?? "—"} | expiry=${fmtDate(p.expiryDate)} | sku=${p.sku ?? "—"} | barcode=${p.barcode ?? "—"}`).join("\n") || "None"}\n\nLOW STOCK\n${low.map((p) => `${p.name} — ${p.quantity} left`).join("\n") || "None"}\n\nYOUR RECENT SALES\n${orders.map((o) => `${fmtDate(o.date)} — ${money(o.total)} — ${o.paymentMethod}`).join("\n") || "None"}`;
 }
 
-async function ownerContext(ownerId: number, storeId: number, type: string) {
+async function ownerContext(ownerId: number, storeId: number, type: string): Promise<string> {
   if (type === "sales") return salesContext(ownerId, storeId, 14);
   if (type === "products") return `${await salesContext(ownerId, storeId, 30)}\n\n${await inventoryContext(ownerId, storeId)}`;
   if (type === "inventory") return inventoryContext(ownerId, storeId);
@@ -108,14 +108,14 @@ async function ownerContext(ownerId: number, storeId: number, type: string) {
   if (type === "staff") return salesContext(ownerId, storeId, 14);
   if (type === "store") { const s = await prisma.store.findFirst({ where: { id: storeId, ownerId }, select: { name: true, storeType: true, phoneNumber: true, address: true, city: true, state: true, shiftStartTime: true } }); return `STORE\n${s ? JSON.stringify(s) : "No store record found."}`; }
   if (type === "customers") { const rows = await prisma.customer.findMany({ where: { ownerId, storeId }, orderBy: { updatedAt: "desc" }, take: 100, select: { name: true, createdAt: true, updatedAt: true } }); return `CUSTOMERS\n${rows.map((c) => `${c.name} — updated ${fmtDate(c.updatedAt)}`).join("\n") || "No customers."}`; }
-  if (type === "debts") { const rows = await prisma.debt.findMany({ where: { ownerId, storeId }, orderBy: { updatedAt: "desc" }, take: 120 }); return `DEBTS OWNER ONLY\n${rows.map((d: any) => JSON.stringify(d)).join("\n") || "No debt records."}`; }
+  if (type === "debts") { const rows = await prisma.debt.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 120 }); return `DEBTS OWNER ONLY\n${rows.map((d: any) => JSON.stringify(d)).join("\n") || "No debt records."}`; }
   if (type === "expenses") { const rows = await prisma.expense.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 120 }); return `EXPENSES OWNER ONLY\n${rows.map((e: any) => JSON.stringify(e)).join("\n") || "No expense records."}`; }
   if (type === "losses") { const rows = await prisma.stockLoss.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 100, select: { quantity: true, reason: true, note: true, createdAt: true, inventory: { select: { name: true } } } }); return `STOCK LOSSES\n${rows.map((x) => `${x.inventory.name} — ${x.quantity} — ${x.reason} — ${x.note ?? ""} — ${fmtDate(x.createdAt)}`).join("\n") || "No recorded losses."}`; }
   if (type === "returns") { const rows = await prisma.stockReturn.findMany({ where: { ownerId, storeId }, orderBy: { createdAt: "desc" }, take: 100, select: { quantity: true, supplierName: true, reason: true, refundAmount: true, createdAt: true, inventory: { select: { name: true } } } }); return `STOCK RETURNS OWNER ONLY\n${rows.map((x) => `${x.inventory.name} — ${x.quantity} — supplier=${x.supplierName ?? "—"} — refund=${money(x.refundAmount)} — ${fmtDate(x.createdAt)}`).join("\n") || "No recorded returns."}`; }
   return `${await ownerContext(ownerId, storeId, "store")}\n\n${await inventoryContext(ownerId, storeId)}`;
 }
 
-async function targetedContext(role: Role, ownerId: number, storeId: number, staffId: number, question: string) {
+async function targetedContext(role: Role, ownerId: number, storeId: number, staffId: number, question: string): Promise<string> {
   if (role === "staff") return staffContext(ownerId, storeId, staffId);
   return ownerContext(ownerId, storeId, questionType(question));
 }
