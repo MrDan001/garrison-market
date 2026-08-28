@@ -13,13 +13,14 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "types": ["node"],  // 🌟 ADDED: Fixes "Cannot find name 'process'"
+    "types": ["node"],
     "plugins": [
       {
         "name": "next"
       }
     ],
     "paths": {
+      "@/lib/store-assistant.actions": ["./lib/shop-business-assistant.actions"],
       "@/*": ["./*"]
     }
   },
@@ -31,7 +32,7 @@
     ".next/dev/types/**/*.ts",
     "prisma/seed.ts",
     "next.config.ts",
-    "prisma.config.ts" // 🌟 ADDED: Ensures TypeScript checks your config file
+    "prisma.config.ts"
   ],
   "exclude": ["node_modules"]
 }
