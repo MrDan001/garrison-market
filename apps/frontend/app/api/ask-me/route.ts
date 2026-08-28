@@ -8,151 +8,19 @@ import { buildStoreAssistantStage3, getStage3BlockedReply } from "@/lib/store-as
 import { buildStoreAssistantStage4 } from "@/lib/store-assistant-stage4";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-// Pin Ask Me to one general-purpose model. Do not use openrouter/free here:
-// that router can select unrelated free models, including safety/classifier models.
-const OPENROUTER_MODEL = "openai/gpt-oss-120b:free";
+const OPENROUTER_MODEL = "openai/gpt-oss-20b:free";
 const MAX_HISTORY = 10;
 const MAX_CHARS = 2400;
 const MAX_IMAGE_CHARS = 3_500_000;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
-
-function isGreeting(q: string) {
-  return /^(hi|hello|hey|helo|helli|good morning|good afternoon|good evening|how are you)[!?. ]*$/i.test(q.trim());
-}
-
-function money(value: unknown) {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n) : "₦0";
-}
-
-function periodDays(question: string) {
-  const q = question.toLowerCase();
-  if (q.includes("today")) return 1;
-  if (q.includes("yesterday")) return 2;
-  if (q.includes("week")) return 7;
-  if (q.includes("month")) return 30;
-  if (q.includes("year")) return 365;
-  return 14;
-}
-
+function isGreeting(q: string) { return /^(hi|hello|hey|helo|helli|good morning|good afternoon|good evening|how are you)[!?. ]*$/i.test(q.trim()); }
+function money(value: unknown) { const n = Number(value ?? 0); return Number.isFinite(n) ? new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n) : "₦0"; }
+function periodDays(question: string) { const q = question.toLowerCase(); if (q.includes("today")) return 1; if (q.includes("yesterday")) return 2; if (q.includes("week")) return 7; if (q.includes("month")) return 30; if (q.includes("year")) return 365; return 14; }
 function since(days: number) { return new Date(Date.now() - days * 86_400_000); }
-
-async function directAnswer(role: AssistantRole, ownerId: number, storeId: number, staffId: number, question: string) {
-  const q = question.toLowerCase().trim();
-  if (isGreeting(q)) return "Hello! I’m Ask Me, your Garrison Market assistant. I can work with this store’s live business data, staff activity and Rush information while respecting owner/staff privacy.";
-  const days = periodDays(q);
-  if (/how much did we sell|total sales|sales total|how much was sold|sales so far|sales for/.test(q)) {
-    const where: any = { ownerId, storeId, date: { gte: since(days) } };
-    if (role === "staff") where.staffId = staffId;
-    const result = await prisma.order.aggregate({ where, _sum: { total: true }, _count: true });
-    const label = days === 1 ? "today" : days === 7 ? "this week" : days === 30 ? "this month" : `the last ${days} days`;
-    return `For ${label}, the live data shows ${money(result._sum.total)} across ${result._count} recorded order(s).`;
-  }
-  if (/latest sale|last sale|most recent sale/.test(q)) {
-    const where: any = { ownerId, storeId, date: { gte: since(days) } };
-    if (role === "staff") where.staffId = staffId;
-    const order = await prisma.order.findFirst({ where, orderBy: { date: "desc" }, select: { total: true, date: true, paymentMethod: true } });
-    return order ? `The latest recorded sale was ${money(order.total)} via ${order.paymentMethod} on ${order.date.toLocaleString("en-NG")}.` : "There are no recorded sales in the requested period.";
-  }
-  return null;
-}
-
-function extractText(payload: any) {
-  const content = payload?.choices?.[0]?.message?.content;
-  if (typeof content === "string" && content.trim()) return content.trim();
-  if (Array.isArray(content)) {
-    const text = content.map((part: any) => typeof part === "string" ? part : typeof part?.text === "string" ? part.text : "").join("").trim();
-    if (text) return text;
-  }
-  return "";
-}
-
-function isRushTopic(text: string) {
-  return /\b(rush|xp|experience|streak|spin|wheel|quest|restock run|sales sprint|leaderboard|badge|reward|level|clock in|clock out|on time|mvp)\b/i.test(text);
-}
-
-function buildRushContextQuestion(question: string, history: ChatMessage[]) {
-  const q = question.trim();
-  const previousUserQuestion = [...history].reverse().find((message) => message.role === "user" && message.content.trim())?.content.trim() ?? "";
-  if (!previousUserQuestion || !isRushTopic(previousUserQuestion)) return q;
-  const normalized = q.toLowerCase();
-  const explicitRush = isRushTopic(q);
-  const shortFollowUp = q.length <= 80 && (/^(show|show me|yes|yes please|okay|ok|sure|go ahead|do it|what about (that|it)|and then\??|then what\??|tell me more|more|how\??|why\??|which ones\??|what ones\??)[!?. ]*$/i.test(normalized) || (!explicitRush && /^(what|which|how|why|when|where|who|can|could|tell|give|list)\b/i.test(normalized)));
-  return shortFollowUp ? `Previous Rush question: ${previousUserQuestion}\nCurrent Rush follow-up: ${q}` : q;
-}
-
-async function askOpenRouter(messages: any[]) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return { reply: "", error: "Ask Me is not configured yet: OPENROUTER_API_KEY is missing." };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
-  try {
-    const response = await fetch(OPENROUTER_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}`, "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "https://garrison-market.vercel.app", "X-Title": "Garrison Market Ask Me" },
-      body: JSON.stringify({ model: OPENROUTER_MODEL, messages, max_tokens: 1200, stream: false, temperature: 0.2 }),
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    const raw = await response.text();
-    let payload: any = null;
-    try { payload = JSON.parse(raw); } catch { /* handled below */ }
-    if (!response.ok) {
-      console.error("ASK_ME_OPENROUTER_ERROR", response.status, raw.slice(0, 3000));
-      if (response.status === 401) return { reply: "", error: "Ask Me could not authenticate with OpenRouter. Please check the OPENROUTER_API_KEY in Vercel." };
-      if (response.status === 402) return { reply: "", error: "OpenRouter rejected this request (402). The selected model is unavailable on the current account/limit. Please try again shortly." };
-      if (response.status === 404) return { reply: "", error: "OpenRouter could not find the selected Ask Me model. Please check the model configuration." };
-      if (response.status === 429) return { reply: "", error: "Ask Me is temporarily rate-limited by the AI provider. Please try again in a moment." };
-      return { reply: "", error: `The AI provider returned an error (${response.status}). Please try again.` };
-    }
-    const reply = extractText(payload);
-    if (!reply) {
-      console.error("ASK_ME_EMPTY_OPENROUTER_RESPONSE", JSON.stringify({ finishReason: payload?.choices?.[0]?.finish_reason, usage: payload?.usage, error: payload?.error }, null, 2).slice(0, 4000));
-      return { reply: "", error: "The AI provider returned no readable answer. Please try again." };
-    }
-    return { reply, error: "" };
-  } catch (error) {
-    console.error("ASK_ME_OPENROUTER_FETCH_ERROR", error);
-    return { reply: "", error: error instanceof Error && error.name === "AbortError" ? "The AI service took too long to respond. Please try again." : "Ask Me could not reach the AI service. Please try again." };
-  } finally { clearTimeout(timeout); }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const session = await getSessionUser();
-    if (!session || (session.role !== "owner" && session.role !== "staff")) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    const body = await request.json().catch(() => null);
-    const rawHistory = Array.isArray(body?.history) ? body.history : [];
-    const history: ChatMessage[] = rawHistory.slice(-MAX_HISTORY).map((item: any) => ({ role: item?.role === "assistant" ? "assistant" : "user", content: String(item?.content ?? "").slice(0, MAX_CHARS) })).filter((item: ChatMessage) => item.content.trim());
-    const question = history.filter((m) => m.role === "user").at(-1)?.content?.trim() ?? "";
-    const imageDataUrl = typeof body?.imageDataUrl === "string" ? body.imageDataUrl : "";
-    if (!question && !imageDataUrl) return NextResponse.json({ success: false, error: "Please ask a question." }, { status: 400 });
-    if (imageDataUrl && imageDataUrl.length > MAX_IMAGE_CHARS) return NextResponse.json({ success: false, error: "That image is too large to analyze. Please attach a smaller image." }, { status: 413 });
-    const storeId = await getActiveStoreId();
-    if (!storeId) return NextResponse.json({ success: false, error: "No active store is available for this account." }, { status: 400 });
-    const role = session.role as AssistantRole;
-    const ownerId = Number(session.ownerId ?? session.id);
-    const staffId = Number(session.id);
-    const store = await prisma.store.findFirst({ where: { id: storeId, ownerId }, select: { id: true } });
-    if (!store) return NextResponse.json({ success: false, error: "This store is not available to the current account." }, { status: 403 });
-    const direct = await directAnswer(role, ownerId, storeId, staffId, question);
-    if (direct) return NextResponse.json({ success: true, reply: direct, products: [] });
-    const blocked = getStage3BlockedReply(role, question);
-    if (blocked) return NextResponse.json({ success: true, reply: blocked, products: [] });
-    const liveContext = await buildStoreAssistantIntelligence(role, ownerId, storeId, staffId, question);
-    const stage2Analysis = await buildStoreAssistantStage2(role, ownerId, storeId, staffId, question);
-    const stage3Access = buildStoreAssistantStage3(role, question);
-    const stage4Question = buildRushContextQuestion(question, history);
-    const stage4Rush = await buildStoreAssistantStage4(role, stage4Question);
-    const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}\n\n${stage4Rush}`);
-    const userContent: any = imageDataUrl ? [{ type: "text", text: question || "Please analyze this image in the context of my Garrison Market store." }, { type: "image_url", image_url: { url: imageDataUrl } }] : question;
-    const messages: any[] = [{ role: "system", content: system }, ...history.slice(-8, -1), { role: "user", content: userContent }];
-    const ai = await askOpenRouter(messages);
-    if (!ai.reply) return NextResponse.json({ success: false, error: ai.error || "Ask Me could not produce an answer." }, { status: 502 });
-    return NextResponse.json({ success: true, reply: ai.reply, products: [] });
-  } catch (error) {
-    console.error("ASK_ME_ROUTE_ERROR", error);
-    return NextResponse.json({ success: false, error: "Ask Me encountered a server error. Please try again." }, { status: 500 });
-  }
-}
+async function directAnswer(role: AssistantRole, ownerId: number, storeId: number, staffId: number, question: string) { const q = question.toLowerCase().trim(); if (isGreeting(q)) return "Hello! I’m Ask Me, your Garrison Market assistant. I can work with this store’s live business data, staff activity and Rush information while respecting owner/staff privacy."; const days = periodDays(q); if (/how much did we sell|total sales|sales total|how much was sold|sales so far|sales for/.test(q)) { const where: any = { ownerId, storeId, date: { gte: since(days) } }; if (role === "staff") where.staffId = staffId; const result = await prisma.order.aggregate({ where, _sum: { total: true }, _count: true }); const label = days === 1 ? "today" : days === 7 ? "this week" : days === 30 ? "this month" : `the last ${days} days`; return `For ${label}, the live data shows ${money(result._sum.total)} across ${result._count} recorded order(s).`; } if (/latest sale|last sale|most recent sale/.test(q)) { const where: any = { ownerId, storeId, date: { gte: since(days) } }; if (role === "staff") where.staffId = staffId; const order = await prisma.order.findFirst({ where, orderBy: { date: "desc" }, select: { total: true, date: true, paymentMethod: true } }); return order ? `The latest recorded sale was ${money(order.total)} via ${order.paymentMethod} on ${order.date.toLocaleString("en-NG")}.` : "There are no recorded sales in the requested period."; } return null; }
+function extractText(payload: any) { const content = payload?.choices?.[0]?.message?.content; if (typeof content === "string" && content.trim()) return content.trim(); if (Array.isArray(content)) { const text = content.map((part: any) => typeof part === "string" ? part : typeof part?.text === "string" ? part.text : "").join("").trim(); if (text) return text; } return ""; }
+function isRushTopic(text: string) { return /\b(rush|xp|experience|streak|spin|wheel|quest|restock run|sales sprint|leaderboard|badge|reward|level|clock in|clock out|on time|mvp)\b/i.test(text); }
+function buildRushContextQuestion(question: string, history: ChatMessage[]) { const q = question.trim(); const previousUserQuestion = [...history].reverse().find((message) => message.role === "user" && message.content.trim())?.content.trim() ?? ""; if (!previousUserQuestion || !isRushTopic(previousUserQuestion)) return q; const normalized = q.toLowerCase(); const explicitRush = isRushTopic(q); const shortFollowUp = q.length <= 80 && (/^(show|show me|yes|yes please|okay|ok|sure|go ahead|do it|what about (that|it)|and then\??|then what\??|tell me more|more|how\??|why\??|which ones\??|what ones\??)[!?. ]*$/i.test(normalized) || !explicitRush && /^(what|which|how|why|when|where|who|can|could|tell|give|list)\b/i.test(normalized)); return shortFollowUp ? `Previous Rush question: ${previousUserQuestion}\nCurrent Rush follow-up: ${q}` : q; }
+async function askOpenRouter(messages: any[]) { const apiKey = process.env.OPENROUTER_API_KEY; if (!apiKey) return { reply: "", error: "Ask Me is not configured yet: OPENROUTER_API_KEY is missing." }; const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 25_000); try { const response = await fetch(OPENROUTER_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}`, "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "https://garrison-market.vercel.app", "X-Title": "Garrison Market Ask Me" }, body: JSON.stringify({ model: OPENROUTER_MODEL, messages, max_tokens: 1200, stream: false }), cache: "no-store", signal: controller.signal }); const raw = await response.text(); let payload: any = null; try { payload = JSON.parse(raw); } catch {} if (!response.ok) { console.error("ASK_ME_OPENROUTER_ERROR", response.status, raw.slice(0, 3000)); if (response.status === 401) return { reply: "", error: "Ask Me could not authenticate with OpenRouter. Please check the OPENROUTER_API_KEY in Vercel." }; if (response.status === 402) return { reply: "", error: "OpenRouter rejected this request (402). The selected free model may be temporarily unavailable or the account may have reached its current limit." }; if (response.status === 404) return { reply: "", error: "OpenRouter could not find the configured Ask Me model. Please try again after the latest deployment." }; if (response.status === 429) return { reply: "", error: "Ask Me is temporarily rate-limited by the AI provider. Please try again in a moment." }; return { reply: "", error: `The AI provider returned an error (${response.status}). Please try again.` }; } const reply = extractText(payload); if (!reply) { console.error("ASK_ME_EMPTY_OPENROUTER_RESPONSE", JSON.stringify({ finishReason: payload?.choices?.[0]?.finish_reason, usage: payload?.usage, error: payload?.error }, null, 2).slice(0, 4000)); return { reply: "", error: "The AI provider returned no readable answer. Please try again." }; } return { reply, error: "" }; } catch (error) { console.error("ASK_ME_OPENROUTER_FETCH_ERROR", error); return { reply: "", error: error instanceof Error && error.name === "AbortError" ? "The AI service took too long to respond. Please try again." : "Ask Me could not reach the AI service. Please try again." }; } finally { clearTimeout(timeout); } }
+export async function POST(request: NextRequest) { try { const session = await getSessionUser(); if (!session || (session.role !== "owner" && session.role !== "staff")) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 }); const body = await request.json().catch(() => null); const rawHistory = Array.isArray(body?.history) ? body.history : []; const history: ChatMessage[] = rawHistory.slice(-MAX_HISTORY).map((item: any) => ({ role: item?.role === "assistant" ? "assistant" : "user", content: String(item?.content ?? "").slice(0, MAX_CHARS) })).filter((item: ChatMessage) => item.content.trim()); const question = history.filter((m) => m.role === "user").at(-1)?.content?.trim() ?? ""; const imageDataUrl = typeof body?.imageDataUrl === "string" ? body.imageDataUrl : ""; if (!question && !imageDataUrl) return NextResponse.json({ success: false, error: "Please ask a question." }, { status: 400 }); if (imageDataUrl && imageDataUrl.length > MAX_IMAGE_CHARS) return NextResponse.json({ success: false, error: "That image is too large to analyze. Please attach a smaller image." }, { status: 413 }); const storeId = await getActiveStoreId(); if (!storeId) return NextResponse.json({ success: false, error: "No active store is available for this account." }, { status: 400 }); const role = session.role as AssistantRole; const ownerId = Number(session.ownerId ?? session.id); const staffId = Number(session.id); const store = await prisma.store.findFirst({ where: { id: storeId, ownerId }, select: { id: true } }); if (!store) return NextResponse.json({ success: false, error: "This store is not available to the current account." }, { status: 403 }); const direct = await directAnswer(role, ownerId, storeId, staffId, question); if (direct) return NextResponse.json({ success: true, reply: direct, products: [] }); const blocked = getStage3BlockedReply(role, question); if (blocked) return NextResponse.json({ success: true, reply: blocked, products: [] }); const liveContext = await buildStoreAssistantIntelligence(role, ownerId, storeId, staffId, question); const stage2Analysis = await buildStoreAssistantStage2(role, ownerId, storeId, staffId, question); const stage3Access = buildStoreAssistantStage3(role, question); const stage4Question = buildRushContextQuestion(question, history); const stage4Rush = await buildStoreAssistantStage4(role, stage4Question); const system = assistantSystemPrompt(role, `${liveContext}\n\n${stage2Analysis}\n\n${stage3Access}\n\n${stage4Rush}`); const userContent: any = imageDataUrl ? [{ type: "text", text: question || "Please analyze this image in the context of my Garrison Market store." }, { type: "image_url", image_url: { url: imageDataUrl } }] : question; const messages: any[] = [{ role: "system", content: system }, ...history.slice(-8, -1), { role: "user", content: userContent }]; const ai = await askOpenRouter(messages); if (!ai.reply) return NextResponse.json({ success: false, error: ai.error || "Ask Me could not produce an answer." }, { status: 502 }); return NextResponse.json({ success: true, reply: ai.reply, products: [] }); } catch (error) { console.error("ASK_ME_ROUTE_ERROR", error); return NextResponse.json({ success: false, error: "Ask Me encountered a server error. Please try again." }, { status: 500 }); } }
