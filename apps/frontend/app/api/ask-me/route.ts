@@ -4,13 +4,12 @@ import { getActiveStoreId } from "@/lib/store-context";
 import prisma from "@/lib/prisma";
 import {
   assistantSystemPrompt,
-  buildStoreAssistantContext,
+  buildStoreAssistantIntelligence,
   type AssistantRole,
-} from "@/lib/store-assistant-context";
+} from "@/lib/store-assistant-intelligence";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-// Use OpenRouter's free router for both text and image requests. It selects a
-// currently available free model and filters for the capabilities the request needs.
+// OpenRouter's router selects an available model/provider for the request.
 const OPENROUTER_MODEL = "openrouter/free";
 const MAX_HISTORY = 10;
 const MAX_CHARS = 2400;
@@ -172,7 +171,7 @@ export async function POST(request: NextRequest) {
     const direct = await directAnswer(role, ownerId, storeId, staffId, question);
     if (direct) return NextResponse.json({ success: true, reply: direct, products: [] });
 
-    const liveContext = await buildStoreAssistantContext(role, ownerId, storeId, staffId, question);
+    const liveContext = await buildStoreAssistantIntelligence(role, ownerId, storeId, staffId, question);
     const system = assistantSystemPrompt(role, liveContext);
     const userContent: any = imageDataUrl
       ? [{ type: "text", text: question || "Please analyze this image in the context of my Garrison Market store." }, { type: "image_url", image_url: { url: imageDataUrl } }]
