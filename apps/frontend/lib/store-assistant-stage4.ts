@@ -5,7 +5,7 @@ import { getSessionUser } from "./auth.actions";
 import { getActiveStoreId } from "./store-context";
 import { getOrCreateRushProfile } from "./rush.actions";
 import { getWeeklyLeaderboard } from "./rush-leaderboard.actions";
-import { getRestockRunState, getSalesSprintState, getPersonalSalesSprintState } from "./rush-quests.actions";
+import { getRestockRunState, getRestockRunItems, getSalesSprintState, getPersonalSalesSprintState } from "./rush-quests.actions";
 import { getSpinAvailability } from "./rush-rewards.actions";
 import { getShopHealth } from "./rush-shop-health.actions";
 import { getTodayClockStatus } from "./rush-clock.actions";
@@ -19,7 +19,7 @@ function isRushQuestion(question: string) {
 }
 
 function wantsHowTo(question: string) {
-  return /\b(how|what is|explain|teach|earn|get xp|level up|scale|climb|spin|reward|work)\b/i.test(question);
+  return /\b(how|what is|explain|teach|earn|get xp|level up|scale|climb|spin|reward|work|show|which|what)\b/i.test(question);
 }
 
 function formatXpSources() {
@@ -33,6 +33,10 @@ function formatXpSources() {
  * explains mechanics; the DB supplies current progress. This keeps Ask Me
  * from inventing XP rules while still allowing it to give personalized,
  * actionable Rush advice.
+ *
+ * `question` may be a contextualized follow-up supplied by the Ask Me route.
+ * This is important for short messages such as "show me" or "what about it?"
+ * where the Rush subject only exists in the preceding conversation turn.
  */
 export async function buildStoreAssistantStage4(role: RushAssistantRole, question: string) {
   if (!isRushQuestion(question)) return "";
@@ -45,10 +49,11 @@ export async function buildStoreAssistantStage4(role: RushAssistantRole, questio
   const profile = await getOrCreateRushProfile();
   if (!profile) return "";
 
-  const [{ level, xpIntoLevel, xpForNextLevel }, health, restock, spin, salesSprint] = await Promise.all([
+  const [{ level, xpIntoLevel, xpForNextLevel }, health, restock, restockItems, spin, salesSprint] = await Promise.all([
     computeLevel(profile.totalXp),
     getShopHealth(),
     getRestockRunState(),
+    getRestockRunItems(),
     getSpinAvailability(),
     getSalesSprintState(),
   ]);
@@ -79,6 +84,12 @@ export async function buildStoreAssistantStage4(role: RushAssistantRole, questio
   }
 
   if (health) sections.push(`RUSH SHOP HEALTH BREAKDOWN: overall=${health.score}/100; stock=${health.breakdown.stockHealth}; sales trend=${health.breakdown.salesTrend}; staff activity=${health.breakdown.staffActivity}.`);
+
+  const asksForRestockItems = /\b(show|which|what|items|products|restock)\b/i.test(question) && /restock|item|product|verify/i.test(question);
+  if (asksForRestockItems) {
+    sections.push(`TODAY'S RESTOCK RUN ITEMS: ${restockItems.length ? restockItems.map((item, index) => `${index + 1}. ${item.name} — qty=${item.quantity}${restock?.verifiedInventoryIds.includes(item.id) ? " (already verified)" : " (needs verification)"}`).join(" | ") : "No Restock Run items are currently available."}`);
+    sections.push("RESTOCK FOLLOW-UP RULE: If the user asks to see today's Restock Run items, list the live items above. Do not invent item names or quantities.");
+  }
 
   if (wantsHowTo(question)) {
     sections.push("HOW TO EARN XP — LIVE RULES:\n" + formatXpSources());
