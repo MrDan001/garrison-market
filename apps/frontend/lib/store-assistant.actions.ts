@@ -17,9 +17,18 @@ function originFromHeaders(h: Headers): string {
 export async function askStoreAssistant(history: AskMeChatMessage[], imageDataUrl?: string) {
   try {
     const h = await headers();
+    const cookie = h.get("cookie");
+
+    // This is a server-to-server fetch. Next.js does not automatically forward
+    // the browser's session cookies when a Server Action fetches our own API.
+    // Forward the current session so /api/ask-me can authenticate the same
+    // owner/staff session and enforce the store/security boundary.
+    const requestHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (cookie) requestHeaders.Cookie = cookie;
+
     const response = await fetch(`${originFromHeaders(h)}/api/ask-me`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: requestHeaders,
       body: JSON.stringify({ history, imageDataUrl }),
       cache: "no-store",
     });
