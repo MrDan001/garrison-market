@@ -2,7 +2,7 @@
   "name": "Garrison Market",
   "short_name": "Garrison Market",
   "description": "Market management system",
-  "start_url": "/",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#0a0c12",
   "theme_color": "#0a0c12",
