@@ -30,65 +30,40 @@ import {
 
 async function requireAdmin() {
   const session = await getSessionUser();
-  if (!session || session.role?.toLowerCase() !== "admin") {
-    throw new Error("Unauthorized");
-  }
+  if (!session || session.role?.toLowerCase() !== "admin") throw new Error("Unauthorized");
   return session;
 }
 
 function readCampaignFields(formData: FormData) {
-  const campaignName = String(formData.get("campaignName") || "").trim();
-  const subject = String(formData.get("subject") || "").trim();
-  const body = String(formData.get("body") || "").trim();
-  const previewText = String(formData.get("previewText") || "").trim();
-  const ctaLabel = String(formData.get("ctaLabel") || "").trim();
-  const ctaUrl = String(formData.get("ctaUrl") || "").trim();
-  const listId = Number(formData.get("listId"));
-  return { campaignName, subject, body, previewText, ctaLabel, ctaUrl, listId };
+  return {
+    campaignName: String(formData.get("campaignName") || "").trim(),
+    subject: String(formData.get("subject") || "").trim(),
+    body: String(formData.get("body") || "").trim(),
+    previewText: String(formData.get("previewText") || "").trim(),
+    ctaLabel: String(formData.get("ctaLabel") || "").trim(),
+    ctaUrl: String(formData.get("ctaUrl") || "").trim(),
+    listId: Number(formData.get("listId")),
+  };
 }
 
 export async function getMarketingDashboardData() {
   await requireAdmin();
-
   const setup = getBrevoSetupStatus();
   const [drafts, automations] = await Promise.all([listMarketingDrafts(), listMarketingAutomations()]);
-
-  if (!isBrevoConfigured()) {
-    return {
-      setup,
-      aiReady: isMarketingAiConfigured(),
-      lists: [],
-      campaigns: [],
-      drafts,
-      automations,
-    };
-  }
-
+  if (!isBrevoConfigured()) return { setup, aiReady: isMarketingAiConfigured(), lists: [], campaigns: [], drafts, automations };
   const [lists, campaigns] = await Promise.all([getBrevoLists(), getBrevoCampaigns()]);
-  return {
-    setup,
-    aiReady: isMarketingAiConfigured(),
-    lists,
-    campaigns,
-    drafts,
-    automations,
-  };
+  return { setup, aiReady: isMarketingAiConfigured(), lists, campaigns, drafts, automations };
 }
 
 export async function addMarketingContactAction(formData: FormData) {
   await requireAdmin();
-
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const fullName = String(formData.get("fullName") || "").trim();
   const listId = Number(formData.get("listId"));
-
-  if (!/^\S+@\S+\.\S+$/.test(email)) {
-    return { success: false, error: "Enter a valid email address." };
-  }
-  if (!Number.isInteger(listId) || listId <= 0) {
-    return { success: false, error: "Choose a valid Brevo audience list." };
-  }
-
+  const consent = String(formData.get("marketingConsent") || "") === "on";
+  if (!/^\S+@\S+\.\S+$/.test(email)) return { success: false, error: "Enter a valid email address." };
+  if (!Number.isInteger(listId) || listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
+  if (!consent) return { success: false, error: "Confirm that the contact consented to Garrison Market marketing emails." };
   try {
     await addBrevoContact(email, fullName, listId);
     return { success: true };
@@ -101,23 +76,11 @@ export async function addMarketingContactAction(formData: FormData) {
 export async function createMarketingDraftAction(formData: FormData) {
   await requireAdmin();
   const fields = readCampaignFields(formData);
-
-  if (!fields.campaignName || !fields.subject || !fields.body) {
-    return { success: false, error: "Campaign name, subject, and message are required." };
-  }
-  if (!Number.isInteger(fields.listId) || fields.listId <= 0) {
-    return { success: false, error: "Choose a valid Brevo audience list." };
-  }
-  if ((fields.ctaLabel && !fields.ctaUrl) || (!fields.ctaLabel && fields.ctaUrl)) {
-    return { success: false, error: "Provide both a CTA label and a CTA URL, or leave both blank." };
-  }
-
+  if (!fields.campaignName || !fields.subject || !fields.body) return { success: false, error: "Campaign name, subject, and message are required." };
+  if (!Number.isInteger(fields.listId) || fields.listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
+  if ((fields.ctaLabel && !fields.ctaUrl) || (!fields.ctaLabel && fields.ctaUrl)) return { success: false, error: "Provide both a CTA label and a CTA URL, or leave both blank." };
   try {
-    const draft = await createMarketingDraft({
-      ...fields,
-      source: "manual",
-      approvalRequired: true,
-    });
+    const draft = await createMarketingDraft({ ...fields, source: "manual", approvalRequired: true });
     return { success: true, draftId: draft.id };
   } catch (error: any) {
     console.error("[marketing] draft creation failed:", error);
@@ -130,12 +93,8 @@ export async function generateMarketingDraftAction(formData: FormData) {
   const prompt = String(formData.get("prompt") || "").trim();
   const listId = Number(formData.get("listId"));
   const ctaUrl = String(formData.get("ctaUrl") || "").trim();
-
   if (!prompt) return { success: false, error: "Tell the AI what campaign you want it to create." };
-  if (!Number.isInteger(listId) || listId <= 0) {
-    return { success: false, error: "Choose a valid Brevo audience list." };
-  }
-
+  if (!Number.isInteger(listId) || listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
   try {
     const generated = await generateMarketingContent(prompt);
     const draft = await createMarketingDraft({
@@ -160,40 +119,20 @@ export async function generateMarketingDraftAction(formData: FormData) {
 export async function approveMarketingDraftAction(formData: FormData) {
   const session = await requireAdmin();
   const draftId = Number(formData.get("draftId"));
-  if (!Number.isInteger(draftId) || draftId <= 0) {
-    return { success: false, error: "Invalid marketing draft." };
-  }
-
+  if (!Number.isInteger(draftId) || draftId <= 0) return { success: false, error: "Invalid marketing draft." };
   try {
     const existing = await getMarketingDraft(draftId);
     if (!existing) return { success: false, error: "Marketing draft not found." };
-    if (existing.status !== "DRAFT" && existing.status !== "FAILED") {
-      return { success: false, error: `This draft is already ${existing.status.toLowerCase()}.` };
-    }
-    if (!isBrevoConfigured()) {
-      return { success: false, error: "Brevo is not configured yet. Add the Brevo API key and verified sender email first." };
-    }
-
-    const approved = existing.status === "DRAFT"
-      ? await approveMarketingDraft(draftId, Number(session.id))
-      : existing;
+    if (existing.status !== "DRAFT" && existing.status !== "FAILED") return { success: false, error: `This draft is already ${existing.status.toLowerCase()}.` };
+    if (!isBrevoConfigured()) return { success: false, error: "Brevo is not configured yet. Add the Brevo API key and verified sender email first." };
+    const approved = existing.status === "DRAFT" ? await approveMarketingDraft(draftId, Number(session.id)) : existing;
     if (!approved) return { success: false, error: "This draft could not be approved." };
-
     let brevoCampaignId = approved.brevoCampaignId;
     if (!brevoCampaignId) {
-      const campaign = await createBrevoCampaign({
-        campaignName: approved.campaignName,
-        subject: approved.subject,
-        body: approved.body,
-        previewText: approved.previewText || undefined,
-        listId: approved.listId,
-        ctaLabel: approved.ctaLabel || undefined,
-        ctaUrl: approved.ctaUrl || undefined,
-      });
+      const campaign = await createBrevoCampaign({ campaignName: approved.campaignName, subject: approved.subject, body: approved.body, previewText: approved.previewText || undefined, listId: approved.listId, ctaLabel: approved.ctaLabel || undefined, ctaUrl: approved.ctaUrl || undefined });
       brevoCampaignId = campaign.id;
       await markMarketingDraftBrevoCreated(draftId, campaign.id);
     }
-
     await sendBrevoCampaignNow(brevoCampaignId);
     await markMarketingDraftSent(draftId);
     return { success: true, campaignId: brevoCampaignId };
@@ -207,9 +146,7 @@ export async function approveMarketingDraftAction(formData: FormData) {
 export async function rejectMarketingDraftAction(formData: FormData) {
   await requireAdmin();
   const draftId = Number(formData.get("draftId"));
-  if (!Number.isInteger(draftId) || draftId <= 0) {
-    return { success: false, error: "Invalid marketing draft." };
-  }
+  if (!Number.isInteger(draftId) || draftId <= 0) return { success: false, error: "Invalid marketing draft." };
   try {
     const draft = await rejectMarketingDraft(draftId);
     return draft ? { success: true } : { success: false, error: "This draft is no longer waiting for approval." };
@@ -228,24 +165,12 @@ export async function createMarketingAutomationAction(formData: FormData) {
   const weekdayValue = Number(formData.get("weekday"));
   const dayOfMonthValue = Number(formData.get("dayOfMonth"));
   const approvalRequired = String(formData.get("approvalRequired") || "true") === "true";
-
   if (!name || !prompt) return { success: false, error: "Automation name and AI instructions are required." };
   if (!Number.isInteger(listId) || listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
   if (!["daily", "weekly", "monthly"].includes(frequency)) return { success: false, error: "Choose a valid automation frequency." };
   if (!/^\d{2}:\d{2}$/.test(sendTime)) return { success: false, error: "Use a valid UTC send time such as 09:00." };
-
   try {
-    const automation = await createMarketingAutomation({
-      name,
-      prompt,
-      listId,
-      frequency,
-      sendTime,
-      weekday: frequency === "weekly" && Number.isInteger(weekdayValue) ? weekdayValue : null,
-      dayOfMonth: frequency === "monthly" && Number.isInteger(dayOfMonthValue) ? dayOfMonthValue : null,
-      approvalRequired,
-      createdBy: Number(session.id),
-    });
+    const automation = await createMarketingAutomation({ name, prompt, listId, frequency, sendTime, weekday: frequency === "weekly" && Number.isInteger(weekdayValue) ? weekdayValue : null, dayOfMonth: frequency === "monthly" && Number.isInteger(dayOfMonthValue) ? dayOfMonthValue : null, approvalRequired, createdBy: Number(session.id) });
     return { success: true, automationId: automation.id };
   } catch (error: any) {
     console.error("[marketing] automation creation failed:", error);
@@ -258,7 +183,6 @@ export async function toggleMarketingAutomationAction(formData: FormData) {
   const id = Number(formData.get("automationId"));
   const active = String(formData.get("active") || "false") === "true";
   if (!Number.isInteger(id) || id <= 0) return { success: false, error: "Invalid automation." };
-
   try {
     const automation = await setMarketingAutomationActive(id, active);
     return automation ? { success: true } : { success: false, error: "Automation not found." };
