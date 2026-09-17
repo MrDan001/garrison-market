@@ -36,13 +36,17 @@ export async function addMarketingContactAction(formData: FormData) {
 
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const fullName = String(formData.get("fullName") || "").trim();
+  const listId = Number(formData.get("listId"));
 
   if (!/^\S+@\S+\.\S+$/.test(email)) {
     return { success: false, error: "Enter a valid email address." };
   }
+  if (!Number.isInteger(listId) || listId <= 0) {
+    return { success: false, error: "Choose a valid Brevo audience list." };
+  }
 
   try {
-    await addBrevoContact(email, fullName);
+    await addBrevoContact(email, fullName, listId);
     return { success: true };
   } catch (error: any) {
     console.error("[brevo] add contact failed:", error);
