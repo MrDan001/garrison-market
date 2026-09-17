@@ -127,7 +127,6 @@ export async function addBrevoContact(email: string, fullName: string | undefine
         ...(lastName ? { LNAME: lastName } : {}),
       },
       listIds: [listId],
-      // Do not change the contact's existing marketing blacklist/unsubscribe state.
       updateEnabled: true,
     }),
   });
@@ -148,7 +147,7 @@ export function buildMarketingHtml(body: string, cta?: { label: string; url: str
     .split(/\n\s*\n/)
     .map(
       (paragraph) =>
-        `<p style="margin:0 0 16px;color:#2f3440;font-size:15px;line-height:1.7;">${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`
+        `<p style="margin:0 0 16px;color:#2f3440;font-size:15px;line-height:1.7;">${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`,
     )
     .join("");
 
@@ -176,7 +175,7 @@ export function buildMarketingHtml(body: string, cta?: { label: string; url: str
 </html>`;
 }
 
-export async function createAndSendBrevoCampaign(params: {
+export type CreateBrevoCampaignParams = {
   campaignName: string;
   subject: string;
   body: string;
@@ -184,7 +183,9 @@ export async function createAndSendBrevoCampaign(params: {
   ctaLabel?: string;
   ctaUrl?: string;
   previewText?: string;
-}) {
+};
+
+export async function createBrevoCampaign(params: CreateBrevoCampaignParams) {
   const config = requireConfig();
   if (!Number.isInteger(params.listId) || params.listId <= 0) {
     throw new Error("A valid Brevo audience list is required.");
@@ -192,10 +193,10 @@ export async function createAndSendBrevoCampaign(params: {
 
   const htmlContent = buildMarketingHtml(
     params.body,
-    params.ctaLabel && params.ctaUrl ? { label: params.ctaLabel, url: params.ctaUrl } : undefined
+    params.ctaLabel && params.ctaUrl ? { label: params.ctaLabel, url: params.ctaUrl } : undefined,
   );
 
-  const campaign = await brevoRequest<{ id: number }>("/emailCampaigns", {
+  return brevoRequest<{ id: number }>("/emailCampaigns", {
     method: "POST",
     body: JSON.stringify({
       name: params.campaignName,
@@ -213,11 +214,20 @@ export async function createAndSendBrevoCampaign(params: {
       },
     }),
   });
+}
 
-  await brevoRequest<void>(`/emailCampaigns/${campaign.id}/sendNow`, {
+export async function sendBrevoCampaignNow(campaignId: number) {
+  if (!Number.isInteger(campaignId) || campaignId <= 0) {
+    throw new Error("A valid Brevo campaign ID is required.");
+  }
+  await brevoRequest<void>(`/emailCampaigns/${campaignId}/sendNow`, {
     method: "POST",
     body: JSON.stringify({}),
   });
+}
 
+export async function createAndSendBrevoCampaign(params: CreateBrevoCampaignParams) {
+  const campaign = await createBrevoCampaign(params);
+  await sendBrevoCampaignNow(campaign.id);
   return { campaignId: campaign.id };
 }
