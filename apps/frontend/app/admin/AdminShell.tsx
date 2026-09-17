@@ -14,16 +14,17 @@ import { useState } from "react";
 import {
   LayoutDashboard,
   Users,
-  MessageSquare, // <-- Added Support icon
+  MessageSquare,
   Mail,
-  Bell, // <-- Broadcast icon
+  Bell,
   LogOut,
   Menu,
   X,
   ShieldAlert,
-  Code2, // <-- Dev Assistant icon
-  Handshake, // <-- Affiliates icon
-  ListChecks, // <-- Waitlist icon
+  Code2,
+  Handshake,
+  ListChecks,
+  Megaphone,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
@@ -36,19 +37,18 @@ export default function AdminShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Added Support Tickets route pointing to /admin/support
   const navigation = [
     { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
     { name: "Manage Users", href: "/admin/users", icon: Users },
     { name: "Support Tickets", href: "/admin/support", icon: MessageSquare },
     { name: "Messages", href: "/admin/messages", icon: Mail },
     { name: "Broadcast", href: "/admin/broadcast", icon: Bell },
+    { name: "Marketing Email", href: "/admin/marketing", icon: Megaphone },
     { name: "Dev Assistant", href: "/admin/dev-assistant", icon: Code2 },
     { name: "Affiliates", href: "/admin/affiliates", icon: Handshake },
     { name: "Waitlist", href: "/admin/waitlist", icon: ListChecks },
   ];
 
-  // Helper to determine active section name for the header
   const getHeaderLabel = (path: string) => {
     if (path === "/admin/dashboard") return "System Overview";
     if (path === "/admin/support") return "Support Desk";
@@ -56,6 +56,7 @@ export default function AdminShell({
     if (path === "/admin/messages/staff") return "Staff Messages";
     if (path === "/admin/messages") return "Owner Messages";
     if (path === "/admin/broadcast") return "Push Broadcast";
+    if (path === "/admin/marketing") return "Marketing Email";
     if (path === "/admin/dev-assistant") return "Dev Assistant";
     if (path === "/admin/affiliates") return "Affiliate Program";
     return "Admin Console";
