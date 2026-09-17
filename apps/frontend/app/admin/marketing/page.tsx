@@ -13,8 +13,11 @@ export default async function MarketingPage() {
     loadError = error?.message || "Could not load Brevo marketing data.";
     data = {
       setup: { apiKey: false, senderEmail: false },
+      aiReady: Boolean(process.env.OPENROUTER_API_KEY),
       lists: [],
       campaigns: [],
+      drafts: [],
+      automations: [],
     };
   }
 
