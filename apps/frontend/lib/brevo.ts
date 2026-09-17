@@ -3,7 +3,6 @@
 //
 // Required environment variables:
 // - BREVO_API_KEY
-// - BREVO_MARKETING_LIST_ID
 // - BREVO_SENDER_EMAIL
 // Optional:
 // - BREVO_SENDER_NAME
@@ -36,36 +35,32 @@ export type BrevoCampaign = {
 };
 
 function getConfig() {
-  const apiKey = process.env.BREVO_API_KEY;
-  const senderEmail = process.env.BREVO_SENDER_EMAIL;
-  const listId = process.env.BREVO_MARKETING_LIST_ID;
-
   return {
-    apiKey,
-    senderEmail,
+    apiKey: process.env.BREVO_API_KEY,
+    senderEmail: process.env.BREVO_SENDER_EMAIL,
     senderName: process.env.BREVO_SENDER_NAME || "Garrison Market",
     replyTo: process.env.BREVO_REPLY_TO || undefined,
-    listId: listId ? Number(listId) : NaN,
   };
 }
 
 export function getBrevoSetupStatus() {
-  const { apiKey, senderEmail, listId } = getConfig();
+  const { apiKey, senderEmail } = getConfig();
   return {
     apiKey: Boolean(apiKey),
     senderEmail: Boolean(senderEmail),
-    marketingListId: Number.isInteger(listId) && listId > 0,
   };
+}
+
+export function isBrevoConfigured() {
+  const { apiKey, senderEmail } = getConfig();
+  return Boolean(apiKey && senderEmail);
 }
 
 function requireConfig() {
   const config = getConfig();
   if (!config.apiKey) throw new Error("Brevo is not configured: BREVO_API_KEY is missing.");
   if (!config.senderEmail) throw new Error("Brevo is not configured: BREVO_SENDER_EMAIL is missing.");
-  if (!Number.isInteger(config.listId) || config.listId <= 0) {
-    throw new Error("Brevo is not configured: BREVO_MARKETING_LIST_ID must be a valid list ID.");
-  }
-  return config as typeof config & { apiKey: string; senderEmail: string; listId: number };
+  return config as typeof config & { apiKey: string; senderEmail: string };
 }
 
 async function brevoRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -115,8 +110,12 @@ function splitName(fullName: string) {
   };
 }
 
-export async function addBrevoContact(email: string, fullName?: string) {
-  const { listId } = requireConfig();
+export async function addBrevoContact(email: string, fullName: string | undefined, listId: number) {
+  requireConfig();
+  if (!Number.isInteger(listId) || listId <= 0) {
+    throw new Error("A valid Brevo audience list is required.");
+  }
+
   const { firstName, lastName } = splitName(fullName || "");
 
   return brevoRequest<{ id?: number }>("/contacts", {
@@ -187,6 +186,10 @@ export async function createAndSendBrevoCampaign(params: {
   previewText?: string;
 }) {
   const config = requireConfig();
+  if (!Number.isInteger(params.listId) || params.listId <= 0) {
+    throw new Error("A valid Brevo audience list is required.");
+  }
+
   const htmlContent = buildMarketingHtml(
     params.body,
     params.ctaLabel && params.ctaUrl ? { label: params.ctaLabel, url: params.ctaUrl } : undefined
