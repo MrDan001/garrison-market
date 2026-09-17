@@ -12,7 +12,7 @@ export default async function MarketingPage() {
   } catch (error: any) {
     loadError = error?.message || "Could not load Brevo marketing data.";
     data = {
-      setup: { apiKey: false, senderEmail: false, marketingListId: false },
+      setup: { apiKey: false, senderEmail: false },
       lists: [],
       campaigns: [],
     };
