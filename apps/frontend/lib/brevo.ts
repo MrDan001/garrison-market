@@ -127,7 +127,7 @@ export async function addBrevoContact(email: string, fullName: string | undefine
         ...(lastName ? { LNAME: lastName } : {}),
       },
       listIds: [listId],
-      emailBlacklisted: false,
+      // Do not change the contact's existing marketing blacklist/unsubscribe state.
       updateEnabled: true,
     }),
   });
