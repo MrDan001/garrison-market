@@ -60,10 +60,9 @@ export async function addMarketingContactAction(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const fullName = String(formData.get("fullName") || "").trim();
   const listId = Number(formData.get("listId"));
-  const consent = String(formData.get("marketingConsent") || "") === "on";
   if (!/^\S+@\S+\.\S+$/.test(email)) return { success: false, error: "Enter a valid email address." };
   if (!Number.isInteger(listId) || listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
-  if (!consent) return { success: false, error: "Confirm that the contact consented to Garrison Market marketing emails." };
+  // Admins should only add contacts who have consented to marketing email. Brevo preserves existing unsubscribe state.
   try {
     await addBrevoContact(email, fullName, listId);
     return { success: true };
@@ -97,18 +96,7 @@ export async function generateMarketingDraftAction(formData: FormData) {
   if (!Number.isInteger(listId) || listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
   try {
     const generated = await generateMarketingContent(prompt);
-    const draft = await createMarketingDraft({
-      campaignName: generated.campaignName,
-      subject: generated.subject,
-      previewText: generated.previewText,
-      body: generated.body,
-      ctaLabel: generated.ctaLabel || undefined,
-      ctaUrl: ctaUrl || undefined,
-      listId,
-      prompt,
-      source: "ai",
-      approvalRequired: true,
-    });
+    const draft = await createMarketingDraft({ campaignName: generated.campaignName, subject: generated.subject, previewText: generated.previewText, body: generated.body, ctaLabel: generated.ctaLabel || undefined, ctaUrl: ctaUrl || undefined, listId, prompt, source: "ai", approvalRequired: true });
     return { success: true, draftId: draft.id };
   } catch (error: any) {
     console.error("[marketing] AI draft generation failed:", error);
