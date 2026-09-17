@@ -26,7 +26,7 @@ type Campaign = {
 };
 
 type Props = {
-  setup: { apiKey: boolean; senderEmail: boolean; marketingListId: boolean };
+  setup: { apiKey: boolean; senderEmail: boolean };
   lists: List[];
   campaigns: Campaign[];
   loadError: string | null;
@@ -38,7 +38,7 @@ export default function MarketingClient({ setup, lists, campaigns, loadError }: 
   const [contactMessage, setContactMessage] = useState<string | null>(null);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
 
-  const ready = setup.apiKey && setup.senderEmail && setup.marketingListId;
+  const ready = setup.apiKey && setup.senderEmail;
 
   function handleContactSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,7 +49,7 @@ export default function MarketingClient({ setup, lists, campaigns, loadError }: 
     startAdding(async () => {
       const result = await addMarketingContactAction(formData);
       if (result.success) {
-        setContactMessage("Contact added to the configured Brevo marketing list.");
+        setContactMessage("Contact added to the selected Brevo marketing list.");
         form.reset();
       } else {
         setContactMessage(result.error || "Could not add contact.");
@@ -101,15 +101,14 @@ export default function MarketingClient({ setup, lists, campaigns, loadError }: 
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
           <div className="flex items-start gap-3">
             <AlertTriangle className="text-amber-400 mt-0.5" size={18} />
-            <div>
+            <div className="w-full">
               <h2 className="text-sm font-bold text-[var(--text-primary)]">Brevo setup is incomplete</h2>
               <p className="text-xs text-slate-400 mt-1">
-                Add the required environment variables in the Garrison Market Vercel project before using this page.
+                Add the Brevo API key and verified sender email in the Garrison Market Vercel project before using this page.
               </p>
-              <div className="grid sm:grid-cols-3 gap-2 mt-4 text-xs">
+              <div className="grid sm:grid-cols-2 gap-2 mt-4 text-xs">
                 <SetupItem label="BREVO_API_KEY" ready={setup.apiKey} />
                 <SetupItem label="BREVO_SENDER_EMAIL" ready={setup.senderEmail} />
-                <SetupItem label="BREVO_MARKETING_LIST_ID" ready={setup.marketingListId} />
               </div>
             </div>
           </div>
@@ -122,7 +121,7 @@ export default function MarketingClient({ setup, lists, campaigns, loadError }: 
             <Users size={17} className="text-blue-400" />
             <div>
               <h2 className="text-sm font-bold text-[var(--text-primary)]">Add Marketing Contact</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">Adds a contact to the configured Brevo marketing list.</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Add a consenting contact to one of your Brevo audience lists.</p>
             </div>
           </div>
 
@@ -141,9 +140,23 @@ export default function MarketingClient({ setup, lists, campaigns, loadError }: 
               disabled={!ready || isAdding}
               className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-50"
             />
+            <select
+              name="listId"
+              defaultValue={lists.length ? String(lists[0].id) : ""}
+              required
+              disabled={!ready || isAdding || lists.length === 0}
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-50"
+            >
+              <option value="">Choose audience list</option>
+              {lists.map((list) => (
+                <option key={list.id} value={list.id}>
+                  {list.name} — {list.uniqueSubscribers ?? list.totalSubscribers ?? 0} contacts
+                </option>
+              ))}
+            </select>
             <button
               type="submit"
-              disabled={!ready || isAdding}
+              disabled={!ready || isAdding || lists.length === 0}
               className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm px-4 py-3 disabled:opacity-50"
             >
               <span className="inline-flex items-center gap-2">
@@ -174,8 +187,9 @@ export default function MarketingClient({ setup, lists, campaigns, loadError }: 
               />
               <select
                 name="listId"
-                defaultValue={setup.marketingListId ? String(process.env.NEXT_PUBLIC_UNUSED || "") : ""}
-                disabled={!ready || isSending}
+                defaultValue={lists.length ? String(lists[0].id) : ""}
+                required
+                disabled={!ready || isSending || lists.length === 0}
                 className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-50"
               >
                 <option value="">Choose audience list</option>
@@ -229,7 +243,7 @@ export default function MarketingClient({ setup, lists, campaigns, loadError }: 
 
             <button
               type="submit"
-              disabled={!ready || isSending}
+              disabled={!ready || isSending || lists.length === 0}
               className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm px-4 py-3 disabled:opacity-50"
             >
               <span className="inline-flex items-center gap-2">
