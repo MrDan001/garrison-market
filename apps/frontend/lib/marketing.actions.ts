@@ -42,7 +42,7 @@ function readCampaignFields(formData: FormData) {
     previewText: String(formData.get("previewText") || "").trim(),
     ctaLabel: String(formData.get("ctaLabel") || "").trim(),
     ctaUrl: String(formData.get("ctaUrl") || "").trim(),
-    listId: Number(formData.get("listId")),
+    listId: (() => { const value = String(formData.get("listId") || "").trim(); return value ? Number(value) : null; })(),
   };
 }
 
@@ -59,9 +59,10 @@ export async function addMarketingContactAction(formData: FormData) {
   await requireAdmin();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const fullName = String(formData.get("fullName") || "").trim();
-  const listId = Number(formData.get("listId"));
+  const listIdRaw = String(formData.get("listId") || "").trim();
+  const listId = listIdRaw ? Number(listIdRaw) : null;
   if (!/^\S+@\S+\.\S+$/.test(email)) return { success: false, error: "Enter a valid email address." };
-  if (!Number.isInteger(listId) || listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
+  if (listId !== null && (!Number.isInteger(listId) || listId <= 0)) return { success: false, error: "Choose a valid Brevo audience list, or leave it blank for now." };
   // Admins should only add contacts who have consented to marketing email. Brevo preserves existing unsubscribe state.
   try {
     await addBrevoContact(email, fullName, listId);
@@ -76,7 +77,7 @@ export async function createMarketingDraftAction(formData: FormData) {
   await requireAdmin();
   const fields = readCampaignFields(formData);
   if (!fields.campaignName || !fields.subject || !fields.body) return { success: false, error: "Campaign name, subject, and message are required." };
-  if (!Number.isInteger(fields.listId) || fields.listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
+  if (fields.listId !== null && (!Number.isInteger(fields.listId) || fields.listId <= 0)) return { success: false, error: "Choose a valid Brevo audience list, or leave it blank for now." };
   if ((fields.ctaLabel && !fields.ctaUrl) || (!fields.ctaLabel && fields.ctaUrl)) return { success: false, error: "Provide both a CTA label and a CTA URL, or leave both blank." };
   try {
     const draft = await createMarketingDraft({ ...fields, source: "manual", approvalRequired: true });
@@ -113,11 +114,16 @@ export async function approveMarketingDraftAction(formData: FormData) {
     if (!existing) return { success: false, error: "Marketing draft not found." };
     if (existing.status !== "DRAFT" && existing.status !== "FAILED") return { success: false, error: `This draft is already ${existing.status.toLowerCase()}.` };
     if (!isBrevoConfigured()) return { success: false, error: "Brevo is not configured yet. Add the Brevo API key and verified sender email first." };
+    const selectedListIdRaw = String(formData.get("listId") || "").trim();
+    const selectedListId = selectedListIdRaw ? Number(selectedListIdRaw) : null;
+    if (selectedListId !== null && (!Number.isInteger(selectedListId) || selectedListId <= 0)) return { success: false, error: "Choose a valid Brevo audience list." };
+    const targetListId = existing.listId ?? selectedListId;
+    if (!targetListId) return { success: false, error: "Choose an audience list before sending this draft." };
     const approved = existing.status === "DRAFT" ? await approveMarketingDraft(draftId, Number(session.id)) : existing;
     if (!approved) return { success: false, error: "This draft could not be approved." };
     let brevoCampaignId = approved.brevoCampaignId;
     if (!brevoCampaignId) {
-      const campaign = await createBrevoCampaign({ campaignName: approved.campaignName, subject: approved.subject, body: approved.body, previewText: approved.previewText || undefined, listId: approved.listId, ctaLabel: approved.ctaLabel || undefined, ctaUrl: approved.ctaUrl || undefined });
+      const campaign = await createBrevoCampaign({ campaignName: approved.campaignName, subject: approved.subject, body: approved.body, previewText: approved.previewText || undefined, listId: targetListId, ctaLabel: approved.ctaLabel || undefined, ctaUrl: approved.ctaUrl || undefined });
       brevoCampaignId = campaign.id;
       await markMarketingDraftBrevoCreated(draftId, campaign.id);
     }
