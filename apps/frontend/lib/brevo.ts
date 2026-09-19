@@ -1,19 +1,11 @@
 // FILE: apps/frontend/lib/brevo.ts
-// Brevo is used for MARKETING email only. Transactional/app email remains on Resend.
-//
-// Required environment variables:
-// - BREVO_API_KEY
-// - BREVO_SENDER_EMAIL
-// Optional:
-// - BREVO_SENDER_NAME
-// - BREVO_REPLY_TO
+// Brevo marketing traffic is routed through the Railway gateway.
+// The Brevo API key never lives in Vercel.
 
-const BREVO_API_URL = "https://api.brevo.com/v3";
+const GATEWAY_URL = (process.env.BREVO_GATEWAY_URL || "").replace(/\/$/, "");
+const GATEWAY_KEY = process.env.BREVO_GATEWAY_KEY;
 
-type BrevoError = {
-  code?: string;
-  message?: string;
-};
+type BrevoError = { code?: string; message?: string };
 
 export type BrevoList = {
   id: number;
@@ -34,66 +26,45 @@ export type BrevoCampaign = {
   sentDate?: string;
 };
 
-function getConfig() {
-  return {
-    apiKey: process.env.BREVO_API_KEY,
-    senderEmail: process.env.BREVO_SENDER_EMAIL,
-    senderName: process.env.BREVO_SENDER_NAME || "Garrison Market",
-    replyTo: process.env.BREVO_REPLY_TO || undefined,
-  };
+function requireConfig() {
+  if (!GATEWAY_URL) throw new Error("Brevo gateway is not configured: BREVO_GATEWAY_URL is missing.");
+  if (!GATEWAY_KEY) throw new Error("Brevo gateway is not configured: BREVO_GATEWAY_KEY is missing.");
 }
 
 export function getBrevoSetupStatus() {
-  const { apiKey, senderEmail } = getConfig();
-  return {
-    apiKey: Boolean(apiKey),
-    senderEmail: Boolean(senderEmail),
-  };
+  return { apiKey: Boolean(GATEWAY_KEY), senderEmail: true, gateway: Boolean(GATEWAY_URL && GATEWAY_KEY) };
 }
 
 export function isBrevoConfigured() {
-  const { apiKey, senderEmail } = getConfig();
-  return Boolean(apiKey && senderEmail);
-}
-
-function requireConfig() {
-  const config = getConfig();
-  if (!config.apiKey) throw new Error("Brevo is not configured: BREVO_API_KEY is missing.");
-  if (!config.senderEmail) throw new Error("Brevo is not configured: BREVO_SENDER_EMAIL is missing.");
-  return config as typeof config & { apiKey: string; senderEmail: string };
+  return Boolean(GATEWAY_URL && GATEWAY_KEY);
 }
 
 async function brevoRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const { apiKey } = requireConfig();
-
-  const response = await fetch(`${BREVO_API_URL}${path}`, {
+  requireConfig();
+  const response = await fetch(GATEWAY_URL + path, {
     ...init,
     headers: {
       accept: "application/json",
       "content-type": "application/json",
-      "api-key": apiKey,
+      "x-garrison-gateway-key": GATEWAY_KEY!,
       ...(init.headers || {}),
     },
     cache: "no-store",
   });
-
   if (!response.ok) {
-    let detail = "Brevo API request failed.";
+    let detail = "Brevo gateway request failed.";
     try {
-      const body = (await response.json()) as BrevoError;
-      detail = body.message || body.code || detail;
-    } catch {
-      // Keep the generic message when Brevo returns a non-JSON response.
-    }
+      const body = (await response.json()) as BrevoError & { error?: string };
+      detail = body.message || body.code || body.error || detail;
+    } catch {}
     throw new Error(detail);
   }
-
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
 export async function getBrevoLists(): Promise<BrevoList[]> {
-  const data = await brevoRequest<{ lists?: BrevoList[] }>("/contacts/lists?limit=50&offset=0&sort=desc");
+  const data = await brevoRequest<{ lists?: BrevoList[] }>("/lists");
   return data.lists || [];
 }
 
@@ -106,7 +77,7 @@ export const AUTO_MARKETING_FOLDER_NAME = "Garrison Market";
 export const AUTO_MARKETING_LIST_NAME = "Garrison Market Marketing Subscribers";
 
 export async function getBrevoFolders(): Promise<BrevoFolder[]> {
-  const data = await brevoRequest<{ folders?: BrevoFolder[] }>("/contacts/folders?limit=50&offset=0&sort=desc");
+  const data = await brevoRequest<{ folders?: BrevoFolder[] }>("/folders");
   return data.folders || [];
 }
 
@@ -125,7 +96,7 @@ export async function getOrCreateBrevoMarketingList(): Promise<number> {
 
   if (!folder) {
     try {
-      folder = await brevoRequest<BrevoFolder>("/contacts/folders", {
+      folder = await brevoRequest<BrevoFolder>("/folders", {
         method: "POST",
         body: JSON.stringify({ name: AUTO_MARKETING_FOLDER_NAME }),
       });
@@ -139,7 +110,7 @@ export async function getOrCreateBrevoMarketingList(): Promise<number> {
   }
 
   try {
-    const created = await brevoRequest<{ id: number }>("/contacts/lists", {
+    const created = await brevoRequest<{ id: number }>("/lists", {
       method: "POST",
       body: JSON.stringify({
         name: AUTO_MARKETING_LIST_NAME,
@@ -158,7 +129,7 @@ export async function getOrCreateBrevoMarketingList(): Promise<number> {
 }
 
 export async function getBrevoCampaigns(): Promise<BrevoCampaign[]> {
-  const data = await brevoRequest<{ campaigns?: BrevoCampaign[] }>("/emailCampaigns?limit=20&offset=0&sort=desc");
+  const data = await brevoRequest<{ campaigns?: BrevoCampaign[] }>("/campaigns");
   return data.campaigns || [];
 }
 
@@ -256,7 +227,7 @@ export async function createBrevoCampaign(params: CreateBrevoCampaignParams) {
     params.ctaLabel && params.ctaUrl ? { label: params.ctaLabel, url: params.ctaUrl } : undefined,
   );
 
-  return brevoRequest<{ id: number }>("/emailCampaigns", {
+  return brevoRequest<{ id: number }>("/campaigns", {
     method: "POST",
     body: JSON.stringify({
       name: params.campaignName,
@@ -280,7 +251,7 @@ export async function sendBrevoCampaignNow(campaignId: number) {
   if (!Number.isInteger(campaignId) || campaignId <= 0) {
     throw new Error("A valid Brevo campaign ID is required.");
   }
-  await brevoRequest<void>(`/emailCampaigns/${campaignId}/sendNow`, {
+  await brevoRequest<void>(`/campaigns/${campaignId}/send`, {
     method: "POST",
     body: JSON.stringify({}),
   });
