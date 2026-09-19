@@ -61,7 +61,7 @@ export async function GET(request: Request) {
           subject: draft.subject,
           body: draft.body,
           previewText: draft.previewText || undefined,
-          listId: draft.listId,
+          listId: automation.listId,
           ctaLabel: draft.ctaLabel || undefined,
           ctaUrl: draft.ctaUrl || undefined,
         });
