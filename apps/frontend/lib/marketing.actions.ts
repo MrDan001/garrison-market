@@ -59,10 +59,9 @@ export async function addMarketingContactAction(formData: FormData) {
   await requireAdmin();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const fullName = String(formData.get("fullName") || "").trim();
-  const listIdRaw = String(formData.get("listId") || "").trim();
-  const listId = listIdRaw ? Number(listIdRaw) : null;
+  const listId = Number(formData.get("listId"));
   if (!/^\S+@\S+\.\S+$/.test(email)) return { success: false, error: "Enter a valid email address." };
-  if (listId !== null && (!Number.isInteger(listId) || listId <= 0)) return { success: false, error: "Choose a valid Brevo audience list, or leave it blank for now." };
+  if (!Number.isInteger(listId) || listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
   // Admins should only add contacts who have consented to marketing email. Brevo preserves existing unsubscribe state.
   try {
     await addBrevoContact(email, fullName, listId);
@@ -91,10 +90,11 @@ export async function createMarketingDraftAction(formData: FormData) {
 export async function generateMarketingDraftAction(formData: FormData) {
   await requireAdmin();
   const prompt = String(formData.get("prompt") || "").trim();
-  const listId = Number(formData.get("listId"));
+  const listIdRaw = String(formData.get("listId") || "").trim();
+  const listId = listIdRaw ? Number(listIdRaw) : null;
   const ctaUrl = String(formData.get("ctaUrl") || "").trim();
   if (!prompt) return { success: false, error: "Tell the AI what campaign you want it to create." };
-  if (!Number.isInteger(listId) || listId <= 0) return { success: false, error: "Choose a valid Brevo audience list." };
+  if (listId !== null && (!Number.isInteger(listId) || listId <= 0)) return { success: false, error: "Choose a valid Brevo audience list, or leave it blank for now." };
   try {
     const generated = await generateMarketingContent(prompt);
     const draft = await createMarketingDraft({ campaignName: generated.campaignName, subject: generated.subject, previewText: generated.previewText, body: generated.body, ctaLabel: generated.ctaLabel || undefined, ctaUrl: ctaUrl || undefined, listId, prompt, source: "ai", approvalRequired: true });
