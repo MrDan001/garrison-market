@@ -97,6 +97,66 @@ export async function getBrevoLists(): Promise<BrevoList[]> {
   return data.lists || [];
 }
 
+export type BrevoFolder = {
+  id: number;
+  name: string;
+};
+
+export const AUTO_MARKETING_FOLDER_NAME = "Garrison Market";
+export const AUTO_MARKETING_LIST_NAME = "Garrison Market Marketing Subscribers";
+
+export async function getBrevoFolders(): Promise<BrevoFolder[]> {
+  const data = await brevoRequest<{ folders?: BrevoFolder[] }>("/contacts/folders?limit=50&offset=0&sort=desc");
+  return data.folders || [];
+}
+
+export async function getOrCreateBrevoMarketingList(): Promise<number> {
+  const normalizedListName = AUTO_MARKETING_LIST_NAME.toLowerCase();
+
+  const existingList = (await getBrevoLists()).find(
+    (list) => list.name.trim().toLowerCase() === normalizedListName,
+  );
+  if (existingList) return existingList.id;
+
+  const normalizedFolderName = AUTO_MARKETING_FOLDER_NAME.toLowerCase();
+  let folder = (await getBrevoFolders()).find(
+    (item) => item.name.trim().toLowerCase() === normalizedFolderName,
+  );
+
+  if (!folder) {
+    try {
+      folder = await brevoRequest<BrevoFolder>("/contacts/folders", {
+        method: "POST",
+        body: JSON.stringify({ name: AUTO_MARKETING_FOLDER_NAME }),
+      });
+    } catch {
+      // Another request may have created the folder concurrently.
+      folder = (await getBrevoFolders()).find(
+        (item) => item.name.trim().toLowerCase() === normalizedFolderName,
+      );
+      if (!folder) throw new Error("Could not create the Garrison Market Brevo folder.");
+    }
+  }
+
+  try {
+    const created = await brevoRequest<{ id: number }>("/contacts/lists", {
+      method: "POST",
+      body: JSON.stringify({
+        name: AUTO_MARKETING_LIST_NAME,
+        folderId: folder.id,
+      }),
+    });
+    return created.id;
+  } catch {
+    // Another request may have created the list concurrently.
+    const retry = (await getBrevoLists()).find(
+      (list) => list.name.trim().toLowerCase() === normalizedListName,
+    );
+    if (retry) return retry.id;
+    throw new Error("Could not create the Garrison Market Brevo marketing list.");
+  }
+}
+
 export async function getBrevoCampaigns(): Promise<BrevoCampaign[]> {
   const data = await brevoRequest<{ campaigns?: BrevoCampaign[] }>("/emailCampaigns?limit=20&offset=0&sort=desc");
   return data.campaigns || [];

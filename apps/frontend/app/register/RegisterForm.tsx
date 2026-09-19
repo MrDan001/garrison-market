@@ -68,6 +68,8 @@ export default function RegisterForm() {
   const [selectedState, setSelectedState] = useState("");
   const [selectedLga, setSelectedLga] = useState("");
   const [referralCode, setReferralCode] = useState(""); // NEW: Added local state tracking for referral input
+  const [notificationConsent, setNotificationConsent] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
 
   // If the visitor arrived via an affiliate link (see
   // app/ref/[code]/route.ts), pre-fill and lock the Referral Code field
@@ -129,6 +131,12 @@ export default function RegisterForm() {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMessage("");
+
+    if (!notificationConsent || !marketingConsent) {
+      setErrorMessage("Please consent to both notifications and marketing emails to continue.");
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const formData = new FormData();
@@ -381,9 +389,47 @@ export default function RegisterForm() {
               </div>
             </div>
 
+            <div className="space-y-3 rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-[var(--bg-app)]/60 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-primary)]/50" style={{ fontFamily: "var(--font-mono)" }}>
+                Communication Consent
+              </p>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="notificationConsent"
+                  checked={notificationConsent}
+                  onChange={(e) => setNotificationConsent(e.target.checked)}
+                  required
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600"
+                />
+                <span className="text-xs text-[var(--text-primary)]/75 leading-relaxed">
+                  I consent to receive Garrison Market app notifications, including order alerts, account updates, and important service notices.
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="marketingConsent"
+                  checked={marketingConsent}
+                  onChange={(e) => setMarketingConsent(e.target.checked)}
+                  required
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600"
+                />
+                <span className="text-xs text-[var(--text-primary)]/75 leading-relaxed">
+                  I consent to receive Garrison Market marketing emails, including product updates, tips, offers, and announcements. I can unsubscribe from marketing emails at any time.
+                </span>
+              </label>
+
+              <p className="text-[10px] text-[var(--text-primary)]/40 leading-relaxed">
+                Both consents are required before your account can be created.
+              </p>
+            </div>
+
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !notificationConsent || !marketingConsent}
               className="group w-full mt-4 flex items-center justify-center gap-2 rounded-2xl bg-slate-900 dark:bg-slate-100 py-4 font-semibold text-slate-50 dark:text-slate-950 hover:bg-white active:scale-[0.98] transition-all disabled:opacity-50"
             >
               {isSubmitting ? (

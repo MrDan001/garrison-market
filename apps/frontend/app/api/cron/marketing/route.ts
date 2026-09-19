@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createBrevoCampaign, isBrevoConfigured, sendBrevoCampaignNow } from "@/lib/brevo";
 import { isValidCronAuthHeader } from "@/lib/cron-auth";
+import { syncPendingMarketingConsents } from "@/lib/marketing-consent";
 import { generateMarketingContent } from "@/lib/marketing-ai";
 import {
   claimDueMarketingAutomations,
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    const contactSync = await syncPendingMarketingConsents(100);
     const automations = await claimDueMarketingAutomations(10);
     const results: Array<Record<string, unknown>> = [];
 
@@ -79,7 +81,12 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, processed: automations.length, results });
+    return NextResponse.json({
+      success: true,
+      contacts: contactSync,
+      processed: automations.length,
+      results,
+    });
   } catch (error: any) {
     console.error("[marketing-cron] failed:", error);
     return NextResponse.json({ success: false, error: error?.message || "Marketing automation runner failed." }, { status: 500 });

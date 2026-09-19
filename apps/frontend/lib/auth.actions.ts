@@ -28,6 +28,7 @@ import { resolveAffiliateAttribution, markAffiliateClickConverted } from "@/lib/
 import { resolveWaitlistAttributionByEmail, markWaitlistSignupRegistered } from "@/lib/waitlist-internal";
 import { checkRateLimit, resetRateLimit, getClientIp } from "@/lib/rate-limit";
 import { isRegistrationOpen } from "@/lib/system-settings.actions";
+import { syncMarketingConsentForUser } from "@/lib/marketing-consent";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -235,6 +236,14 @@ export async function registerOwnerAction(formData: FormData) {
   }
 
   const data = Object.fromEntries(formData.entries());
+  const notificationConsent = data.notificationConsent === "on";
+  const marketingConsent = data.marketingConsent === "on";
+
+  if (!notificationConsent || !marketingConsent) {
+    return { error: "Both notification and marketing consent are required to create an account." };
+  }
+
+  const consentRecordedAt = new Date();
 
   const passwordCheck = validatePassword(data.password as string);
   if (!passwordCheck.valid) {
@@ -299,6 +308,10 @@ export async function registerOwnerAction(formData: FormData) {
         status: 'pending',
         referralCode: cleanNewCodeForUser,
         referredById: referrerId,
+        notificationConsent,
+        notificationConsentAt: consentRecordedAt,
+        marketingConsent,
+        marketingConsentAt: consentRecordedAt,
         affiliateId: affiliateAttribution?.affiliateId ?? null,
 affiliateReferredAt: affiliateAttribution ? new Date() : null,
         hasTriggeredReferralReward: false, 
@@ -312,6 +325,15 @@ affiliateReferredAt: affiliateAttribution ? new Date() : null,
     });
     if (affiliateAttribution) {
       await markAffiliateClickConverted(affiliateAttribution.clickId, newUser.id);
+    }
+
+    // Marketing consent is recorded locally first. Brevo sync is best-effort
+    // so a temporary marketing-provider outage cannot block account creation;
+    // the daily marketing worker retries any consented user not yet synced.
+    try {
+      await syncMarketingConsentForUser(newUser.id);
+    } catch (error) {
+      console.error("[registerOwnerAction] Brevo marketing sync failed", error);
     }
     if (waitlistAttribution) {
       await markWaitlistSignupRegistered(waitlistAttribution.waitlistSignupId, newUser.id);
