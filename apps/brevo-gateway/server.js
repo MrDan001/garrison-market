@@ -98,7 +98,7 @@ const server = http.createServer(async (req, res) => {
       const payload = {
         email: String(body.email || "").trim().toLowerCase(),
         attributes: body.attributes || {},
-        listIds: [Number(body.listId)],
+        listIds: [Number(body.listId || body.listIds?.[0])],
         updateEnabled: true,
       };
       return json(res, 200, await brevo("/contacts", { method: "POST", body: JSON.stringify(payload) }));
