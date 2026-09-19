@@ -24,6 +24,11 @@ model User {
   shopCity                    String?
   shopState                   String?
   notificationsEnabled        Boolean              @default(true)
+  notificationConsent         Boolean              @default(false)
+  notificationConsentAt       DateTime?
+  marketingConsent            Boolean              @default(false)
+  marketingConsentAt          DateTime?
+  marketingBrevoSyncedAt      DateTime?
   discountEnabled             Boolean              @default(false)
   consignmentEnabled          Boolean              @default(false)
   staffStoreId                Int?
