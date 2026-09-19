@@ -30,7 +30,7 @@ export type MarketingDraft = {
   body: string;
   ctaLabel: string | null;
   ctaUrl: string | null;
-  listId: number;
+  listId: number | null;
   prompt: string | null;
   source: MarketingDraftSource;
   status: MarketingDraftStatus;
@@ -76,7 +76,7 @@ function toDraft(row: DbRow): MarketingDraft {
     body: String(row.body),
     ctaLabel: row.cta_label ? String(row.cta_label) : null,
     ctaUrl: row.cta_url ? String(row.cta_url) : null,
-    listId: Number(row.list_id),
+    listId: row.list_id == null ? null : Number(row.list_id),
     prompt: row.prompt ? String(row.prompt) : null,
     source: String(row.source) as MarketingDraftSource,
     status: String(row.status) as MarketingDraftStatus,
@@ -168,7 +168,7 @@ async function ensureMarketingTablesInternal() {
       body TEXT NOT NULL,
       cta_label TEXT,
       cta_url TEXT,
-      list_id INTEGER NOT NULL,
+      list_id INTEGER,
       prompt TEXT,
       source TEXT NOT NULL DEFAULT 'manual',
       status TEXT NOT NULL DEFAULT 'DRAFT',
@@ -182,6 +182,9 @@ async function ensureMarketingTablesInternal() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE garrison_marketing_drafts
+      ALTER COLUMN list_id DROP NOT NULL;
 
     CREATE INDEX IF NOT EXISTS garrison_marketing_drafts_status_idx
       ON garrison_marketing_drafts(status, created_at DESC);
@@ -245,7 +248,7 @@ export async function createMarketingDraft(input: {
   body: string;
   ctaLabel?: string;
   ctaUrl?: string;
-  listId: number;
+  listId?: number | null;
   prompt?: string;
   source: MarketingDraftSource;
   approvalRequired?: boolean;
@@ -264,7 +267,7 @@ export async function createMarketingDraft(input: {
       input.body.trim(),
       input.ctaLabel?.trim() || null,
       input.ctaUrl?.trim() || null,
-      input.listId,
+      input.listId ?? null,
       input.prompt?.trim() || null,
       input.source,
       input.approvalRequired ?? true,
