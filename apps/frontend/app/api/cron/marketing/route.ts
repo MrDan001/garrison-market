@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { createBrevoCampaign, isBrevoConfigured, sendBrevoCampaignNow } from "@/lib/brevo";
+import { createResendBroadcast, getMarketingSegmentId, isResendMarketingConfigured, sendResendBroadcastNow } from "@/lib/resend-marketing";
 import { isValidCronAuthHeader } from "@/lib/cron-auth";
 import { syncPendingMarketingConsents } from "@/lib/marketing-consent";
 import { generateMarketingContent } from "@/lib/marketing-ai";
 import {
   claimDueMarketingAutomations,
   createMarketingDraft,
-  markMarketingDraftBrevoCreated,
   markMarketingDraftFailed,
+  markMarketingDraftResendCreated,
   markMarketingDraftSent,
   recordAutomationResult,
 } from "@/lib/marketing-db";
@@ -28,18 +28,21 @@ export async function GET(request: Request) {
       let draftId: number | null = null;
       try {
         const generated = await generateMarketingContent(automation.prompt);
+        const segmentId = automation.resendSegmentId || getMarketingSegmentId();
+
         const draft = await createMarketingDraft({
           campaignName: generated.campaignName,
           subject: generated.subject,
           previewText: generated.previewText,
           body: generated.body,
           ctaLabel: generated.ctaLabel || undefined,
-          listId: automation.listId,
+          resendSegmentId: segmentId,
           prompt: automation.prompt,
           source: "automation",
           approvalRequired: automation.approvalRequired,
           automationId: automation.id,
         });
+
         draftId = draft.id;
         await recordAutomationResult(automation.id, draft.id);
 
@@ -48,27 +51,35 @@ export async function GET(request: Request) {
           continue;
         }
 
-        if (!isBrevoConfigured()) {
-          const message = "Brevo is not configured; automated campaign was drafted but not sent.";
+        if (!isResendMarketingConfigured() || !segmentId) {
+          const message = "Resend marketing is not configured; automated campaign was drafted but not sent.";
           await markMarketingDraftFailed(draft.id, message);
           await recordAutomationResult(automation.id, draft.id, message);
           results.push({ id: automation.id, draftId: draft.id, mode: "automatic", status: "failed", error: message });
           continue;
         }
 
-        const campaign = await createBrevoCampaign({
+        const broadcast = await createResendBroadcast({
           campaignName: draft.campaignName,
           subject: draft.subject,
           body: draft.body,
           previewText: draft.previewText || undefined,
-          listId: automation.listId,
+          segmentId,
           ctaLabel: draft.ctaLabel || undefined,
           ctaUrl: draft.ctaUrl || undefined,
         });
-        await markMarketingDraftBrevoCreated(draft.id, campaign.id);
-        await sendBrevoCampaignNow(campaign.id);
+
+        await markMarketingDraftResendCreated(draft.id, broadcast.id);
+        await sendResendBroadcastNow(broadcast.id);
         await markMarketingDraftSent(draft.id);
-        results.push({ id: automation.id, draftId: draft.id, campaignId: campaign.id, mode: "automatic", status: "sent" });
+
+        results.push({
+          id: automation.id,
+          draftId: draft.id,
+          broadcastId: broadcast.id,
+          mode: "automatic",
+          status: "sent",
+        });
       } catch (error: any) {
         const message = error?.message || "Automated marketing run failed.";
         if (draftId) {
@@ -89,6 +100,9 @@ export async function GET(request: Request) {
     });
   } catch (error: any) {
     console.error("[marketing-cron] failed:", error);
-    return NextResponse.json({ success: false, error: error?.message || "Marketing automation runner failed." }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error?.message || "Marketing automation runner failed." },
+      { status: 500 },
+    );
   }
 }
