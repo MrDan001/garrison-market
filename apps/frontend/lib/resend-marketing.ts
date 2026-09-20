@@ -123,10 +123,17 @@ export async function addResendMarketingContact(email: string, fullName?: string
     firstName,
     lastName,
     unsubscribed: false,
-    segments: [{ id: targetSegmentId }],
   });
 
   if (error) throw new Error(error.message || "Could not add the Resend marketing contact.");
+  if (!data?.id) throw new Error("Resend created the contact but returned no contact ID.");
+
+  const { error: segmentError } = await client.contacts.segments.add({
+    contactId: data.id,
+    segmentId: targetSegmentId,
+  });
+  if (segmentError) throw new Error(segmentError.message || "Could not add the contact to the Garrison Market marketing segment.");
+
   return data;
 }
 
@@ -150,6 +157,17 @@ export async function syncResendMarketingContact(
       unsubscribed: !subscribed,
     });
     if (error) throw new Error(error.message || "Could not update the Resend marketing contact.");
+
+    if (subscribed) {
+      const { error: segmentError } = await client.contacts.segments.add({
+        contactId: existing.id,
+        segmentId: targetSegmentId,
+      });
+      if (segmentError) {
+        throw new Error(segmentError.message || "Could not add the contact to the Garrison Market marketing segment.");
+      }
+    }
+
     return data;
   }
 
@@ -160,9 +178,16 @@ export async function syncResendMarketingContact(
     firstName,
     lastName,
     unsubscribed: false,
-    segments: [{ id: targetSegmentId }],
   });
   if (error) throw new Error(error.message || "Could not create the Resend marketing contact.");
+  if (!data?.id) throw new Error("Resend created the contact but returned no contact ID.");
+
+  const { error: segmentError } = await client.contacts.segments.add({
+    contactId: data.id,
+    segmentId: targetSegmentId,
+  });
+  if (segmentError) throw new Error(segmentError.message || "Could not add the contact to the Garrison Market marketing segment.");
+
   return data;
 }
 
