@@ -99,7 +99,6 @@ function toAutomation(row: DbRow): MarketingAutomation {
     id: Number(row.id),
     name: String(row.name),
     prompt: String(row.prompt),
-    listId: row.list_id == null ? undefined : Number(row.list_id),
     resendSegmentId: row.resend_segment_id ? String(row.resend_segment_id) : null,
     frequency: String(row.frequency) as MarketingFrequency,
     sendTime: String(row.send_time),
@@ -180,6 +179,8 @@ async function ensureMarketingTablesInternal() {
       approved_by INTEGER,
       approved_at TIMESTAMPTZ,
       brevo_campaign_id BIGINT,
+      resend_broadcast_id TEXT,
+      resend_segment_id TEXT,
       sent_at TIMESTAMPTZ,
       error TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -188,6 +189,10 @@ async function ensureMarketingTablesInternal() {
 
     ALTER TABLE garrison_marketing_drafts
       ALTER COLUMN list_id DROP NOT NULL;
+
+    ALTER TABLE garrison_marketing_drafts
+      ADD COLUMN IF NOT EXISTS resend_broadcast_id TEXT,
+      ADD COLUMN IF NOT EXISTS resend_segment_id TEXT;
 
     CREATE INDEX IF NOT EXISTS garrison_marketing_drafts_status_idx
       ON garrison_marketing_drafts(status, created_at DESC);
@@ -198,7 +203,8 @@ async function ensureMarketingTablesInternal() {
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       prompt TEXT NOT NULL,
-      list_id INTEGER NOT NULL,
+      list_id INTEGER,
+      resend_segment_id TEXT,
       frequency TEXT NOT NULL DEFAULT 'weekly',
       send_time TEXT NOT NULL DEFAULT '09:00',
       weekday INTEGER,
@@ -213,6 +219,12 @@ async function ensureMarketingTablesInternal() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE garrison_marketing_automations
+      ALTER COLUMN list_id DROP NOT NULL;
+
+    ALTER TABLE garrison_marketing_automations
+      ADD COLUMN IF NOT EXISTS resend_segment_id TEXT;
 
     CREATE TABLE IF NOT EXISTS garrison_marketing_events (
       id BIGSERIAL PRIMARY KEY,
