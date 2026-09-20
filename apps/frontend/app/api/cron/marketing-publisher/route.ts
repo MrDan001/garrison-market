@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       page_id: string | null;
       instagram_business_account_id: string | null;
       access_token_ciphertext: string | null;
+      status: string;
     }>(
       "select id, provider, provider_account_id, page_id, instagram_business_account_id, access_token_ciphertext, status " +
         "from marketing.social_connections where id = $1 limit 1",
