@@ -38,7 +38,8 @@ export type MarketingDraft = {
   automationId: number | null;
   approvedBy: number | null;
   approvedAt: string | null;
-  brevoCampaignId: number | null;
+  resendBroadcastId: string | null;
+  resendSegmentId: string | null;
   sentAt: string | null;
   error: string | null;
   createdAt: string;
@@ -49,7 +50,7 @@ export type MarketingAutomation = {
   id: number;
   name: string;
   prompt: string;
-  listId: number;
+  resendSegmentId: string | null;
   frequency: MarketingFrequency;
   sendTime: string;
   weekday: number | null;
@@ -84,7 +85,8 @@ function toDraft(row: DbRow): MarketingDraft {
     automationId: row.automation_id == null ? null : Number(row.automation_id),
     approvedBy: row.approved_by == null ? null : Number(row.approved_by),
     approvedAt: row.approved_at ? new Date(row.approved_at).toISOString() : null,
-    brevoCampaignId: row.brevo_campaign_id == null ? null : Number(row.brevo_campaign_id),
+    resendBroadcastId: row.resend_broadcast_id ? String(row.resend_broadcast_id) : null,
+    resendSegmentId: row.resend_segment_id ? String(row.resend_segment_id) : null,
     sentAt: row.sent_at ? new Date(row.sent_at).toISOString() : null,
     error: row.error ? String(row.error) : null,
     createdAt: new Date(row.created_at).toISOString(),
@@ -97,7 +99,7 @@ function toAutomation(row: DbRow): MarketingAutomation {
     id: Number(row.id),
     name: String(row.name),
     prompt: String(row.prompt),
-    listId: Number(row.list_id),
+    resendSegmentId: row.resend_segment_id ? String(row.resend_segment_id) : null,
     frequency: String(row.frequency) as MarketingFrequency,
     sendTime: String(row.send_time),
     weekday: row.weekday == null ? null : Number(row.weekday),
@@ -177,6 +179,8 @@ async function ensureMarketingTablesInternal() {
       approved_by INTEGER,
       approved_at TIMESTAMPTZ,
       brevo_campaign_id BIGINT,
+      resend_broadcast_id TEXT,
+      resend_segment_id TEXT,
       sent_at TIMESTAMPTZ,
       error TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -185,6 +189,10 @@ async function ensureMarketingTablesInternal() {
 
     ALTER TABLE garrison_marketing_drafts
       ALTER COLUMN list_id DROP NOT NULL;
+
+    ALTER TABLE garrison_marketing_drafts
+      ADD COLUMN IF NOT EXISTS resend_broadcast_id TEXT,
+      ADD COLUMN IF NOT EXISTS resend_segment_id TEXT;
 
     CREATE INDEX IF NOT EXISTS garrison_marketing_drafts_status_idx
       ON garrison_marketing_drafts(status, created_at DESC);
@@ -195,7 +203,8 @@ async function ensureMarketingTablesInternal() {
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       prompt TEXT NOT NULL,
-      list_id INTEGER NOT NULL,
+      list_id INTEGER,
+      resend_segment_id TEXT,
       frequency TEXT NOT NULL DEFAULT 'weekly',
       send_time TEXT NOT NULL DEFAULT '09:00',
       weekday INTEGER,
@@ -210,6 +219,25 @@ async function ensureMarketingTablesInternal() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE garrison_marketing_automations
+      ALTER COLUMN list_id DROP NOT NULL;
+
+    ALTER TABLE garrison_marketing_automations
+      ADD COLUMN IF NOT EXISTS resend_segment_id TEXT;
+
+    CREATE TABLE IF NOT EXISTS garrison_marketing_events (
+      id BIGSERIAL PRIMARY KEY,
+      resend_event_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      broadcast_id TEXT,
+      email TEXT,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS garrison_marketing_events_broadcast_idx
+      ON garrison_marketing_events(broadcast_id, created_at DESC);
 
     CREATE INDEX IF NOT EXISTS garrison_marketing_automations_due_idx
       ON garrison_marketing_automations(active, next_run_at);
@@ -249,6 +277,7 @@ export async function createMarketingDraft(input: {
   ctaLabel?: string;
   ctaUrl?: string;
   listId?: number | null;
+  resendSegmentId?: string | null;
   prompt?: string;
   source: MarketingDraftSource;
   approvalRequired?: boolean;
@@ -257,8 +286,8 @@ export async function createMarketingDraft(input: {
   await ensureMarketingTables();
   const result = await pool.query(
     `INSERT INTO garrison_marketing_drafts
-      (campaign_name, subject, preview_text, body, cta_label, cta_url, list_id, prompt, source, approval_required, automation_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      (campaign_name, subject, preview_text, body, cta_label, cta_url, list_id, resend_segment_id, prompt, source, approval_required, automation_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING *`,
     [
       input.campaignName.trim(),
@@ -268,6 +297,7 @@ export async function createMarketingDraft(input: {
       input.ctaLabel?.trim() || null,
       input.ctaUrl?.trim() || null,
       input.listId ?? null,
+      input.resendSegmentId ?? null,
       input.prompt?.trim() || null,
       input.source,
       input.approvalRequired ?? true,
@@ -301,11 +331,11 @@ export async function rejectMarketingDraft(id: number) {
   return result.rows[0] ? toDraft(result.rows[0]) : null;
 }
 
-export async function markMarketingDraftBrevoCreated(id: number, brevoCampaignId: number) {
+export async function markMarketingDraftResendCreated(id: number, broadcastId: string) {
   await ensureMarketingTables();
   const result = await pool.query(
-    `UPDATE garrison_marketing_drafts SET brevo_campaign_id = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
-    [id, brevoCampaignId],
+    `UPDATE garrison_marketing_drafts SET resend_broadcast_id = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
+    [id, broadcastId],
   );
   return result.rows[0] ? toDraft(result.rows[0]) : null;
 }
@@ -343,7 +373,7 @@ export async function listMarketingAutomations() {
 export async function createMarketingAutomation(input: {
   name: string;
   prompt: string;
-  listId: number;
+  resendSegmentId?: string | null;
   frequency: MarketingFrequency;
   sendTime: string;
   weekday?: number | null;
@@ -355,13 +385,14 @@ export async function createMarketingAutomation(input: {
   const nextRun = calculateNextMarketingRun(input.frequency, input.sendTime, input.weekday ?? null, input.dayOfMonth ?? null);
   const result = await pool.query(
     `INSERT INTO garrison_marketing_automations
-      (name, prompt, list_id, frequency, send_time, weekday, day_of_month, active, approval_required, next_run_at, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8,$9,$10)
+      (name, prompt, list_id, resend_segment_id, frequency, send_time, weekday, day_of_month, active, approval_required, next_run_at, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10,$11)
      RETURNING *`,
     [
       input.name.trim(),
       input.prompt.trim(),
-      input.listId,
+      null,
+      input.resendSegmentId ?? null,
       input.frequency,
       input.sendTime,
       input.weekday ?? null,
@@ -447,5 +478,22 @@ export async function recordAutomationResult(automationId: number, draftId: numb
        SET last_draft_id = $2, last_error = $3, updated_at = NOW()
      WHERE id = $1`,
     [automationId, draftId, error ? error.slice(0, 2000) : null],
+  );
+}
+
+
+export async function recordResendMarketingEvent(input: {
+  eventId: string;
+  eventType: string;
+  broadcastId?: string | null;
+  email?: string | null;
+  payload: unknown;
+}) {
+  await ensureMarketingTables();
+  await pool.query(
+    `INSERT INTO garrison_marketing_events (resend_event_id, event_type, broadcast_id, email, payload)
+     VALUES ($1,$2,$3,$4,$5::jsonb)
+     ON CONFLICT (resend_event_id) DO NOTHING`,
+    [input.eventId, input.eventType, input.broadcastId ?? null, input.email ?? null, JSON.stringify(input.payload ?? {})],
   );
 }

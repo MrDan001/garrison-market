@@ -10,11 +10,12 @@ export default async function MarketingPage() {
   try {
     data = await getMarketingDashboardData();
   } catch (error: any) {
-    loadError = error?.message || "Could not load Brevo marketing data.";
+    loadError = error?.message || "Could not load Resend marketing data.";
     data = {
-      setup: { apiKey: false, senderEmail: false },
+      setup: { apiKey: false, senderEmail: false, segmentId: false },
       aiReady: Boolean(process.env.OPENROUTER_API_KEY),
       lists: [],
+      segment: { id: process.env.RESEND_MARKETING_SEGMENT_ID || null, name: "Garrison Market Marketing Subscribers" },
       campaigns: [],
       drafts: [],
       automations: [],

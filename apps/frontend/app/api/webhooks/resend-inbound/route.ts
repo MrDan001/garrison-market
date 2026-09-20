@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import prisma from "@/lib/prisma";
 import { createAdminNotification } from "@/lib/admin-notification.actions";
+import { recordResendMarketingEvent } from "@/lib/marketing-db";
 
 function getResendClient(): Resend {
   const apiKey = process.env.RESEND_API_KEY;
@@ -77,6 +78,41 @@ export async function POST(request: NextRequest) {
   }
 
   if (event?.type !== "email.received") {
+    try {
+      const eventType = String(event?.type || "");
+      const data = event?.data || {};
+      const eventId = String(event?.id || request.headers.get("svix-id") || "");
+      const recipients = Array.isArray(data?.to) ? data.to : [data?.to].filter(Boolean);
+      const email = eventType === "contact.updated"
+        ? String(data?.email || "").trim().toLowerCase() || null
+        : recipients[0]
+          ? String(recipients[0]).toLowerCase()
+          : null;
+      const broadcastId = data?.broadcast_id ? String(data.broadcast_id) : null;
+
+      if (eventType === "contact.updated" && email && data?.unsubscribed === true) {
+        await prisma.user.updateMany({
+          where: { email },
+          data: {
+            marketingConsent: false,
+            marketingBrevoSyncedAt: new Date(),
+          },
+        });
+      }
+
+      if (eventId && (eventType.startsWith("email.") || eventType === "contact.updated")) {
+        await recordResendMarketingEvent({
+          eventId,
+          eventType,
+          broadcastId,
+          email,
+          payload: event,
+        });
+      }
+    } catch (marketingEventError) {
+      console.error("[resend-webhook] failed to process Resend marketing event:", marketingEventError);
+    }
+
     return NextResponse.json({ received: true });
   }
 
