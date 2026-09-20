@@ -26,6 +26,9 @@ export async function POST(request: Request) {
     const draftId = typeof payload?.draftId === "string" ? payload.draftId : "";
     const connectionId = typeof payload?.connectionId === "string" ? payload.connectionId : "";
     const scheduledFor = parseScheduledFor(payload?.scheduledFor);
+    const mediaUrls = Array.isArray(payload?.mediaUrls)
+      ? payload.mediaUrls.filter((value: unknown): value is string => typeof value === "string" && value.trim()).slice(0, 10)
+      : draftId ? null : [];
 
     if (!draftId || !connectionId) {
       return NextResponse.json({ error: "draftId and connectionId are required." }, { status: 400 });
@@ -70,6 +73,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Draft platform and connection platform do not match." }, { status: 409 });
     }
 
+    const postMediaUrls = mediaUrls ?? draft.media_urls ?? [];
+    if (draft.platform === "instagram" && postMediaUrls.length === 0) {
+      return NextResponse.json(
+        { error: "Instagram posts require at least one public image or video URL." },
+        { status: 400 },
+      );
+    }
+
     const row = await marketingQueryOne(
       "insert into marketing.posts (" +
         "connection_id, draft_id, platform, caption, media_urls, status, scheduled_for, created_by_user_id" +
@@ -79,7 +90,7 @@ export async function POST(request: Request) {
         draftId,
         draft.platform,
         draft.body,
-        draft.media_urls ?? [],
+        postMediaUrls,
         scheduledFor ? "scheduled" : "queued",
         scheduledFor,
         session.id,
