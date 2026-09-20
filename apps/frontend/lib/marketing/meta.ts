@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { marketingQuery, marketingQueryOne } from "@/lib/marketing/db";
 import { encryptMarketingToken } from "@/lib/marketing/token-crypto";
 
-const DEFAULT_GRAPH_VERSION = "v24.0";
+const DEFAULT_GRAPH_VERSION = "v26.0";
 const META_GRAPH_HOST = "https://graph.facebook.com";
 
 export const META_PUBLISH_SCOPES = [
