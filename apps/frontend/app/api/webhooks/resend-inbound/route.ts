@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import prisma from "@/lib/prisma";
 import { createAdminNotification } from "@/lib/admin-notification.actions";
+import { recordResendMarketingEvent } from "@/lib/marketing-db";
 
 function getResendClient(): Resend {
   const apiKey = process.env.RESEND_API_KEY;
@@ -77,6 +78,27 @@ export async function POST(request: NextRequest) {
   }
 
   if (event?.type !== "email.received") {
+    try {
+      const eventType = String(event?.type || "");
+      const data = event?.data || {};
+      const eventId = String(event?.id || request.headers.get("svix-id") || "");
+      const recipients = Array.isArray(data?.to) ? data.to : [data?.to].filter(Boolean);
+      const email = recipients[0] ? String(recipients[0]).toLowerCase() : null;
+      const broadcastId = data?.broadcast_id ? String(data.broadcast_id) : null;
+
+      if (eventId && eventType.startsWith("email.")) {
+        await recordResendMarketingEvent({
+          eventId,
+          eventType,
+          broadcastId,
+          email,
+          payload: event,
+        });
+      }
+    } catch (marketingEventError) {
+      console.error("[resend-webhook] failed to record marketing event:", marketingEventError);
+    }
+
     return NextResponse.json({ received: true });
   }
 
