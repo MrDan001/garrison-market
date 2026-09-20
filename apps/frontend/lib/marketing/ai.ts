@@ -130,40 +130,26 @@ function buildLocalGeneration(input: MarketingGenerationInput): GeneratedMarketi
   const goal = input.goal || "increase awareness and engagement";
 
   const facebook: GeneratedPlatformContent = {
-    title: featureName + ": make the everyday business work easier",
+    title: `${featureName}: make the everyday business work easier`,
     body:
-      "Running a business should not mean guessing. " +
-      featureName +
-      " helps business owners " +
-      angle +
-      ". " +
-      "Garrison Market puts this into one practical system so you can spend less time chasing records and more time running the shop. " +
-      "The goal here is simple: " +
-      goal.toLowerCase().replace(/[.]+$/, "") +
-      ".",
+      `Running a business should not mean guessing. ${featureName} helps business owners ${angle}. ` +
+      `Garrison Market puts this into one practical system so you can spend less time chasing records and more time running the shop. ` +
+      `The goal here is simple: ${goal.toLowerCase().replace(/[.]+$/, "")}.`,
     hashtags: [
       cleanHashtag("GarrisonMarket"),
       cleanHashtag(feature.category),
       cleanHashtag("BusinessOwners"),
       cleanHashtag("NigeriaBusiness"),
     ].filter(Boolean),
-    callToAction:
-      "See how Garrison Market can fit into your business and tell us what you would like to simplify first.",
+    callToAction: "See how Garrison Market can fit into your business and tell us what you would like to simplify first.",
   };
 
   const instagram: GeneratedPlatformContent = {
-    title: featureName + " without the guesswork.",
+    title: `${featureName} without the guesswork.`,
     body:
-      featureName +
-      " → " +
-      angle +
-      ".
-
-" +
-      "Less chasing records. More clarity for your business.
-
-" +
-      "That is the kind of everyday problem Garrison Market is built to help with.",
+      `${featureName} → ${angle}.\n\n` +
+      `Less chasing records. More clarity for your business.\n\n` +
+      `That is the kind of everyday problem Garrison Market is built to help with.`,
     hashtags: [
       cleanHashtag("GarrisonMarket"),
       cleanHashtag(featureName.replace(/&/g, "and")),
@@ -176,17 +162,13 @@ function buildLocalGeneration(input: MarketingGenerationInput): GeneratedMarketi
 
   return {
     strategy:
-      "Lead with the real business-owner pain point around " +
-      featureName +
-      ", show the practical benefit, and invite the audience into the conversation.",
+      `Lead with the real business-owner pain point around ${featureName}, show the practical benefit, and invite the audience into the conversation.`,
     featureFocus: feature.id,
     contentType: input.platform === "instagram" ? "instagram-post" : "social-post",
     facebook,
     instagram,
     visualIdea:
-      "Create a clean Garrison Market visual showing a business owner dealing with the pain point addressed by " +
-      featureName +
-      ", then reveal the feature as the practical solution.",
+      `Create a clean Garrison Market visual showing a business owner dealing with the pain point addressed by ${featureName}, then reveal the feature as the practical solution.`,
   };
 }
 
@@ -195,9 +177,7 @@ async function generateWithGemini(input: MarketingGenerationInput, apiKey: strin
   const prompt = buildMarketingBrainPrompt(input);
 
   const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/" +
-      encodeURIComponent(model) +
-      ":generateContent",
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: "POST",
       headers: {
