@@ -49,7 +49,7 @@ export type MarketingAutomation = {
   id: number;
   name: string;
   prompt: string;
-  listId: number;
+  resendSegmentId?: string | null;
   frequency: MarketingFrequency;
   sendTime: string;
   weekday: number | null;
@@ -97,7 +97,8 @@ function toAutomation(row: DbRow): MarketingAutomation {
     id: Number(row.id),
     name: String(row.name),
     prompt: String(row.prompt),
-    listId: Number(row.list_id),
+    listId: row.list_id == null ? undefined : Number(row.list_id),
+    resendSegmentId: row.resend_segment_id ? String(row.resend_segment_id) : null,
     frequency: String(row.frequency) as MarketingFrequency,
     sendTime: String(row.send_time),
     weekday: row.weekday == null ? null : Number(row.weekday),
