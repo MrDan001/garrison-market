@@ -59,12 +59,43 @@ export async function POST(request: Request) {
       ...recentPosts.map((item) => "[" + item.platform + "] " + (item.caption || "")),
     ].slice(0, 30);
 
+    const performanceRows = await marketingQuery<{
+      platform: string;
+      impressions: string;
+      reach: string;
+      likes: string;
+      comments: string;
+      shares: string;
+      saves: string;
+      clicks: string;
+      video_views: string;
+    }>(
+      "select platform, sum(impressions)::text as impressions, sum(reach)::text as reach, " +
+        "sum(likes)::text as likes, sum(comments)::text as comments, sum(shares)::text as shares, " +
+        "sum(saves)::text as saves, sum(clicks)::text as clicks, sum(video_views)::text as video_views " +
+        "from marketing.analytics_snapshots where metric_date >= current_date - 14 group by platform",
+    );
+
+    const performanceSignals = performanceRows.map(
+      (row) =>
+        row.platform +
+        ": views/impressions=" + row.impressions +
+        ", reach=" + row.reach +
+        ", likes=" + row.likes +
+        ", comments=" + row.comments +
+        ", shares=" + row.shares +
+        ", saves=" + row.saves +
+        ", clicks=" + row.clicks +
+        ", video views=" + row.video_views,
+    );
+
     const generation = await generateMarketingContent({
       platform,
       goal,
       audience,
       featureFocus: requestedFeature || undefined,
       recentContent,
+      performanceSignals,
     });
 
     const selectedFeature = getMarketingFeature(generation.featureFocus);
@@ -106,6 +137,7 @@ export async function POST(request: Request) {
             goal,
             audience,
             recentContentCount: recentContent.length,
+            performanceSignalCount: performanceSignals.length,
           }),
           session.id,
         ],
