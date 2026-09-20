@@ -24,6 +24,7 @@ import {
   Code2,
   Handshake,
   ListChecks,
+  Megaphone,
 } from "lucide-react";
 import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
@@ -45,6 +46,7 @@ export default function AdminShell({
     { name: "Dev Assistant", href: "/admin/dev-assistant", icon: Code2 },
     { name: "Affiliates", href: "/admin/affiliates", icon: Handshake },
     { name: "Waitlist", href: "/admin/waitlist", icon: ListChecks },
+    { name: "Marketing Manager", href: "/admin/marketing", icon: Megaphone },
   ];
 
   const getHeaderLabel = (path: string) => {
@@ -56,6 +58,7 @@ export default function AdminShell({
     if (path === "/admin/broadcast") return "Push Broadcast";
     if (path === "/admin/dev-assistant") return "Dev Assistant";
     if (path === "/admin/affiliates") return "Affiliate Program";
+    if (path === "/admin/marketing" || path.startsWith("/admin/marketing/")) return "Marketing Manager";
     return "Admin Console";
   };
 
