@@ -1,10 +1,12 @@
 import prisma from "@/lib/prisma";
 import {
-  addBrevoContact,
-  getOrCreateBrevoMarketingList,
-  isBrevoConfigured,
-} from "@/lib/brevo";
+  getMarketingSegmentId,
+  isResendMarketingConfigured,
+  syncResendMarketingContact,
+} from "@/lib/resend-marketing";
 
+// The existing database field is retained for backward-compatible data.
+// Its value now means "marketing contact synchronized with Resend".
 export async function syncMarketingConsentForUser(userId: number) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -17,34 +19,39 @@ export async function syncMarketingConsentForUser(userId: number) {
     },
   });
 
-  if (!user || !user.marketingConsent || user.marketingBrevoSyncedAt) {
-    return { synced: false, skipped: true };
+  if (!user || !isResendMarketingConfigured() || !getMarketingSegmentId()) {
+    return { synced: false, skipped: true, reason: "resend_not_configured" };
   }
 
-  if (!isBrevoConfigured()) {
-    return { synced: false, skipped: true, reason: "brevo_not_configured" };
+  try {
+    await syncResendMarketingContact(
+      user.email,
+      user.fullName || undefined,
+      getMarketingSegmentId() || undefined,
+      Boolean(user.marketingConsent),
+    );
+
+    if (user.marketingConsent && !user.marketingBrevoSyncedAt) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { marketingBrevoSyncedAt: new Date() },
+      });
+    }
+
+    return {
+      synced: true,
+      skipped: false,
+      subscribed: Boolean(user.marketingConsent),
+    };
+  } catch (error) {
+    console.error("[marketing-consent] Resend sync failed", { userId, error });
+    throw error;
   }
-
-  const listId = await getOrCreateBrevoMarketingList();
-
-  await addBrevoContact(user.email, user.fullName || undefined, listId);
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { marketingBrevoSyncedAt: new Date() },
-  });
-
-  return { synced: true, skipped: false, listId };
 }
 
-export async function syncPendingMarketingConsents(limit = 50) {
-  if (!isBrevoConfigured()) {
-    return {
-      configured: false,
-      attempted: 0,
-      synced: 0,
-      failed: 0,
-    };
+export async function syncPendingMarketingConsents(limit = 100) {
+  if (!isResendMarketingConfigured() || !getMarketingSegmentId()) {
+    return { configured: false, attempted: 0, synced: 0, failed: 0 };
   }
 
   const pending = await prisma.user.findMany({
@@ -66,10 +73,7 @@ export async function syncPendingMarketingConsents(limit = 50) {
       if (result.synced) synced += 1;
     } catch (error) {
       failed += 1;
-      console.error("[marketing-consent] Brevo sync failed", {
-        userId: user.id,
-        error,
-      });
+      console.error("[marketing-consent] pending Resend sync failed", { userId: user.id, error });
     }
   }
 
