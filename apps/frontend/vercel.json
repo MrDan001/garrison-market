@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/marketing-publisher",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/marketing-automation",
+      "schedule": "0 * * * *"
     }
   ]
 }
