@@ -8,7 +8,7 @@ function getConfig() {
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.EMAIL_FROM || "Garrison Market <no-reply@gmstock.co>",
     replyTo: process.env.EMAIL_REPLY_TO || undefined,
-    segmentId: process.env.RESEND_MARKETING_SEGMENT_ID,
+    segmentId: process.env.RESEND_MARKETING_SEGMENT_ID || "94fd6b6b-2701-4ad2-b981-df314107d076",
   };
 }
 
