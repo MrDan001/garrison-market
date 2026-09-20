@@ -123,7 +123,7 @@ export async function addResendMarketingContact(email: string, fullName?: string
     firstName,
     lastName,
     unsubscribed: false,
-    segments: [targetSegmentId],
+    segments: [{ id: targetSegmentId }],
   });
 
   if (error) throw new Error(error.message || "Could not add the Resend marketing contact.");
@@ -160,7 +160,7 @@ export async function syncResendMarketingContact(
     firstName,
     lastName,
     unsubscribed: false,
-    segmentIds: [targetSegmentId],
+    segments: [{ id: targetSegmentId }],
   });
   if (error) throw new Error(error.message || "Could not create the Resend marketing contact.");
   return data;
