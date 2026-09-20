@@ -80,7 +80,7 @@ export default function MarketingManager() {
   );
 
   async function load() {
-    const [d, c, p] = await Promise.all([
+    const [d, c, p, a] = await Promise.all([
       fetch("/api/admin/marketing/drafts?limit=30", { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/admin/marketing/meta/connections", { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/admin/marketing/posts?limit=30", { cache: "no-store" }).then((r) => r.json()),
