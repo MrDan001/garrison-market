@@ -79,22 +79,14 @@ export async function POST(request: Request) {
     const performanceSignals = performanceRows.map(
       (row) =>
         row.platform +
-        ": views/impressions=" +
-        row.impressions +
-        ", reach=" +
-        row.reach +
-        ", likes=" +
-        row.likes +
-        ", comments=" +
-        row.comments +
-        ", shares=" +
-        row.shares +
-        ", saves=" +
-        row.saves +
-        ", clicks=" +
-        row.clicks +
-        ", video views=" +
-        row.video_views,
+        ": views/impressions=" + row.impressions +
+        ", reach=" + row.reach +
+        ", likes=" + row.likes +
+        ", comments=" + row.comments +
+        ", shares=" + row.shares +
+        ", saves=" + row.saves +
+        ", clicks=" + row.clicks +
+        ", video views=" + row.video_views,
     );
 
     const generation = await generateMarketingContent({
