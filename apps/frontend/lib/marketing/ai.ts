@@ -61,18 +61,34 @@ const MARKETING_OUTPUT_SCHEMA = {
   required: ["strategy", "featureFocus", "contentType", "facebook", "instagram", "visualIdea"],
 } as const;
 
-function getOpenAIConfig() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+function getAiConfig() {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+  if (geminiApiKey) {
+    return { provider: "gemini" as const, apiKey: geminiApiKey, model: geminiModel };
   }
 
-  return { apiKey, model };
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+  const openAiModel = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+
+  if (openAiApiKey) {
+    return { provider: "openai" as const, apiKey: openAiApiKey, model: openAiModel };
+  }
+
+  throw new Error("GEMINI_API_KEY is not configured. Create a free Gemini API key and add it to the marketing server environment.");
 }
 
-function extractOutputText(payload: any): string {
+function extractGeminiOutputText(payload: any): string {
+  const parts = payload?.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .map((part: any) => (typeof part?.text === "string" ? part.text : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function extractOpenAIOutputText(payload: any): string {
   if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
     return payload.output_text;
   }
@@ -89,10 +105,55 @@ function extractOutputText(payload: any): string {
   return chunks.join("\n").trim();
 }
 
-export async function generateMarketingContent(input: MarketingGenerationInput) {
-  const { apiKey, model } = getOpenAIConfig();
-  const prompt = buildMarketingBrainPrompt(input);
+async function generateWithGemini(apiKey: string, model: string, prompt: string) {
+  const response = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/" +
+      encodeURIComponent(model) +
+      ":generateContent?key=" +
+      encodeURIComponent(apiKey),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [
+            {
+              text:
+                "Return only the requested structured marketing object. " +
+                "Every feature reference must be a verified feature id from the supplied catalog. " +
+                "Do not invent prices, discounts, customer counts, guarantees, integrations, or outcomes.",
+            },
+          ],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: MARKETING_OUTPUT_SCHEMA,
+        },
+      }),
+      cache: "no-store",
+    },
+  );
 
+  const payload = await response.json();
+
+  if (!response.ok) {
+    const message =
+      payload?.error?.message ||
+      payload?.error?.status ||
+      "Gemini request failed with HTTP " + response.status + ".";
+    throw new Error(String(message));
+  }
+
+  return extractGeminiOutputText(payload);
+}
+
+async function generateWithOpenAI(apiKey: string, model: string, prompt: string) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -130,7 +191,7 @@ export async function generateMarketingContent(input: MarketingGenerationInput) 
       },
     }),
     cache: "no-store",
-  });
+  );
 
   const payload = await response.json();
 
@@ -142,7 +203,17 @@ export async function generateMarketingContent(input: MarketingGenerationInput) 
     throw new Error(String(message));
   }
 
-  const raw = extractOutputText(payload);
+  return extractOpenAIOutputText(payload);
+}
+
+export async function generateMarketingContent(input: MarketingGenerationInput) {
+  const { provider, apiKey, model } = getAiConfig();
+  const prompt = buildMarketingBrainPrompt(input);
+
+  const raw =
+    provider === "gemini"
+      ? await generateWithGemini(apiKey, model, prompt)
+      : await generateWithOpenAI(apiKey, model, prompt);
 
   if (!raw) throw new Error("The marketing brain returned no text output.");
 
@@ -163,5 +234,5 @@ export async function generateMarketingContent(input: MarketingGenerationInput) 
     throw new Error("The marketing brain returned incomplete content.");
   }
 
-  return { ...parsed, model };
+  return { ...parsed, model, provider };
 }
