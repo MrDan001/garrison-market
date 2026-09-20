@@ -41,6 +41,9 @@ export default function MarketingManager() {
   const [goal, setGoal] = useState("Create content that makes business owners curious enough to open Garrison Market.");
   const [platform, setPlatform] = useState("both");
   const [featureFocus, setFeatureFocus] = useState("");
+  const [scheduleFor, setScheduleFor] = useState<Record<string, string>>({});
+  const [mediaFor, setMediaFor] = useState<Record<string, string>>({});
+  const [connectionFor, setConnectionFor] = useState<Record<string, string>>({});
 
   const activeConnections = useMemo(
     () => connections.filter((item) => item.status === "active"),
@@ -96,6 +99,37 @@ export default function MarketingManager() {
 
   async function connectMeta() {
     window.location.href = "/api/admin/marketing/meta/connect?returnTo=/admin/marketing";
+  }
+
+  async function schedule(draft: Draft) {
+    const connectionId = connectionFor[draft.id];
+    const scheduledFor = scheduleFor[draft.id];
+
+    if (!connectionId || !scheduledFor) {
+      setStatus("Choose a social connection and future time first.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/marketing/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draftId: draft.id,
+          connectionId,
+          scheduledFor: new Date(scheduledFor).toISOString(),
+          mediaUrls: mediaFor[draft.id]
+            ? mediaFor[draft.id].split(",").map((value) => value.trim()).filter(Boolean)
+            : [],
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to schedule draft.");
+      setStatus("Scheduled " + (draft.title || "post") + ".");
+      await load();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to schedule draft.");
+    }
   }
 
   return (
@@ -163,9 +197,44 @@ export default function MarketingManager() {
                 <h3 className="mt-2 font-semibold">{draft.title || "Untitled draft"}</h3>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-slate-200">{draft.body}</p>
                 {draft.hashtags?.length > 0 && <p className="mt-3 text-xs text-cyan-200">{draft.hashtags.join(" ")}</p>}
-                {draft.status === "draft" && (
-                  <button onClick={() => approve(draft.id)} className="mt-4 rounded-lg border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200">Approve</button>
-                )}
+                <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1fr]">
+                  {draft.status === "draft" && (
+                    <button onClick={() => approve(draft.id)} className="rounded-lg border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200">Approve</button>
+                  )}
+                  {draft.status === "approved" && (
+                    <>
+                      <select
+                        value={connectionFor[draft.id] || ""}
+                        onChange={(event) => setConnectionFor((current) => ({ ...current, [draft.id]: event.target.value }))}
+                        className="rounded-lg border border-white/10 bg-slate-950 p-2 text-xs"
+                      >
+                        <option value="">Choose connection</option>
+                        {activeConnections
+                          .filter((connection) => connection.provider === draft.platform)
+                          .map((connection) => (
+                            <option key={connection.id} value={connection.id}>
+                              {connection.account_name || connection.provider}
+                            </option>
+                          ))}
+                      </select>
+                      <input
+                        type="datetime-local"
+                        value={scheduleFor[draft.id] || ""}
+                        onChange={(event) => setScheduleFor((current) => ({ ...current, [draft.id]: event.target.value }))}
+                        className="rounded-lg border border-white/10 bg-slate-950 p-2 text-xs"
+                      />
+                      <input
+                        value={mediaFor[draft.id] || ""}
+                        onChange={(event) => setMediaFor((current) => ({ ...current, [draft.id]: event.target.value }))}
+                        placeholder="Public image/video URL (required for Instagram)"
+                        className="sm:col-span-2 rounded-lg border border-white/10 bg-slate-950 p-2 text-xs outline-none"
+                      />
+                      <button onClick={() => schedule(draft)} className="sm:col-span-2 rounded-lg bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950">
+                        Schedule post
+                      </button>
+                    </>
+                  )}
+                </div>
               </article>
             ))}
             {drafts.length === 0 && <p className="text-sm text-slate-400">No drafts yet. Generate the first campaign asset above.</p>}
