@@ -10,7 +10,7 @@ export default async function MarketingPage() {
   try {
     data = await getMarketingDashboardData();
   } catch (error: any) {
-    loadError = error?.message || "Could not load Brevo marketing data.";
+    loadError = error?.message || "Could not load Resend marketing data.";
     data = {
       setup: { apiKey: false, senderEmail: false },
       aiReady: Boolean(process.env.OPENROUTER_API_KEY),
