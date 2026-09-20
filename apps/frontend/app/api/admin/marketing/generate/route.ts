@@ -79,14 +79,22 @@ export async function POST(request: Request) {
     const performanceSignals = performanceRows.map(
       (row) =>
         row.platform +
-        ": views/impressions=" + row.impressions +
-        ", reach=" + row.reach +
-        ", likes=" + row.likes +
-        ", comments=" + row.comments +
-        ", shares=" + row.shares +
-        ", saves=" + row.saves +
-        ", clicks=" + row.clicks +
-        ", video views=" + row.video_views,
+        ": views/impressions=" +
+        row.impressions +
+        ", reach=" +
+        row.reach +
+        ", likes=" +
+        row.likes +
+        ", comments=" +
+        row.comments +
+        ", shares=" +
+        row.shares +
+        ", saves=" +
+        row.saves +
+        ", clicks=" +
+        row.clicks +
+        ", video views=" +
+        row.video_views,
     );
 
     const generation = await generateMarketingContent({
@@ -133,6 +141,7 @@ export async function POST(request: Request) {
             strategy: generation.strategy,
             visualIdea: generation.visualIdea,
             model: generation.model,
+            provider: generation.provider,
             requestedPlatform: platform,
             goal,
             audience,
@@ -161,7 +170,11 @@ export async function POST(request: Request) {
     console.error("[marketing/generate]", error);
     const message = error instanceof Error ? error.message : "Unable to generate marketing content.";
 
-    if (message === "OPENAI_API_KEY is not configured." || message.includes("marketing brain")) {
+    if (
+      message === "GEMINI_API_KEY is not configured." ||
+      message.startsWith("GEMINI_API_KEY is not configured.") ||
+      message.includes("marketing brain")
+    ) {
       return NextResponse.json({ error: message }, { status: 503 });
     }
 
