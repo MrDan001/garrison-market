@@ -141,7 +141,6 @@ export async function POST(request: Request) {
             strategy: generation.strategy,
             visualIdea: generation.visualIdea,
             model: generation.model,
-            provider: generation.provider,
             requestedPlatform: platform,
             goal,
             audience,
@@ -170,11 +169,7 @@ export async function POST(request: Request) {
     console.error("[marketing/generate]", error);
     const message = error instanceof Error ? error.message : "Unable to generate marketing content.";
 
-    if (
-      message === "GEMINI_API_KEY is not configured." ||
-      message.startsWith("GEMINI_API_KEY is not configured.") ||
-      message.includes("marketing brain")
-    ) {
+    if (message === "OPENAI_API_KEY is not configured." || message.includes("marketing brain")) {
       return NextResponse.json({ error: message }, { status: 503 });
     }
 
