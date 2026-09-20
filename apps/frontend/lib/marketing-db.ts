@@ -38,7 +38,8 @@ export type MarketingDraft = {
   automationId: number | null;
   approvedBy: number | null;
   approvedAt: string | null;
-  brevoCampaignId: number | null;
+  resendBroadcastId: string | null;
+  resendSegmentId: string | null;
   sentAt: string | null;
   error: string | null;
   createdAt: string;
@@ -84,7 +85,8 @@ function toDraft(row: DbRow): MarketingDraft {
     automationId: row.automation_id == null ? null : Number(row.automation_id),
     approvedBy: row.approved_by == null ? null : Number(row.approved_by),
     approvedAt: row.approved_at ? new Date(row.approved_at).toISOString() : null,
-    brevoCampaignId: row.brevo_campaign_id == null ? null : Number(row.brevo_campaign_id),
+    resendBroadcastId: row.resend_broadcast_id ? String(row.resend_broadcast_id) : null,
+    resendSegmentId: row.resend_segment_id ? String(row.resend_segment_id) : null,
     sentAt: row.sent_at ? new Date(row.sent_at).toISOString() : null,
     error: row.error ? String(row.error) : null,
     createdAt: new Date(row.created_at).toISOString(),
