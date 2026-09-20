@@ -50,7 +50,7 @@ export type MarketingAutomation = {
   id: number;
   name: string;
   prompt: string;
-  resendSegmentId?: string | null;
+  resendSegmentId: string | null;
   frequency: MarketingFrequency;
   sendTime: string;
   weekday: number | null;
