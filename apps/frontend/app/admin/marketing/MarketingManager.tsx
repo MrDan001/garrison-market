@@ -32,12 +32,41 @@ type Post = {
   account_name: string | null;
 };
 
+type Analytics = {
+  totals: {
+    impressions: string | number;
+    reach: string | number;
+    likes: string | number;
+    comments: string | number;
+    shares: string | number;
+    saves: string | number;
+    clicks: string | number;
+    video_views: string | number;
+  };
+  statusCounts: Array<{ status: string; count: number }>;
+  daily: Array<{
+    metric_date: string;
+    platform: string;
+    impressions: string | number;
+    reach: string | number;
+    likes: string | number;
+    comments: string | number;
+    shares: string | number;
+    saves: string | number;
+    clicks: string | number;
+    video_views: string | number;
+  }>;
+};
+
 export default function MarketingManager() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [runningPublisher, setRunningPublisher] = useState(false);
+  const [syncingAnalytics, setSyncingAnalytics] = useState(false);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [goal, setGoal] = useState("Create content that makes business owners curious enough to open Garrison Market.");
   const [platform, setPlatform] = useState("both");
   const [featureFocus, setFeatureFocus] = useState("");
@@ -55,15 +84,25 @@ export default function MarketingManager() {
       fetch("/api/admin/marketing/drafts?limit=30", { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/admin/marketing/meta/connections", { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/admin/marketing/posts?limit=30", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/admin/marketing/analytics", { cache: "no-store" }).then((r) => r.json()),
     ]);
 
     setDrafts(d.drafts || []);
     setConnections(c.connections || []);
     setPosts(p.posts || []);
+    setAnalytics(a.totals ? a : null);
   }
 
   useEffect(() => {
     load().catch(() => setStatus("Unable to load marketing data."));
+
+    const params = new URLSearchParams(window.location.search);
+    const meta = params.get("meta");
+    if (meta === "connected") {
+      setStatus("Meta connected successfully. Facebook Pages and linked Instagram accounts are now available.");
+    } else if (meta === "error") {
+      setStatus(params.get("message") || "Meta connection failed.");
+    }
   }, []);
 
   async function generate() {
@@ -99,6 +138,41 @@ export default function MarketingManager() {
 
   async function connectMeta() {
     window.location.href = "/api/admin/marketing/meta/connect?returnTo=/admin/marketing";
+  }
+
+  async function runPublisher() {
+    setRunningPublisher(true);
+    setStatus("Running the marketing publisher...");
+    try {
+      const response = await fetch("/api/admin/marketing/publisher/run", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Publisher run failed.");
+      const published = (data.results || []).filter((item: { status?: string }) => item.status === "published").length;
+      const failed = (data.results || []).filter((item: { status?: string }) => item.status === "failed").length;
+      setStatus("Publisher finished: " + published + " published, " + failed + " failed.");
+      await load();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Publisher run failed.");
+    } finally {
+      setRunningPublisher(false);
+    }
+  }
+
+  async function syncAnalytics() {
+    setSyncingAnalytics(true);
+    setStatus("Syncing Facebook and Instagram analytics...");
+    try {
+      const response = await fetch("/api/admin/marketing/analytics/sync", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Analytics sync failed.");
+      const failed = (data.results || []).filter((item: { status?: string }) => item.status === "failed").length;
+      setStatus("Analytics sync finished: " + data.processed + " connection(s) checked" + (failed ? ", " + failed + " failed." : "."));
+      await load();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Analytics sync failed.");
+    } finally {
+      setSyncingAnalytics(false);
+    }
   }
 
   async function schedule(draft: Draft) {
@@ -242,9 +316,28 @@ export default function MarketingManager() {
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Publishing pipeline</h2>
-            <span className="text-xs text-slate-400">{posts.length} recent posts</span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Publishing pipeline</h2>
+              <p className="text-xs text-slate-400">Run due posts immediately, or let an external scheduler call the same publisher runner.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={runPublisher}
+                disabled={runningPublisher}
+                className="rounded-lg border border-cyan-300/30 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-50"
+              >
+                {runningPublisher ? "Publishing..." : "Run publisher now"}
+              </button>
+              <button
+                onClick={syncAnalytics}
+                disabled={syncingAnalytics || activeConnections.length === 0}
+                className="rounded-lg border border-emerald-300/30 px-3 py-2 text-xs font-semibold text-emerald-200 disabled:opacity-50"
+              >
+                {syncingAnalytics ? "Syncing..." : "Sync analytics now"}
+              </button>
+              <span className="self-center text-xs text-slate-400">{posts.length} recent posts</span>
+            </div>
           </div>
           <div className="mt-3 space-y-2">
             {posts.map((post) => (
@@ -259,6 +352,52 @@ export default function MarketingManager() {
             ))}
             {posts.length === 0 && <p className="text-sm text-slate-400">Nothing scheduled or published yet.</p>}
           </div>
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold">Marketing analytics</h2>
+              <p className="text-xs text-slate-400">Last 14 days of synced Meta performance.</p>
+            </div>
+            <span className="text-xs text-slate-400">{analytics?.daily?.length || 0} daily rows</span>
+          </div>
+
+          {analytics ? (
+            <>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  ["Impressions", analytics.totals.impressions],
+                  ["Reach", analytics.totals.reach],
+                  ["Likes", analytics.totals.likes],
+                  ["Comments", analytics.totals.comments],
+                  ["Shares", analytics.totals.shares],
+                  ["Saves", analytics.totals.saves],
+                  ["Clicks", analytics.totals.clicks],
+                  ["Video views", analytics.totals.video_views],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl bg-black/20 p-3">
+                    <p className="text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-100">{Number(value || 0).toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {analytics.daily.slice(0, 14).map((row) => (
+                  <div key={row.metric_date + row.platform} className="grid grid-cols-[1fr_auto_auto] gap-3 rounded-xl bg-slate-900/60 p-3 text-xs">
+                    <div>
+                      <p className="font-medium text-slate-200">{row.platform} • {row.metric_date}</p>
+                      <p className="text-slate-500">Reach {Number(row.reach || 0).toLocaleString()} • Views {Number((row.impressions ?? row.video_views) || 0).toLocaleString()}</p>
+                    </div>
+                    <span className="text-slate-400">❤ {Number(row.likes || 0).toLocaleString()}</span>
+                    <span className="text-slate-400">↗ {Number(row.shares || 0).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="mt-4 text-sm text-slate-400">No analytics have been synced yet. Connect Meta, then use “Sync analytics now”.</p>
+          )}
+        </section>
         </section>
       </div>
     </main>
