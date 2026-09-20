@@ -11,18 +11,6 @@
     {
       "path": "/api/cron/rush-streak-reset",
       "schedule": "0 23 * * *"
-    },
-    {
-      "path": "/api/cron/marketing-publisher",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/marketing-automation",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/marketing-analytics",
-      "schedule": "10 * * * *"
     }
   ]
 }
