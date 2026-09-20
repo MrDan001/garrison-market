@@ -1,7 +1,7 @@
 import { decryptMarketingToken } from "@/lib/marketing/token-crypto";
 
 const GRAPH_HOST = "https://graph.facebook.com";
-const DEFAULT_GRAPH_VERSION = "v24.0";
+const DEFAULT_GRAPH_VERSION = "v26.0";
 
 type Connection = {
   id: string;
