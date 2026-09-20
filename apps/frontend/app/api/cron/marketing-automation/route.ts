@@ -52,12 +52,39 @@ export async function GET(request: Request) {
           "where created_at >= now() - interval '60 days' order by created_at desc limit 25",
       );
 
+      const performance = await marketingQuery<{
+        platform: string;
+        impressions: string;
+        reach: string;
+        likes: string;
+        comments: string;
+        shares: string;
+        saves: string;
+        clicks: string;
+      }>(
+        "select platform, sum(impressions)::text as impressions, sum(reach)::text as reach, " +
+          "sum(likes)::text as likes, sum(comments)::text as comments, sum(shares)::text as shares, " +
+          "sum(saves)::text as saves, sum(clicks)::text as clicks " +
+          "from marketing.analytics_snapshots where metric_date >= current_date - 14 group by platform",
+      );
+
       const generated = await generateMarketingContent({
         platform,
         goal,
         audience,
         featureFocus,
         recentContent: recent.map((item) => "[" + item.platform + "] " + item.body),
+        performanceSignals: performance.map(
+          (item) =>
+            item.platform +
+            ": impressions=" + item.impressions +
+            ", reach=" + item.reach +
+            ", likes=" + item.likes +
+            ", comments=" + item.comments +
+            ", shares=" + item.shares +
+            ", saves=" + item.saves +
+            ", clicks=" + item.clicks,
+        ),
       });
 
       const feature = getMarketingFeature(generated.featureFocus);
