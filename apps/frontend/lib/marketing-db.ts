@@ -212,6 +212,19 @@ async function ensureMarketingTablesInternal() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS garrison_marketing_events (
+      id BIGSERIAL PRIMARY KEY,
+      resend_event_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      broadcast_id TEXT,
+      email TEXT,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS garrison_marketing_events_broadcast_idx
+      ON garrison_marketing_events(broadcast_id, created_at DESC);
+
     CREATE INDEX IF NOT EXISTS garrison_marketing_automations_due_idx
       ON garrison_marketing_automations(active, next_run_at);
   `);
@@ -448,5 +461,22 @@ export async function recordAutomationResult(automationId: number, draftId: numb
        SET last_draft_id = $2, last_error = $3, updated_at = NOW()
      WHERE id = $1`,
     [automationId, draftId, error ? error.slice(0, 2000) : null],
+  );
+}
+
+
+export async function recordResendMarketingEvent(input: {
+  eventId: string;
+  eventType: string;
+  broadcastId?: string | null;
+  email?: string | null;
+  payload: unknown;
+}) {
+  await ensureMarketingTables();
+  await pool.query(
+    `INSERT INTO garrison_marketing_events (resend_event_id, event_type, broadcast_id, email, payload)
+     VALUES ($1,$2,$3,$4,$5::jsonb)
+     ON CONFLICT (resend_event_id) DO NOTHING`,
+    [input.eventId, input.eventType, input.broadcastId ?? null, input.email ?? null, JSON.stringify(input.payload ?? {})],
   );
 }
