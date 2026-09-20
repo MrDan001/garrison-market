@@ -123,7 +123,7 @@ export async function addResendMarketingContact(email: string, fullName?: string
     firstName,
     lastName,
     unsubscribed: false,
-    segmentIds: [targetSegmentId],
+    segments: [targetSegmentId],
   });
 
   if (error) throw new Error(error.message || "Could not add the Resend marketing contact.");
