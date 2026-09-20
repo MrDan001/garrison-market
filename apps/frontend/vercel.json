@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/rush-streak-reset",
       "schedule": "0 23 * * *"
-    },
-    {
-      "path": "/api/cron/marketing",
-      "schedule": "0 9 * * *"
     }
   ]
 }
