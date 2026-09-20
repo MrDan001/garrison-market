@@ -162,3 +162,15 @@ alter table marketing.oauth_states enable row level security;
 comment on schema marketing is 'Private Garrison Market marketing/social subsystem. Access through trusted server-side code only.';
 comment on table marketing.social_connections is 'Meta/Facebook/Instagram connections. OAuth access tokens are stored as ciphertext.';
 comment on table marketing.oauth_states is 'Short-lived OAuth state records used to protect Meta connection flows.';
+
+revoke all on schema marketing from public, anon, authenticated;
+revoke all on all tables in schema marketing from public, anon, authenticated;
+revoke all on all sequences in schema marketing from public, anon, authenticated;
+revoke all on all routines in schema marketing from public, anon, authenticated;
+
+alter default privileges for role postgres in schema marketing
+  revoke all on tables from public, anon, authenticated;
+alter default privileges for role postgres in schema marketing
+  revoke all on sequences from public, anon, authenticated;
+alter default privileges for role postgres in schema marketing
+  revoke all on functions from public, anon, authenticated;
