@@ -1,4 +1,9 @@
 import { buildMarketingBrainPrompt } from "@/lib/marketing/brain";
+import {
+  GARRISON_MARKET_MARKETING_FEATURES,
+  getMarketingFeature,
+  type MarketingFeature,
+} from "@/lib/marketing/feature-catalog";
 
 export type MarketingPlatform = "facebook" | "instagram" | "both";
 
@@ -61,65 +66,150 @@ const MARKETING_OUTPUT_SCHEMA = {
   required: ["strategy", "featureFocus", "contentType", "facebook", "instagram", "visualIdea"],
 } as const;
 
-function getAiConfig() {
-  const geminiApiKey = process.env.GEMINI_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-
-  if (geminiApiKey) {
-    return { provider: "gemini" as const, apiKey: geminiApiKey, model: geminiModel };
+function validateGeneratedContent(parsed: GeneratedMarketingContent) {
+  if (
+    !parsed?.featureFocus ||
+    !parsed.facebook?.body ||
+    !parsed.instagram?.body ||
+    !Array.isArray(parsed.facebook.hashtags) ||
+    !Array.isArray(parsed.instagram.hashtags)
+  ) {
+    throw new Error("The marketing brain returned incomplete content.");
   }
 
-  const openAiApiKey = process.env.OPENAI_API_KEY;
-  const openAiModel = process.env.OPENAI_MODEL || "gpt-5.6-luna";
-
-  if (openAiApiKey) {
-    return { provider: "openai" as const, apiKey: openAiApiKey, model: openAiModel };
+  if (!getMarketingFeature(parsed.featureFocus)) {
+    throw new Error("The marketing brain selected an unverified feature.");
   }
 
-  throw new Error("GEMINI_API_KEY is not configured. Create a free Gemini API key and add it to the marketing server environment.");
+  return parsed;
 }
 
-function extractGeminiOutputText(payload: any): string {
-  const parts = payload?.candidates?.[0]?.content?.parts ?? [];
-  return parts
-    .map((part: any) => (typeof part?.text === "string" ? part.text : ""))
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
-
-function extractOpenAIOutputText(payload: any): string {
-  if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
-    return payload.output_text;
+function chooseLocalFeature(input: MarketingGenerationInput): MarketingFeature {
+  if (input.featureFocus) {
+    const explicit = getMarketingFeature(input.featureFocus);
+    if (explicit) return explicit;
   }
 
-  const chunks: string[] = [];
+  const haystack = (
+    [input.goal, input.audience, ...(input.recentContent ?? [])].join(" ") + " "
+  ).toLowerCase();
 
-  for (const item of payload?.output ?? []) {
-    for (const content of item?.content ?? []) {
-      if (typeof content?.text === "string") chunks.push(content.text);
-      else if (typeof content?.text?.value === "string") chunks.push(content.text.value);
-    }
-  }
+  const scored = GARRISON_MARKET_MARKETING_FEATURES.map((feature, index) => {
+    const matches = [...feature.keywords, ...feature.angles].reduce(
+      (score, keyword) => score + (haystack.includes(keyword.toLowerCase()) ? 2 : 0),
+      0,
+    );
+    return { feature, score: matches, index };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
 
-  return chunks.join("\n").trim();
+  const recentFeatureIds = new Set(
+    (input.recentContent ?? [])
+      .flatMap((entry) =>
+        GARRISON_MARKET_MARKETING_FEATURES.filter((feature) =>
+          entry.toLowerCase().includes(feature.name.toLowerCase()),
+        ).map((feature) => feature.id),
+      ),
+  );
+
+  return (
+    scored.find((item) => !recentFeatureIds.has(item.feature.id))?.feature ??
+    scored[0]?.feature ??
+    GARRISON_MARKET_MARKETING_FEATURES[0]
+  );
 }
 
-async function generateWithGemini(apiKey: string, model: string, prompt: string) {
+function cleanHashtag(value: string) {
+  const normalized = value.replace(/[^a-zA-Z0-9_]/g, "");
+  return normalized ? "#" + normalized : "";
+}
+
+function buildLocalGeneration(input: MarketingGenerationInput): GeneratedMarketingContent {
+  const feature = chooseLocalFeature(input);
+  const angle = feature.angles[0] || feature.description;
+  const featureName = feature.name;
+  const goal = input.goal || "increase awareness and engagement";
+
+  const facebook: GeneratedPlatformContent = {
+    title: featureName + ": make the everyday business work easier",
+    body:
+      "Running a business should not mean guessing. " +
+      featureName +
+      " helps business owners " +
+      angle +
+      ". " +
+      "Garrison Market puts this into one practical system so you can spend less time chasing records and more time running the shop. " +
+      "The goal here is simple: " +
+      goal.toLowerCase().replace(/[.]+$/, "") +
+      ".",
+    hashtags: [
+      cleanHashtag("GarrisonMarket"),
+      cleanHashtag(feature.category),
+      cleanHashtag("BusinessOwners"),
+      cleanHashtag("NigeriaBusiness"),
+    ].filter(Boolean),
+    callToAction:
+      "See how Garrison Market can fit into your business and tell us what you would like to simplify first.",
+  };
+
+  const instagram: GeneratedPlatformContent = {
+    title: featureName + " without the guesswork.",
+    body:
+      featureName +
+      " → " +
+      angle +
+      ".
+
+" +
+      "Less chasing records. More clarity for your business.
+
+" +
+      "That is the kind of everyday problem Garrison Market is built to help with.",
+    hashtags: [
+      cleanHashtag("GarrisonMarket"),
+      cleanHashtag(featureName.replace(/&/g, "and")),
+      cleanHashtag("SmallBusiness"),
+      cleanHashtag("BusinessNigeria"),
+      cleanHashtag("ShopManagement"),
+    ].filter(Boolean),
+    callToAction: "Tap through and explore Garrison Market.",
+  };
+
+  return {
+    strategy:
+      "Lead with the real business-owner pain point around " +
+      featureName +
+      ", show the practical benefit, and invite the audience into the conversation.",
+    featureFocus: feature.id,
+    contentType: input.platform === "instagram" ? "instagram-post" : "social-post",
+    facebook,
+    instagram,
+    visualIdea:
+      "Create a clean Garrison Market visual showing a business owner dealing with the pain point addressed by " +
+      featureName +
+      ", then reveal the feature as the practical solution.",
+  };
+}
+
+async function generateWithGemini(input: MarketingGenerationInput, apiKey: string) {
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+  const prompt = buildMarketingBrainPrompt(input);
+
   const response = await fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/" +
       encodeURIComponent(model) +
-      ":generateContent?key=" +
-      encodeURIComponent(apiKey),
+      ":generateContent",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "x-goog-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        systemInstruction: {
+        system_instruction: {
           parts: [
             {
               text:
-                "Return only the requested structured marketing object. " +
+                "Return only the requested JSON object. " +
                 "Every feature reference must be a verified feature id from the supplied catalog. " +
                 "Do not invent prices, discounts, customer counts, guarantees, integrations, or outcomes.",
             },
@@ -134,6 +224,7 @@ async function generateWithGemini(apiKey: string, model: string, prompt: string)
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: MARKETING_OUTPUT_SCHEMA,
+          temperature: 0.8,
         },
       }),
       cache: "no-store",
@@ -150,70 +241,11 @@ async function generateWithGemini(apiKey: string, model: string, prompt: string)
     throw new Error(String(message));
   }
 
-  return extractGeminiOutputText(payload);
-}
-
-async function generateWithOpenAI(apiKey: string, model: string, prompt: string) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text:
-                "Return only the requested structured marketing object. " +
-                "Every feature reference must be a verified feature id from the supplied catalog. " +
-                "Do not invent prices, discounts, customer counts, guarantees, integrations, or outcomes.",
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [{ type: "input_text", text: prompt }],
-        },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "garrison_market_marketing_content",
-          description: "Structured Garrison Market marketing content for Facebook and Instagram.",
-          strict: true,
-          schema: MARKETING_OUTPUT_SCHEMA,
-        },
-      },
-    }),
-    cache: "no-store",
-  );
-
-  const payload = await response.json();
-
-  if (!response.ok) {
-    const message =
-      payload?.error?.message ||
-      payload?.error?.code ||
-      "OpenAI request failed with HTTP " + response.status + ".";
-    throw new Error(String(message));
-  }
-
-  return extractOpenAIOutputText(payload);
-}
-
-export async function generateMarketingContent(input: MarketingGenerationInput) {
-  const { provider, apiKey, model } = getAiConfig();
-  const prompt = buildMarketingBrainPrompt(input);
-
   const raw =
-    provider === "gemini"
-      ? await generateWithGemini(apiKey, model, prompt)
-      : await generateWithOpenAI(apiKey, model, prompt);
+    payload?.candidates?.[0]?.content?.parts
+      ?.map((part: { text?: string }) => part.text)
+      .filter(Boolean)
+      .join("") || "";
 
   if (!raw) throw new Error("The marketing brain returned no text output.");
 
@@ -224,15 +256,23 @@ export async function generateMarketingContent(input: MarketingGenerationInput) 
     throw new Error("The marketing brain returned invalid structured output.");
   }
 
-  if (
-    !parsed?.featureFocus ||
-    !parsed.facebook?.body ||
-    !parsed.instagram?.body ||
-    !Array.isArray(parsed.facebook.hashtags) ||
-    !Array.isArray(parsed.instagram.hashtags)
-  ) {
-    throw new Error("The marketing brain returned incomplete content.");
+  return {
+    ...validateGeneratedContent(parsed),
+    model,
+    provider: "gemini",
+  };
+}
+
+export async function generateMarketingContent(input: MarketingGenerationInput) {
+  const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
+
+  if (geminiApiKey) {
+    return generateWithGemini(input, geminiApiKey);
   }
 
-  return { ...parsed, model, provider };
+  return {
+    ...buildLocalGeneration(input),
+    model: "local-marketing-brain",
+    provider: "local",
+  };
 }
