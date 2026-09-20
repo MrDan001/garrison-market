@@ -8,6 +8,7 @@ export type MarketingGenerationInput = {
   audience: string;
   featureFocus?: string;
   recentContent?: string[];
+  performanceSignals?: string[];
 };
 
 export type GeneratedPlatformContent = {
