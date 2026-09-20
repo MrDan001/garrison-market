@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/marketing-automation",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/marketing-analytics",
+      "schedule": "10 * * * *"
     }
   ]
 }
