@@ -151,6 +151,11 @@ export default function RegisterForm() {
       formData.append("shopState", selectedState);
       formData.append("shopCity", selectedLga);
       formData.append("referralCode", referralCode); // NEW: Append tracking identifier to standard request matrix
+      // The server action validates these fields from FormData. The checkbox
+      // state above is already validated before submission, so send the
+      // checked values explicitly instead of relying on the checkbox DOM.
+      formData.append("notificationConsent", "on");
+      formData.append("marketingConsent", "on");
 
       if (imageFile) {
         const compressed = await compressImage(imageFile, { maxDimension: 800, quality: 0.82 });
