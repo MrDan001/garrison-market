@@ -4,7 +4,6 @@ import { ThemeAntiFlashScript } from './theme-anti-flash';
 import SessionTimeoutGuard from '@/components/SessionTimeoutGuard';
 import ScreenshotGuard from '@/components/ScreenshotGuard';
 import PwaServiceWorkerRegister from '@/components/PwaServiceWorkerRegister';
-import AppOnlyGate from '@/components/AppOnlyGate';
 import "./styles.css";
 
 const siteUrl = 'https://gmstock.co';
@@ -92,7 +91,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         suppressHydrationWarning={true}
       >
         <PwaServiceWorkerRegister />
-        <AppOnlyGate>{children}</AppOnlyGate>
+        {children}
         <SessionTimeoutGuard />
         <ScreenshotGuard />
       </body>
