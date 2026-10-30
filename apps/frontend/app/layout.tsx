@@ -4,6 +4,7 @@ import { ThemeAntiFlashScript } from './theme-anti-flash';
 import SessionTimeoutGuard from '@/components/SessionTimeoutGuard';
 import ScreenshotGuard from '@/components/ScreenshotGuard';
 import PwaServiceWorkerRegister from '@/components/PwaServiceWorkerRegister';
+import OptionalInstallPrompt from '@/components/OptionalInstallPrompt';
 import "./styles.css";
 
 const siteUrl = 'https://gmstock.co';
@@ -91,6 +92,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         suppressHydrationWarning={true}
       >
         <PwaServiceWorkerRegister />
+        <OptionalInstallPrompt />
         {children}
         <SessionTimeoutGuard />
         <ScreenshotGuard />
