@@ -485,12 +485,12 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
               Contact
             </h4>
             <a
-              href="https://wa.me/2347034336627"
+              href="https://wa.me/2349067859200"
               target="_blank"
               rel="noopener noreferrer"
               className="block py-2.5 text-sm font-semibold text-[var(--text-primary)]/80 hover:text-[var(--text-primary)] transition-colors"
             >
-              WhatsApp: +234 703 433 6627
+              WhatsApp: +234 906 785 9200
             </a>
           </div>
         </nav>
@@ -907,17 +907,17 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
             <ul className="space-y-3 text-[var(--text-primary)]/60 font-semibold text-xs">
               <li>
                 <a
-                  href="https://wa.me/2347034336627"
+                  href="https://wa.me/2349067859200"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-[var(--text-primary)] transition"
                 >
-                  WhatsApp: +234 703 433 6627
+                  WhatsApp: +234 906 785 9200
                 </a>
               </li>
               <li>
-                <a href="tel:+2347034336627" className="hover:text-[var(--text-primary)] transition">
-                  Call: +234 703 433 6627
+                <a href="tel:+2349067859200" className="hover:text-[var(--text-primary)] transition">
+                  Call: +234 906 785 9200
                 </a>
               </li>
               <li className="text-[var(--text-primary)]/40 not-italic leading-relaxed">
@@ -976,12 +976,12 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
               },
               contactPoint: {
                 "@type": "ContactPoint",
-                telephone: "+234-703-433-6627",
+                telephone: "+234-906-785-9200",
                 contactType: "customer support",
                 areaServed: "NG",
                 availableLanguage: ["en"],
               },
-              sameAs: ["https://wa.me/2347034336627"],
+              sameAs: ["https://wa.me/2349067859200"],
             },
           }),
         }}
