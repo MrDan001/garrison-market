@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
+import { addExpenseAction } from "@/lib/expense.actions";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
@@ -45,6 +46,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [listening, setListening] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingExpense, setPendingExpense] = useState<{ amount?: number; note?: string } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
   ]);
@@ -104,23 +106,74 @@ export default function SpeakOn({ role }: { role: Role }) {
     return () => { if (timer) window.clearTimeout(timer); };
   }, [open, startListening]);
 
-  const send = useCallback(() => {
+  const send = useCallback(async () => {
     const text = draft.trim();
     if (!text || busy) return;
     setBusy(true);
-    const previousAction = [...messages].reverse().find((message) => message.role === "assistant" && message.href);
-    const isContextualOpen = /^(open it|go there|yes|continue|take me there)$/i.test(text);
-    const result = isContextualOpen && previousAction?.href
-      ? { reply: "I’ll open the workflow we were just discussing.", href: previousAction.href, label: previousAction.label }
-      : resolveSpeakOnRequest(text, role);
-    setMessages((prev) => [...prev, { role: "user", text }, { role: "assistant", text: result.reply, href: result.href, label: result.label }]);
+    setMessages((prev) => [...prev, { role: "user", text }]);
     setDraft("");
-    setBusy(false);
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(result.reply));
+
+    const say = (reply: string, href?: string, label?: string) => {
+      setMessages((prev) => [...prev, { role: "assistant", text: reply, href, label }]);
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(new SpeechSynthesisUtterance(reply));
+      }
+    };
+
+    try {
+      const normalized = text.toLowerCase();
+      const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
+      const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
+
+      if (pendingExpense) {
+        if (cancels) {
+          setPendingExpense(null);
+          say("Okay. I cancelled that expense. Nothing has been saved.");
+        } else if (confirms) {
+          if (!pendingExpense.amount || pendingExpense.amount <= 0) {
+            say("I still need the expense amount before I can prepare it.");
+          } else {
+            const result = await addExpenseAction({ amount: pendingExpense.amount, note: pendingExpense.note });
+            setPendingExpense(null);
+            if (result.success) say("The expense was saved successfully.");
+            else say(result.error || "I couldn't save that expense. Nothing was recorded.");
+          }
+        } else {
+          const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
+          if (!pendingExpense.amount && amountMatch) {
+            const amount = Number(amountMatch[1].replace(/,/g, ""));
+            const next = { ...pendingExpense, amount };
+            setPendingExpense(next);
+            say(`Please confirm: log an expense of ${amount.toLocaleString()} for ${next.note || "no note"}? Say yes to save or cancel.`);
+          } else {
+            say("Please say yes to save this expense, or cancel to discard it.");
+          }
+        }
+      } else if (/\b(expense|spent|spending|log.*cost)\b/i.test(text)) {
+        const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
+        const amount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : undefined;
+        const note = text
+          .replace(/\b(log|record|add|an?|the|expense|spent|spending|cost|of|for|naira|ngn)\b/gi, " ")
+          .replace(/(?:₦|\$|£)?\s*\d[\d,]*(?:\.\d{1,2})?/g, " ")
+          .replace(/\s+/g, " ").trim();
+        setPendingExpense({ amount, note: note || undefined });
+        if (amount) say(`I’m ready to log an expense of ${amount.toLocaleString()} for ${note || "no note"}. Nothing has been saved yet. Say yes to confirm or cancel.`);
+        else say("I can log that expense. What amount should I record?");
+      } else {
+        const previousAction = [...messages].reverse().find((message) => message.role === "assistant" && message.href);
+        const isContextualOpen = /^(open it|go there|yes|continue|take me there)$/i.test(text);
+        const result = isContextualOpen && previousAction?.href
+          ? { reply: "I’ll open the workflow we were just discussing.", href: previousAction.href, label: previousAction.label }
+          : resolveSpeakOnRequest(text, role);
+        say(result.reply, result.href, result.label);
+      }
+    } catch (error: any) {
+      say(error?.message || "I couldn't complete that request. No success has been assumed.");
+    } finally {
+      setBusy(false);
     }
-  }, [draft, busy, role, messages]);
+  }, [draft, busy, role, messages, pendingExpense]);
 
   return (
     <>
@@ -146,7 +199,7 @@ export default function SpeakOn({ role }: { role: Role }) {
                 <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={listening ? "Listening… speak now" : "Speak or type your request"} className="min-w-0 flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-3 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"/>
                 <button type="button" onClick={send} disabled={!draft.trim() || busy} className="h-11 w-11 shrink-0 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 flex items-center justify-center" aria-label="Send request"><Send size={17}/></button>
               </div>
-              <p className="text-[10px] text-slate-400 text-center">Speak On guides you through existing forms. Review details and save using the app’s normal controls.</p>
+              <p className="text-[10px] text-slate-400 text-center">Speak On prepares supported actions for your confirmation before saving. Other workflows open their existing forms.</p>
             </div>
           </section>
         </div>
