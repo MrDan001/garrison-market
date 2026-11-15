@@ -1,4 +1,5 @@
 "use client";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 // FILE: apps/frontend/app/owner/expenses/owner-expenses-client.tsx
 
 import { useState, useTransition, useEffect } from "react";
@@ -44,10 +45,6 @@ type Overview = {
 } | null;
 type Period = "day" | "month" | "year";
 
-function formatCurrency(n: number) {
-  return `₦${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
 export default function OwnerExpensesClient({
   categories: initialCategories,
   overview,
@@ -59,7 +56,9 @@ export default function OwnerExpensesClient({
   initialPeriod: Period;
   initialData: PeriodData;
 }) {
-  const { formatCurrency, currencyCode } = useBusinessCurrency();\n  const [categories, setCategories] = useState(initialCategories);
+  const { formatCurrency, currencyCode } = useBusinessCurrency();
+  const { formatCurrency, currencyCode } = useBusinessCurrency();
+  const [categories, setCategories] = useState(initialCategories);
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [referenceDate, setReferenceDate] = useState(new Date());
   const [data, setData] = useState<PeriodData>(initialData);
