@@ -32,7 +32,7 @@ const routeFor = (text: string, role: Role): { reply: string; href?: string; lab
     return { reply: "Open the existing debt records. Select the correct customer and debt, then enter the payment amount and method.", href: role === "owner" ? "/owner/customers" : "/staff/debts", label: "Open Debtors" };
   }
   if (/\b(sale|sell|checkout|sold)\b/.test(q)) {
-    return { reply: "Open the inventory and use its existing sales/checkout controls. Select the exact products, quantities and payment details there.", href: "/staff/inventory", label: "Open Inventory & Sales" };
+    return { reply: "Open the inventory and use its existing sales/checkout controls. Select the exact products, quantities and payment details there.", href: role === "owner" ? "/owner/inventory" : "/staff/inventory", label: "Open Inventory & Sales" };
   }
   if (/\b(inventory|stock|products|items)\b/.test(q)) {
     return { reply: "Here is your inventory. Choose the item and use the existing controls available to your account.", href: role === "owner" ? "/owner/inventory" : "/staff/inventory", label: "Open Inventory" };
@@ -82,6 +82,12 @@ export default function SpeakOn({ role }: { role: Role }) {
     setListening(true);
     recognition.start();
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => startListening(), 350);
+    return () => window.clearTimeout(timer);
+  }, [open, startListening]);
 
   const send = useCallback(() => {
     const text = draft.trim();
