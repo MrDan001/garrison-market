@@ -93,7 +93,7 @@ export default function OwnerWastageClient({ data }: { data: any }) {
                   <td>${entry.staff?.fullName || "Staff"}</td>
                   <td>${WASTAGE_REASON_LABELS[entry.reason as keyof typeof WASTAGE_REASON_LABELS] ?? entry.reason}</td>
                   <td>${entry.quantity}${entry.unit}</td>
-                  <td>₦${entryValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td>${formatCurrency(entryValue)}</td>
                 </tr>
               `;
                 })
@@ -101,7 +101,7 @@ export default function OwnerWastageClient({ data }: { data: any }) {
             </tbody>
           </table>
           <div class="total">
-            Total Value Lost: ₦${bucket.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            Total Value Lost: ${formatCurrency(bucket.value)}
           </div>
           <script>
             window.onload = function() { window.print(); window.close(); }
