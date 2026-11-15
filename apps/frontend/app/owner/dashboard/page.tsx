@@ -347,7 +347,7 @@ export default async function OwnerDashboardPage() {
                 <h2 className="text-base font-semibold text-[var(--text-primary)] mb-4">Recent Activity</h2>
                 <div className="space-y-3">
                   {activityFeed.length > 0 ? (
-                    activityFeed.map((item) => <ActivityRow key={item.id} item={item} />)
+                    activityFeed.map((item) => <ActivityRow key={item.id} item={item} currencyCode={user.currencyCode} />)
                   ) : (
                     <p className="text-slate-500 text-sm text-center py-4">No recent activity.</p>
                   )}
@@ -409,7 +409,7 @@ export default async function OwnerDashboardPage() {
   }
 }
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item, currencyCode }: { item: ActivityItem; currencyCode: string }) {
   const getTheme = () => {
     switch (item.type) {
       case "sale":
@@ -452,7 +452,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
       <div className="pr-4 text-right shrink-0">
         <span className={`block font-mono text-xs font-bold ${t.text}`}>
-          {item.type === "sale" ? `+${formatBusinessCurrency(item.amount, user.currencyCode)}` : 
+          {item.type === "sale" ? `+${formatBusinessCurrency(item.amount, currencyCode)}` : 
            item.type === "alert" && "isOutOfStock" in item ? (item.isOutOfStock ? "EMPTY" : `${item.quantity} UNITS`) :
            item.type === "restock" ? `${item.quantity} UNITS` :
            "REVIEW"}
