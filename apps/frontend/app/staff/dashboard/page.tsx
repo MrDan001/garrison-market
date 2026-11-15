@@ -429,7 +429,7 @@ export default async function StaffDashboard() {
             <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recent Activity</h2>
             <div className="space-y-3">
               {activityFeed.length > 0 ? (
-                activityFeed.map((item) => <ActivityRow key={item.id} item={item} />)
+                activityFeed.map((item) => <ActivityRow key={item.id} item={item} currencyCode={currencyCode} />)
               ) : (
                 <div className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center">
                   <ShoppingBag size={28} className="mx-auto mb-2 text-slate-300 dark:text-slate-700" />
@@ -486,7 +486,7 @@ export default async function StaffDashboard() {
   );
 }
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item, currencyCode }: { item: ActivityItem; currencyCode: string }) {
   if (item.type === "sale") {
     return (
       <div className="flex justify-between items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
