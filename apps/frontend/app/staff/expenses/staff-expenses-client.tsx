@@ -27,7 +27,6 @@ export default function StaffExpensesClient({
   initialData: TodayData;
 }) {
   const { formatCurrency, currencyCode } = useBusinessCurrency();
-  const { formatCurrency, currencyCode } = useBusinessCurrency();
   const [data, setData] = useState(initialData);
   const [showAddModal, setShowAddModal] = useState(false);
 
