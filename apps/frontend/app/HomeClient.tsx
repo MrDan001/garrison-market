@@ -1021,9 +1021,14 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
             url: "https://gmstock.co",
             description:
               "Garrison Market is an inventory and business management platform for owners and teams. Manage products, stock levels, sales, staff access, expenses, customer records, invoices, reports and multiple business locations from one connected workspace.",
-            offers: [
-              { "@type": "Offer", name: "Basic Plan", price: "6000", priceCurrency: "NGN" },
-              { "@type": "Offer", name: "Premium Plan", price: "12000", priceCurrency: "NGN" },
+            featureList: [
+              "Inventory and stock management",
+              "Sales and order tracking",
+              "Staff accounts and access management",
+              "Business expense tracking",
+              "Customer records and part-payments",
+              "Invoices and business reports",
+              "Multiple business locations, depending on plan",
             ],
             provider: {
               "@type": "Organization",
