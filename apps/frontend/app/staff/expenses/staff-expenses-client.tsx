@@ -4,7 +4,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CreditCard, Plus, X } from "lucide-react";
-import { addExpenseAction, getExpensesForStaffToday } from "@/lib/expense.actions";\nimport { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
+import { addExpenseAction, getExpensesForStaffToday } from "@/lib/expense.actions";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 type Category = { id: number; name: string };
 type ExpenseRow = {
@@ -18,10 +19,6 @@ type ExpenseRow = {
 };
 type TodayData = { expenses: ExpenseRow[]; total: number };
 
-function formatCurrency(n: number) {
-  return `₦${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
 export default function StaffExpensesClient({
   categories,
   initialData,
@@ -29,7 +26,9 @@ export default function StaffExpensesClient({
   categories: Category[];
   initialData: TodayData;
 }) {
-  const { formatCurrency, currencyCode } = useBusinessCurrency();\n  const [data, setData] = useState(initialData);
+  const { formatCurrency, currencyCode } = useBusinessCurrency();
+  const { formatCurrency, currencyCode } = useBusinessCurrency();
+  const [data, setData] = useState(initialData);
   const [showAddModal, setShowAddModal] = useState(false);
 
   async function refresh() {
