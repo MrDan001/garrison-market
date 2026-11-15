@@ -1,5 +1,6 @@
 "use client";
 
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
@@ -13,6 +14,7 @@ import { ArrowLeft, Scale as ScaleIcon, Tag, ChevronRight, Clock } from "lucide-
 import Link from "next/link";
 
 export default function AddScaleInventoryForm() {
+  const { currencyCode } = useBusinessCurrency();
   const [imageFiles, setImageFiles] = useState<(File | null)[]>([null, null, null]);
   const [imagePreviews, setImagePreviews] = useState<(string | null)[]>([null, null, null]);
   const [categoryId, setCategoryId] = useState<number | null>(null);
@@ -222,11 +224,11 @@ export default function AddScaleInventoryForm() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Cost Price (per {unit}) *</label>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Cost Price ({currencyCode} per {unit}) *</label>
               <input name="costPrice" type="number" step="0.01" required className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Selling Price (per {unit}) *</label>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Selling Price ({currencyCode} per {unit}) *</label>
               <input name="price" type="number" step="0.01" required className="w-full bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:outline-none focus:border-blue-600" />
             </div>
           </div>
