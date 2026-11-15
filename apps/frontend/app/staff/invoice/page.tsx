@@ -313,7 +313,7 @@ export default function StaffInvoicesPage() {
                       <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-800 border-dashed items-center print:border-slate-700 print:dark:border-slate-300">
                         <span className="font-bold text-[var(--text-primary)] print:text-black">Amount Settled</span>
                         <span className="text-base font-black text-blue-400 print:text-black">
-                          ₦{Number(selectedOrder.total).toLocaleString()}
+                          {formatCurrency(Number(selectedOrder.total))}
                         </span>
                       </div>
                     </div>
