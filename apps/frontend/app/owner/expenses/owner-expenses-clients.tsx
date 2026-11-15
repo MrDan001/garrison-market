@@ -57,7 +57,6 @@ export default function OwnerExpensesClient({
   initialData: PeriodData;
 }) {
   const { formatCurrency, currencyCode } = useBusinessCurrency();
-  const { formatCurrency, currencyCode } = useBusinessCurrency();
   const [categories, setCategories] = useState(initialCategories);
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [referenceDate, setReferenceDate] = useState(new Date());
