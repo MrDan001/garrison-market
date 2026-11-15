@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Printer, Receipt, AlertTriangle, User, Phone, MessageCircle } from "lucide-react";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface OrderItemType {
   id: number;
@@ -34,6 +35,7 @@ interface OrderType {
 }
 
 export default function StaffInvoicesPage() {
+  const { formatCurrency } = useBusinessCurrency();
   const [todaysOrders, setTodaysOrders] = useState<OrderType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,10 +100,10 @@ export default function StaffInvoicesPage() {
       `Invoice #${order.id} — ${new Date(order.date).toLocaleString()}`,
       "",
       ...order.items.map(
-        (item) => `${item.inventory?.name || "Item"} x${item.quantity} — ₦${(Number(item.priceAtTime) * item.quantity).toLocaleString()}`
+        (item) => `${item.inventory?.name || "Item"} x${item.quantity} — ${formatCurrency(Number(item.priceAtTime) * item.quantity)}`
       ),
       "",
-      `*Total: ₦${Number(order.total).toLocaleString()}*`,
+      `*Total: ${formatCurrency(Number(order.total))}*`,
       "",
       `Thank you for shopping with us!`,
     ];
@@ -187,7 +189,7 @@ export default function StaffInvoicesPage() {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}{" "}
-                        &middot; ₦{Number(order.total).toLocaleString()}
+                        &middot; {formatCurrency(Number(order.total))}
                       </div>
                     </button>
                   );
@@ -287,10 +289,10 @@ export default function StaffInvoicesPage() {
                                 </td>
                                 <td className="p-3 text-center text-slate-600 dark:text-slate-400 print:text-black">{item.quantity}</td>
                                 <td className="p-3 text-right text-slate-600 dark:text-slate-400 print:text-black">
-                                  ₦{Number(item.priceAtTime).toLocaleString()}
+                                  {formatCurrency(Number(item.priceAtTime))}
                                 </td>
                                 <td className="p-3 text-right font-semibold text-slate-800 dark:text-slate-200 print:text-black">
-                                  ₦{subValue.toLocaleString()}
+                                  {formatCurrency(subValue)}
                                 </td>
                               </tr>
                             );
@@ -305,7 +307,7 @@ export default function StaffInvoicesPage() {
                       <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Gross Subtotal</span>
                         <span className="font-medium text-slate-700 dark:text-slate-300 print:text-black">
-                          ₦{Number(selectedOrder.total).toLocaleString()}
+                          {formatCurrency(Number(selectedOrder.total))}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-800 border-dashed items-center print:border-slate-700 print:dark:border-slate-300">
