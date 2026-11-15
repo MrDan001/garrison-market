@@ -38,7 +38,7 @@ export default function BusinessLocalizationForm({
       <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 flex items-start gap-3">
         <Globe2 className="text-blue-500 shrink-0 mt-0.5" size={20} />
         <p className="text-sm text-[var(--text-primary)]/75 leading-relaxed">
-          Your operating currency is used for inventory prices, sales, expenses, invoices and reports for both owners and staff. Changing it does not convert amounts already recorded.
+          Your operating currency is used for inventory prices, sales, expenses, invoices and reports for both owners and staff. To protect your records, the operating currency is locked after inventory or financial activity has been created.
         </p>
       </div>
 
