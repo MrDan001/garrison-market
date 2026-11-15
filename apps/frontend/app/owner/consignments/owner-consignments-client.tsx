@@ -32,6 +32,7 @@ export default function OwnerConsignmentsClient({
   enabled?: boolean;
   inventory?: InventoryItem[];
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [filter, setFilter] = useState<"all" | "out" | "settled">("all");
   const [storeFilter, setStoreFilter] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
