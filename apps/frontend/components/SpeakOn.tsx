@@ -7,7 +7,7 @@ import { Mic, MicOff, X, Send, Volume2, ArrowRight, MessageCircle } from "lucide
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
 
-const routeFor = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
+export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
   if (/\b(add|create|new)\b.*\b(product|item)\b/.test(q)) {
     return role === "owner"
@@ -93,7 +93,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     const text = draft.trim();
     if (!text || busy) return;
     setBusy(true);
-    const result = routeFor(text, role);
+    const result = resolveSpeakOnRequest(text, role);
     setMessages((prev) => [...prev, { role: "user", text }, { role: "assistant", ...result }]);
     setDraft("");
     setBusy(false);
