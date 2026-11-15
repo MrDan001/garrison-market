@@ -361,7 +361,7 @@ export default function SpeakOn({ role }: { role: Role }) {
           const query = text.replace(/\b(settle|settlement|consignment|consignments|for|the|please|of)\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
           const candidates = [
             ...standard.map((entry: any) => ({ kind: "standard" as const, id: entry.id, recipientName: entry.recipientName, items: (entry.items || []).map((item: any) => ({ itemId: item.id, name: item.inventory?.name || "Item", quantityOut: Number(item.quantityOut) })) })),
-            ...scale.map((entry: any) => ({ kind: "scale" as const, id: entry.id, recipientName: entry.recipientName, items: (entry.scaleItems || []).map((item: any) => ({ itemId: item.id, name: item.scaleInventory?.name || "Item", quantityOut: Number(item.quantityOut), unit: item.unit })) })),
+            ...scale.filter((entry: any) => entry.staffId !== null).map((entry: any) => ({ kind: "scale" as const, id: entry.id, recipientName: entry.recipientName, items: (entry.scaleItems || []).map((item: any) => ({ itemId: item.id, name: item.scaleInventory?.name || "Item", quantityOut: Number(item.quantityOut), unit: item.unit })) })),
           ];
           const matches = candidates.filter((entry) => query && (entry.recipientName.toLowerCase().includes(query) || entry.items.some((item) => item.name.toLowerCase().includes(query))));
           if (matches.length !== 1) say(matches.length > 1 ? "More than one open consignment matches. Please say the recipient's exact name." : candidates.length ? "I couldn't identify the open consignment. Please mention its recipient's name." : "You have no open consignments to settle.");
