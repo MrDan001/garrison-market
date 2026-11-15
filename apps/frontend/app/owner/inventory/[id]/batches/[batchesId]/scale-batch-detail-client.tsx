@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Archive, ShoppingCart, TrendingDown, Package2, Users, Clock,
@@ -100,6 +101,7 @@ const fmtDateTime = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 
 export default function ScaleBatchDetailClient({ data, productId }: { data: ScaleBatchDetail; productId: string }) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [tab, setTab] = useState<SubTab>("details");
   const [showLossModal, setShowLossModal] = useState(false);
@@ -201,9 +203,9 @@ export default function ScaleBatchDetailClient({ data, productId }: { data: Scal
             <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-800">
               <Row icon={<Calendar size={13} />} label="Added On" value={fmtDate(data.addedAt)} />
               <Row icon={<Hash size={13} />} label="Batch ID" value={`#${data.id}`} />
-              <Row icon={<Tag size={13} />} label="Selling Price" value={`${naira(data.sellingPriceAtTime)} / ${data.unit}`} valueClassName="text-emerald-500" />
+              <Row icon={<Tag size={13} />} label="Selling Price" value={`${formatCurrency(data.sellingPriceAtTime)} / ${data.unit}`} valueClassName="text-emerald-500" />
               {data.costPrice != null && (
-                <Row icon={<Tag size={13} />} label="Cost Price" value={`${naira(data.costPrice)} / ${data.unit}`} />
+                <Row icon={<Tag size={13} />} label="Cost Price" value={`${formatCurrency(data.costPrice)} / ${data.unit}`} />
               )}
               {data.paymentMethod && <Row icon={<ArrowLeftRight size={13} />} label="Paid By" value={data.paymentMethod} />}
               {data.createdByName && <Row icon={<Users size={13} />} label="Added By" value={data.createdByName} />}
@@ -297,7 +299,7 @@ export default function ScaleBatchDetailClient({ data, productId }: { data: Scal
                       </p>
                       {r.reason && <p className="text-[11px] text-slate-500 mt-0.5">{r.reason}</p>}
                       {r.refundAmount != null && (
-                        <p className="text-[11px] text-emerald-500 mt-0.5 font-semibold">Refunded {naira(r.refundAmount)}</p>
+                        <p className="text-[11px] text-emerald-500 mt-0.5 font-semibold">Refunded {formatCurrency(r.refundAmount)}</p>
                       )}
                       <p className="text-[10px] text-slate-400 mt-0.5">
                         {fmtDateTime(r.date)}{r.recordedByName ? ` · ${r.recordedByName}` : ""}
@@ -315,12 +317,12 @@ export default function ScaleBatchDetailClient({ data, productId }: { data: Scal
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Batch Report Overview</p>
               <div className="grid grid-cols-2 gap-2 mb-2">
-                <Metric icon={<ShoppingBag size={14} />} label="Cost Spent" value={naira(data.salesOverview.costSpent)} className="text-orange-500" />
-                <Metric icon={<Tag size={14} />} label="Expected Revenue" value={naira(data.salesOverview.expectedRevenue)} className="text-blue-500" />
+                <Metric icon={<ShoppingBag size={14} />} label="Cost Spent" value={formatCurrency(data.salesOverview.costSpent)} className="text-orange-500" />
+                <Metric icon={<Tag size={14} />} label="Expected Revenue" value={formatCurrency(data.salesOverview.expectedRevenue)} className="text-blue-500" />
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Metric icon={<TrendingDown size={14} />} label="Discount Given" value={naira(data.salesOverview.discountGiven)} className="text-purple-500" />
-                <Metric icon={<Tag size={14} />} label="Actual Revenue" value={naira(data.salesOverview.actualRevenue)} className="text-emerald-500" />
+                <Metric icon={<TrendingDown size={14} />} label="Discount Given" value={formatCurrency(data.salesOverview.discountGiven)} className="text-purple-500" />
+                <Metric icon={<Tag size={14} />} label="Actual Revenue" value={formatCurrency(data.salesOverview.actualRevenue)} className="text-emerald-500" />
               </div>
             </div>
 
@@ -340,7 +342,7 @@ export default function ScaleBatchDetailClient({ data, productId }: { data: Scal
                           {s.quantity}{data.unit} · {fmtDateTime(s.date)}
                         </p>
                       </div>
-                      <p className="text-sm font-bold text-emerald-500">{naira(s.amount)}</p>
+                      <p className="text-sm font-bold text-emerald-500">{formatCurrency(s.amount)}</p>
                     </div>
                   ))}
                 </div>
@@ -372,7 +374,7 @@ export default function ScaleBatchDetailClient({ data, productId }: { data: Scal
                         </p>
                       </div>
                     </div>
-                    <p className="text-sm font-bold text-blue-500">{naira(c.spent)}</p>
+                    <p className="text-sm font-bold text-blue-500">{formatCurrency(c.spent)}</p>
                   </div>
                 ))}
               </div>
