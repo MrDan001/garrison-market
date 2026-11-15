@@ -301,17 +301,21 @@ export default function SpeakOn({ role }: { role: Role }) {
           }
         } else {
           const data = await getWastageForOwner();
-          const itemQuery = text.replace(/\b(approve|decline|reject|wastage|wasted|entry|for|the|of|please)\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
-          const matches = data.pending.filter((entry: any) => itemQuery && (entry.scaleInventory.name.toLowerCase().includes(itemQuery) || entry.staff?.fullName?.toLowerCase().includes(itemQuery)));
-          if (matches.length !== 1) {
-            say(matches.length ? "Several pending wastage entries match. Please specify the item or staff member more clearly." : data.pending.length ? "I couldn't identify the pending entry. Mention its item name or staff member." : "There are no pending wastage entries awaiting approval.");
+          const mode = /\b(decline|reject)\b/i.test(text) ? "decline" : /\b(approve|accept)\b/i.test(text) ? "approve" : undefined;
+          if (!mode) {
+            say("Would you like to approve or decline a pending wastage entry? Please say the action and item or staff name.");
           } else {
-            const entry = matches[0];
-            const mode = /\b(decline|reject)\b/i.test(text) ? "decline" : "approve";
+            const itemQuery = text.split(/because|reason/i)[0].replace(/\b(approve|accept|decline|reject|wastage|wasted|entry|for|the|of|please)\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
+            const matches = data.pending.filter((entry: any) => itemQuery && (entry.scaleInventory.name.toLowerCase().includes(itemQuery) || entry.staff?.fullName?.toLowerCase().includes(itemQuery)));
+            if (matches.length !== 1) {
+              say(matches.length ? "Several pending wastage entries match. Please specify the item or staff member more clearly." : data.pending.length ? "I couldn't identify the pending entry. Mention its item name or staff member." : "There are no pending wastage entries awaiting approval.");
+            } else {
+              const entry = matches[0];
             const declineReason = mode === "decline" ? text.split(/because|reason/i).slice(1).join(" ").trim() : undefined;
             setPendingWastage({ mode, wastageId: entry.id, productName: entry.scaleInventory.name, quantity: Number(entry.quantity), unit: entry.unit, reason: entry.reason, declineReason });
-            if (mode === "decline" && !declineReason) say("What reason should I give for declining this wastage entry?");
-            else say("Please confirm: " + mode + " " + entry.quantity + entry.unit + " of " + entry.scaleInventory.name + " logged by " + (entry.staff?.fullName || "staff") + "? Say yes to confirm or cancel.");
+              if (mode === "decline" && !declineReason) say("What reason should I give for declining this wastage entry?");
+              else say("Please confirm: " + mode + " " + entry.quantity + entry.unit + " of " + entry.scaleInventory.name + " logged by " + (entry.staff?.fullName || "staff") + "? Say yes to confirm or cancel.");
+            }
           }
         }
       } else if (/\b(restock|add stock|receive stock|stock in)\b/i.test(text)) {
