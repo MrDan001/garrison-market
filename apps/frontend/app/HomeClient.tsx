@@ -570,7 +570,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
                   </Link>
                 </div>
                 <p className="mt-4 text-xs font-semibold text-[var(--text-primary)]/50 uppercase tracking-wider">
-                  14-day free trial · Full access to every feature · No card required
+                  14-day free trial · Plans for different business sizes · No card required
                 </p>
               </div>
 
@@ -1017,7 +1017,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
             "@type": "SoftwareApplication",
             name: "Garrison Market",
             applicationCategory: "BusinessApplication",
-            operatingSystem: "Web, iOS, Android",
+            operatingSystem: "Any modern web browser; installable progressive web app",
             url: "https://gmstock.co",
             description:
               "Garrison Market is an inventory and business management platform for owners and teams. Manage products, stock levels, sales, staff access, expenses, customer records, invoices, reports and multiple business locations from one connected workspace.",
