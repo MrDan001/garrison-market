@@ -39,7 +39,8 @@ interface BatchSummary {
 
 type Tab = "batches" | "details" | "report";
 
-export default function ProductDetailClient({ item, batches }: { item: ProductItem; batches: BatchSummary[] }) {\n  const { formatCurrency } = useBusinessCurrency();
+export default function ProductDetailClient({ item, batches }: { item: ProductItem; batches: BatchSummary[] }) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("batches");
   const [isDeleting, setIsDeleting] = useState(false);
