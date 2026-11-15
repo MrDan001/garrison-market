@@ -5,6 +5,7 @@
 import { useState, useEffect, use } from "react";
 import { ArrowLeft, Receipt, Printer, Search, MessageCircle, BarChart3 } from "lucide-react";
 import Link from "next/link";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface InvoicesPageProps {
   searchParams: Promise<{ id?: string }>;
@@ -40,6 +41,7 @@ interface OrderType {
 }
 
 export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
+  const { formatCurrency } = useBusinessCurrency();
   const resolvedSearchParams = use(searchParams);
   const activeInvoiceId = resolvedSearchParams.id ? parseInt(resolvedSearchParams.id, 10) : null;
 
@@ -92,10 +94,10 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
       `Invoice #${order.id} — ${new Date(order.date).toLocaleString()}`,
       "",
       ...order.items.map(
-        (item) => `${item.inventory?.name || "Item"} x${item.quantity} — ₦${(Number(item.priceAtTime) * item.quantity).toLocaleString()}`
+        (item) => `${item.inventory?.name || "Item"} x${item.quantity} — ${formatCurrency(Number(item.priceAtTime) * item.quantity)}`
       ),
       "",
-      `*Total: ₦${Number(order.calculatedTotal || order.total).toLocaleString()}*`,
+      `*Total: ${formatCurrency(Number(order.calculatedTotal || order.total))}*`,
       "",
       `Thank you for shopping with us!`,
     ];
@@ -175,7 +177,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                         <p className="text-[11px] text-slate-500 uppercase tracking-wide leading-none">Processed by</p>
                         <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">{order.staff?.fullName || "Owner"}</p>
                       </div>
-                      <p className="text-sm font-bold text-blue-400">₦{orderTotal.toLocaleString()}</p>
+                      <p className="text-sm font-bold text-blue-400">{formatCurrency(orderTotal)}</p>
                     </div>
                   </Link>
                 );
@@ -260,8 +262,8 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                             <tr key={item.id} className="hover:bg-slate-100/10 hover:dark:bg-slate-900/10 transition-colors">
                               <td className="p-3 font-medium text-[var(--text-primary)]">{item.inventory?.name || "Deleted Product"}</td>
                               <td className="p-3 text-center text-slate-600 dark:text-slate-400">{item.quantity}</td>
-                              <td className="p-3 text-right text-slate-600 dark:text-slate-400">₦{unitPrice.toLocaleString()}</td>
-                              <td className="p-3 text-right font-semibold text-slate-800 dark:text-slate-200">₦{subValue.toLocaleString()}</td>
+                              <td className="p-3 text-right text-slate-600 dark:text-slate-400">{formatCurrency(unitPrice)}</td>
+                              <td className="p-3 text-right font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(subValue)}</td>
                             </tr>
                           );
                         })}
@@ -275,12 +277,12 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Gross Subtotal</span>
                       <span className="font-medium text-slate-700 dark:text-slate-300">
-                        ₦{Number(selectedOrder.calculatedTotal || selectedOrder.total || 0).toLocaleString()}
+                        {formatCurrency(Number(selectedOrder.calculatedTotal || selectedOrder.total || 0))}
                       </span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Applied Surcharges</span>
-                      <span className="font-medium text-slate-700 dark:text-slate-300">₦0.00</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{formatCurrency(0)}</span>
                     </div>
                     <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-800 border-dashed items-center print:border-slate-700 print:dark:border-slate-300">
                       <span className="font-bold text-[var(--text-primary)]">Amount Settled</span>
