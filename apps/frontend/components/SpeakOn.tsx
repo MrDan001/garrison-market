@@ -105,12 +105,10 @@ export default function SpeakOn({ role }: { role: Role }) {
 
   useEffect(() => {
     if (!open) return;
-    let timer: number | undefined;
     let started = false;
     const beginListening = () => {
       if (started) return;
       started = true;
-      if (timer) window.clearTimeout(timer);
       startListening();
     };
     if ("speechSynthesis" in window) {
@@ -118,11 +116,10 @@ export default function SpeakOn({ role }: { role: Role }) {
       greeting.onend = beginListening;
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(greeting);
-      timer = window.setTimeout(beginListening, 5000);
     } else {
-      timer = window.setTimeout(beginListening, 250);
+      beginListening();
     }
-    return () => { if (timer) window.clearTimeout(timer); };
+    return () => { window.speechSynthesis?.cancel?.(); };
   }, [open, startListening]);
 
   const send = useCallback(async () => {
@@ -330,7 +327,7 @@ export default function SpeakOn({ role }: { role: Role }) {
         } else {
           const quantityMatch = text.match(/\b(\d+)\b/);
           const quantity = pendingSale.quantity ?? (quantityMatch ? Number(quantityMatch[1]) : undefined);
-          const paymentMethod = pendingSale.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
+          const paymentMethod: "cash" | "transfer" | undefined = pendingSale.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
           const next = { ...pendingSale, quantity, paymentMethod };
           setPendingSale(next);
           if (!next.quantity) say("How many " + (next.productName || "units") + " were sold?");
@@ -497,7 +494,7 @@ export default function SpeakOn({ role }: { role: Role }) {
         const inventory = await getInventoryForStaff();
         const quantityMatch = text.match(/\b(\d+)\b/);
         const quantity = quantityMatch ? Number(quantityMatch[1]) : undefined;
-        const paymentMethod = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+        const paymentMethod: "cash" | "transfer" | undefined = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
         const productQuery = text
           .replace(/\b(sell|sale|checkout|sold|please|record|make|a|an|the|of|for|by|cash|transfer|unit|units)\b/gi, " ")
           .replace(/\b\d+\b/g, " ")
@@ -519,7 +516,7 @@ export default function SpeakOn({ role }: { role: Role }) {
         const debts = role === "owner" ? await getOpenDebtsForOwner() : await getOpenDebtsForStaff();
         const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
         const amount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : undefined;
-        const paymentMethod = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+        const paymentMethod: "cash" | "transfer" | undefined = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
         const customerQuery = text
           .replace(/\b(record|log|a|the|debt|debtor|payment|paid|pay|from|by|customer|owe|owes|cash|transfer|naira|ngn)\b/gi, " ")
           .replace(/(?:₦|\$|£)?\s*\d[\d,]*(?:\.\d{1,2})?/g, " ")
