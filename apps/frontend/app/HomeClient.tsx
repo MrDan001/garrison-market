@@ -36,76 +36,107 @@ const body = Inter({ subsets: ["latin"], variable: "--font-body" });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
 
 const receiptLines = [
-  { text: "GARRISON MARKET — TILL #02", muted: true },
-  { text: "PHONE CHARGERS ......... 34 IN STOCK", muted: false },
-  { text: "AIRPODS CASE ........... LOW STOCK", warn: true },
-  { text: "SALE #0231  ₦4,500 ..... TOKUNBO", muted: false },
-  { text: "RESTOCK ALERT: HEADSETS", warn: true },
-  { text: "REPORT SUBMITTED — 18:02", muted: false },
+  { text: "GARRISON MARKET — WORKSPACE", muted: true },
+  { text: "PRODUCTS ............... 248 ACTIVE", muted: false },
+  { text: "RESTOCK ALERT .......... 3 ITEMS", warn: true },
+  { text: "NEW SALE ............... ORDER #0231", muted: false },
+  { text: "EXPENSE LOGGED ......... SUPPLIES", muted: false },
+  { text: "TEAM REPORT ............ SUBMITTED", muted: false },
 ];
 
 const tickerItems = [
-  "NO MORE PAPER LEDGERS",
-  "NO MORE GUESSING STOCK",
-  "NO MORE STAFF DISPUTES",
-  "NO MORE LOST SALES",
-  "NO MORE MIDNIGHT MATH",
+  "ONE VIEW OF YOUR INVENTORY",
+  "SALES YOUR TEAM CAN ACCOUNT FOR",
+  "EXPENSES IN THE SAME WORKSPACE",
+  "CUSTOMER RECORDS THAT STAY ORGANIZED",
+  "CLEARER DAY-TO-DAY OPERATIONS",
 ];
 
 const painPoints = [
-  "You find out you're out of stock when a customer is standing in front of you",
-  "Staff sales get scribbled on paper, then lost, then argued about",
-  "You have no idea which staff member sold what, or when",
-  "Restocking is a guess, not a number",
+  "Stock counts, sales and expenses live in different notebooks or spreadsheets",
+  "Owners have to chase staff to understand what happened during a shift",
+  "Customer balances and part-payments are difficult to follow",
+  "You cannot get a clear picture of every location from one place",
 ];
 
 const withGarrison = [
-  "A restock alert before you run out, every time",
-  "Every sale logged instantly, tied to the staff member who made it",
-  "A clear log of who sold what and when, no arguments",
-  "A restock threshold you set once, and the app watches for you",
+  "Keep products, quantities and restock alerts in one inventory",
+  "Give each team member their own access and activity history",
+  "Record expenses, customer balances and sales alongside operations",
+  "Review your stores and business reports from one workspace",
 ];
 
 const deepFeatures = [
   {
     icon: Boxes,
     tag: "INVENTORY",
-    title: "Know your stock before it runs out",
-    desc: "Every product tracked with cost price, selling price, and category. Set a restock threshold once — the moment stock dips below it, you'll see the warning the second you open the dashboard. No more finding out from a disappointed customer.",
+    title: "Know what you have, where it is, and when to restock",
+    desc: "Organize products, categories, quantities and pricing in one inventory. Track stock by item or supported measurement, review stock activity, and set low-stock thresholds so your team can act before products run out.",
     mock: [
-      { label: "Phone Chargers", value: "34 units", tone: "ok" },
-      { label: "AirPods Case", value: "LOW STOCK", tone: "warn" },
-      { label: "USB-C Cables", value: "0 — OUT", tone: "danger" },
+      { label: "Product A", value: "248 units", tone: "ok" },
+      { label: "Product B", value: "RESTOCK SOON", tone: "warn" },
+      { label: "Product C", value: "OUT OF STOCK", tone: "danger" },
+    ],
+  },
+  {
+    icon: Zap,
+    tag: "SALES",
+    title: "Keep every sale connected to your team",
+    desc: "Record orders and sales activity in the same workspace as your inventory. Owners can review sales history while staff use their own accounts to handle the work they are assigned.",
+    mock: [
+      { label: "Orders today", value: "23", tone: "ok" },
+      { label: "Team activity", value: "UP TO DATE", tone: "ok" },
+      { label: "Stock updates", value: "LIVE LOG", tone: "warn" },
     ],
   },
   {
     icon: Users,
-    tag: "STAFF",
-    title: "Give staff access, not the keys to the shop",
-    desc: "Create a login for every staff member. See exactly who sold what, suspend a login instantly if you need to, and never wonder again who was on shift when a sale went missing.",
+    tag: "TEAM MANAGEMENT",
+    title: "Give people the access they need to do their work",
+    desc: "Create individual staff accounts, manage access, review activity and receive staff reports. Keep day-to-day work moving without sharing the owner's account with the whole team.",
     mock: [
-      { label: "Tokunbo — Active", value: "₦42,500 today", tone: "ok" },
-      { label: "Amaka — Active", value: "₦18,000 today", tone: "ok" },
-      { label: "David — Suspended", value: "No access", tone: "danger" },
+      { label: "Team member 01", value: "ACTIVE", tone: "ok" },
+      { label: "Team member 02", value: "ACTIVE", tone: "ok" },
+      { label: "Team member 03", value: "ACCESS PAUSED", tone: "danger" },
+    ],
+  },
+  {
+    icon: TrendingDown,
+    tag: "EXPENSES",
+    title: "Bring business expenses into the same picture",
+    desc: "Record operating expenses alongside sales and inventory activity. Keep a clearer history of business spending and use reports to understand what is happening across your operation.",
+    mock: [
+      { label: "Supplies", value: "RECORDED", tone: "ok" },
+      { label: "Transport", value: "RECORDED", tone: "ok" },
+      { label: "Pending review", value: "2 ITEMS", tone: "warn" },
     ],
   },
   {
     icon: ClipboardList,
-    tag: "REPORTS",
-    title: "Today's numbers, without chasing anyone",
-    desc: "Staff submit a short end-of-day report from their phone. You see today's revenue, order count, and top movers the second it happens — not two days later when someone finally remembers.",
+    tag: "CUSTOMERS & REPORTS",
+    title: "Keep customer records and business reports together",
+    desc: "Maintain customer profiles, review balances and part-payments, manage invoices and check reports without switching between disconnected tools.",
     mock: [
-      { label: "Today's Sales", value: "₦186,400", tone: "ok" },
-      { label: "Orders Today", value: "23", tone: "ok" },
-      { label: "Reports Pending", value: "0", tone: "ok" },
+      { label: "Customer records", value: "ORGANIZED", tone: "ok" },
+      { label: "Part-payments", value: "HISTORY SAVED", tone: "ok" },
+      { label: "Daily reports", value: "READY TO REVIEW", tone: "warn" },
     ],
   },
 ];
 
+const businessTypes = [
+  "Retail and specialty stores",
+  "Wholesale and distribution",
+  "Food and beverage retailers",
+  "Beauty and personal care",
+  "Electronics and accessories",
+  "Businesses with multiple locations",
+];
+
 const steps = [
-  { n: "01", title: "Add your stock", desc: "Name, quantity, cost price, selling price. Takes under a minute per item." },
-  { n: "02", title: "Bring your staff in", desc: "Create a login for each staff member. They only see what they need to." },
-  { n: "03", title: "Watch it run itself", desc: "Sales, stock, and reports update live. You just check the dashboard." },
+  { n: "01", title: "Set up your inventory", desc: "Add products, categories, quantities and the details your team needs to work accurately." },
+  { n: "02", title: "Bring your team in", desc: "Create staff accounts and give each person access for their responsibilities." },
+  { n: "03", title: "Manage the moving parts", desc: "Review sales, stock, expenses, customers and reports from one connected workspace." },
 ];
 
 const displayLimit = (n: number) => (n === Infinity ? "Unlimited" : n);
@@ -115,19 +146,19 @@ function getGoodies(planId: PlanId): { supersetOf: string | null; items: string[
   const items: string[] = [];
 
   items.push(
-    `${displayLimit(plan.maxStores)} store${plan.maxStores !== 1 ? "s" : ""}, ${displayLimit(plan.maxStaff)} staff logins, ${displayLimit(plan.maxProducts)} products`
+    `${displayLimit(plan.maxStores)} location${plan.maxStores !== 1 ? "s" : ""}, ${displayLimit(plan.maxStaff)} staff logins, ${displayLimit(plan.maxProducts)} products`
   );
 
   if (planId === "basic") {
-    items.push("Full inventory, checkout, expenses & invoices");
-    items.push("Daily reports, staff management & announcements");
-    items.push("Push notifications, admin chat & screenshot lock");
+    items.push("Inventory, checkout, expenses and invoices");
+    items.push("Daily reports, staff management and announcements");
+    items.push("Push notifications, admin chat and screenshot lock");
   }
-  if (plan.businessSummaryChart) items.push("Sales & business summary chart");
-  if (plan.debtors) items.push("Debtors — part-payments with full history");
-  if (plan.customerProfiles) items.push("Customer profiles ranked by spend");
-  if (plan.staffConsignment) items.push("Staff consignment — sign stock out to customers");
-  if (plan.ownerConsignment) items.push("Owner consignment — sign stock out yourself too");
+  if (plan.businessSummaryChart) items.push("Sales and business summary charts");
+  if (plan.debtors) items.push("Customer balances and part-payment history");
+  if (plan.customerProfiles) items.push("Customer profiles and purchase history");
+  if (plan.staffConsignment) items.push("Staff consignment and stock sign-out");
+  if (plan.ownerConsignment) items.push("Owner-managed stock consignment");
 
   return {
     supersetOf: planId === "premium" ? "Basic" : planId === "max" ? "Pro" : null,
@@ -137,20 +168,24 @@ function getGoodies(planId: PlanId): { supersetOf: string | null; items: string[
 
 const faqs = [
   {
-    q: "Do I need to be technical to use this?",
-    a: "No. If you can use WhatsApp, you can use Garrison Market. Everything is built for a phone screen first.",
+    q: "Who is Garrison Market designed for?",
+    a: "Garrison Market is for business owners and teams that need to keep inventory, sales, staff activity and everyday operations organized in one place.",
   },
   {
-    q: "What happens if I delete an item that's already been sold?",
-    a: "It won't let you lose that history. Instead, it's automatically marked Out of Stock so your past sales records stay intact.",
+    q: "Can my employees use the platform too?",
+    a: "Yes. Owners can create individual staff accounts and manage access. Team members use their own login for the tasks and information available to their role.",
   },
   {
-    q: "Can my staff see everything I see?",
-    a: "No. Staff get their own login with access to sell, view inventory, and submit reports — not your full dashboard or business numbers.",
+    q: "Can I manage more than one location?",
+    a: "Yes. Multiple-location management is available, with the number of locations depending on the selected plan.",
   },
   {
-    q: "What if I only have one product category right now?",
-    a: "That's fine — start with what you have. You can add items, staff, and categories any time as you grow.",
+    q: "What can I manage in Garrison Market?",
+    a: "You can manage inventory, sales, staff, expenses, customer records, invoices, reports and supported stock hand-offs from one workspace.",
+  },
+  {
+    q: "Do I need special equipment or technical experience?",
+    a: "No special equipment is required to get started. Garrison Market is designed for everyday use on a phone, with a web-based workspace for owners and staff.",
   },
 ];
 
@@ -313,7 +348,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
               className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#E55345] hover:underline underline-offset-4 transition-all whitespace-nowrap"
             >
               <span className="sm:hidden">Become an affiliate →</span>
-              <span className="hidden sm:inline">Become an affiliate — earn commission referring shop owners →</span>
+              <span className="hidden sm:inline">Become an affiliate — earn commission referring businesses →</span>
             </Link>
           </div>
         </div>
@@ -508,17 +543,17 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
                   className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#E55345] mb-6 bg-[#E55345]/10 px-3 py-1 rounded-sm border border-[#E55345]/30"
                   style={{ fontFamily: "var(--font-mono)" }}
                 >
-                  <Zap size={14} /> Built for shop owners, not IT departments
+                  <Zap size={14} /> For business owners and the teams behind them
                 </div>
                 <h1
                   className="text-[2.8rem] sm:text-[4rem] lg:text-[4.6rem] leading-[0.9] font-black text-[var(--text-primary)] mb-8 tracking-tight uppercase"
                   style={{ fontFamily: "var(--font-display)" }}
                 >
-                  STOP RUNNING <br />YOUR SHOP <span className="text-[#E55345] relative inline-block hover-glitch shadow-[#E55345]/10">BLIND.</span>
+                  RUN YOUR <br />BUSINESS <span className="text-[#E55345] relative inline-block hover-glitch shadow-[#E55345]/10">WITH CLARITY.</span>
                 </h1>
                 <p className="text-[var(--text-primary)]/70 text-lg max-w-md mb-10 leading-relaxed font-medium">
                   <Typewriter 
-                    text="Garrison Market gives you one dashboard for stock, staff, and daily sales — so you know exactly what sold, who sold it, and what's running low, before it costs you a business day." 
+                    text="Garrison Market brings inventory, sales, staff, expenses and customer activity into one connected workspace — helping owners stay in control and teams know what needs to get done." 
                     active={active} 
                     speed={12}
                   />
@@ -597,7 +632,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
                   className="text-4xl sm:text-5xl font-black text-[var(--text-primary)] tracking-tight uppercase"
                   style={{ fontFamily: "var(--font-display)" }}
                 >
-                  Every notebook has a <span className="text-[#E55345] hover-glitch">blind spot.</span>
+                  Every disconnected tool leaves a <span className="text-[#E55345] hover-glitch">blind spot.</span>
                 </h2>
               </div>
 
@@ -691,7 +726,34 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
           ))}
         </section>
 
-        {/* Section 4: Process Steps */}
+        {/* Section 4: Businesses we support */}
+        <ScrollUnfurl>
+          {() => (
+            <section className="py-16 sm:py-20 border-t border-[var(--border-subtle)]/10">
+              <div className="max-w-3xl mx-auto text-center mb-10">
+                <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#E55345] mb-4 bg-[#E55345]/10 px-3 py-1 border border-[#E55345]/20" style={{ fontFamily: "var(--font-mono)" }}>
+                  <Boxes size={14} /> One platform, many business types
+                </div>
+                <h2 className="text-3xl sm:text-4xl font-black text-[var(--text-primary)] tracking-tight uppercase" style={{ fontFamily: "var(--font-display)" }}>
+                  Built for businesses that manage products and people.
+                </h2>
+                <p className="mt-4 text-sm sm:text-base text-[var(--text-primary)]/65 leading-relaxed">
+                  From a single location to a growing operation, bring the everyday work of your business into one place.
+                </p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {businessTypes.map((type) => (
+                  <div key={type} className="border border-[var(--border-subtle)]/15 bg-[var(--bg-surface)]/70 px-5 py-4 text-sm font-semibold text-[var(--text-primary)]/75 flex items-center gap-3">
+                    <Check size={15} className="text-emerald-400 shrink-0" />
+                    {type}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </ScrollUnfurl>
+
+        {/* Section 5: Process Steps */}
         <ScrollUnfurl>
           {(active) => (
             <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10 relative">
@@ -722,7 +784,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
           )}
         </ScrollUnfurl>
 
-        {/* Section 5: Pricing */}
+        {/* Section 6: Pricing */}
         <ScrollUnfurl>
           {() => (
             <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10">
@@ -823,7 +885,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
           )}
         </ScrollUnfurl>
 
-        {/* Section 6: FAQ */}
+        {/* Section 7: FAQ */}
         <ScrollUnfurl>
           {() => (
             <section className="py-16 sm:py-24 border-t border-[var(--border-subtle)]/10">
@@ -848,7 +910,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
           )}
         </ScrollUnfurl>
 
-        {/* Section 7: Final Call to Action */}
+        {/* Section 8: Final Call to Action */}
         <ScrollUnfurl>
           {(active) => (
             <section className="py-20 sm:py-28 border-t border-[var(--border-subtle)]/10">
@@ -862,7 +924,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
                   Every day on paper<br />is a day you're guessing.
                 </h2>
                 <p className="text-[#0A0F1D]/85 mb-10 max-w-lg mx-auto font-bold text-base sm:text-lg">
-                  <Typewriter text="Set up your shop in minutes. No card required to start." active={active} speed={15} />
+                  <Typewriter text="Bring your inventory and team into one workspace. No card required to start." active={active} speed={15} />
                 </p>
                 <Link
                   href={ctaHref()}
@@ -886,7 +948,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
               <span className="font-extrabold tracking-tight text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>GARRISON MARKET</span>
             </div>
             <p className="text-[var(--text-primary)]/40 text-xs leading-relaxed max-w-xs">
-              One dashboard for stock, staff, and sales. Built for the shop floor.
+              One connected workspace for inventory, sales, staff, expenses and customers.
             </p>
           </div>
           <div>
@@ -942,7 +1004,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
           </div>
         </div>
         <div className="max-w-6xl mx-auto pt-8 border-t border-[var(--border-subtle)]/5 text-center text-[var(--text-primary)]/30 text-xs font-semibold uppercase tracking-wider">
-          &copy; {new Date().getFullYear()} Garrison Market. Built for the shop floor.
+          &copy; {new Date().getFullYear()} Garrison Market. Built for the way your business works.
         </div>
       </footer>
 
@@ -958,7 +1020,7 @@ export default function HomeClient({ registrationOpen }: { registrationOpen: boo
             operatingSystem: "Web, iOS, Android",
             url: "https://gmstock.co",
             description:
-              "Garrison Market is an all-in-one inventory and sales management app for shop and market owners in Nigeria. Track stock by piece or by weight, manage staff and multiple stores, process sales, generate daily reports, and handle consignments and wastage — all from your phone.",
+              "Garrison Market is an inventory and business management platform for owners and teams. Manage products, stock levels, sales, staff access, expenses, customer records, invoices, reports and multiple business locations from one connected workspace.",
             offers: [
               { "@type": "Offer", name: "Basic Plan", price: "6000", priceCurrency: "NGN" },
               { "@type": "Offer", name: "Premium Plan", price: "12000", priceCurrency: "NGN" },
