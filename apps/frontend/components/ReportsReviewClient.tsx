@@ -28,6 +28,7 @@ import Link from "next/link";
 // of everything mashed into one table. A report with only one type never
 // shows the toggle — it just renders that one table, same as before.
 function ItemsTable({ items }: { items: any[] }) {
+  const { formatCurrency } = useBusinessCurrency();
   return (
     <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-[var(--bg-surface)]">
       <table className="w-full text-left border-collapse">
@@ -92,6 +93,7 @@ function ItemTypeToggle({
   listTotal: number;
   scaleTotal: number;
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   return (
     <div className="flex gap-2 mb-2">
       <button
