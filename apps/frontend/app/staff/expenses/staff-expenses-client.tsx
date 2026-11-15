@@ -4,7 +4,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CreditCard, Plus, X } from "lucide-react";
-import { addExpenseAction, getExpensesForStaffToday } from "@/lib/expense.actions";
+import { addExpenseAction, getExpensesForStaffToday } from "@/lib/expense.actions";\nimport { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 type Category = { id: number; name: string };
 type ExpenseRow = {
@@ -18,7 +18,7 @@ type ExpenseRow = {
 };
 type TodayData = { expenses: ExpenseRow[]; total: number };
 
-function naira(n: number) {
+function formatCurrency(n: number) {
   return `₦${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
@@ -29,7 +29,7 @@ export default function StaffExpensesClient({
   categories: Category[];
   initialData: TodayData;
 }) {
-  const [data, setData] = useState(initialData);
+  const { formatCurrency, currencyCode } = useBusinessCurrency();\n  const [data, setData] = useState(initialData);
   const [showAddModal, setShowAddModal] = useState(false);
 
   async function refresh() {
@@ -55,7 +55,7 @@ export default function StaffExpensesClient({
         <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl px-5 py-4 mb-6">
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total Today</p>
-            <p className="text-2xl font-black text-[var(--text-primary)] mt-1">{naira(data.total)}</p>
+            <p className="text-2xl font-black text-[var(--text-primary)] mt-1">{formatCurrency(data.total)}</p>
           </div>
           <p className="text-xs text-slate-400">{data.expenses.length} expense{data.expenses.length === 1 ? "" : "s"}</p>
         </div>
@@ -86,7 +86,7 @@ export default function StaffExpensesClient({
                     {new Date(e.createdAt).toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit" })}
                   </p>
                 </div>
-                <p className="text-sm font-bold text-rose-500 shrink-0">{naira(e.amount)}</p>
+                <p className="text-sm font-bold text-rose-500 shrink-0">{formatCurrency(e.amount)}</p>
               </div>
             ))}
           </div>
@@ -185,7 +185,7 @@ function AddExpenseModal({
           )}
 
           <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-semibold">₦</span>
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-semibold">{currencyCode}</span>
             <input
               type="number"
               inputMode="decimal"
