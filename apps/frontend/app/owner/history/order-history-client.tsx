@@ -2,10 +2,12 @@
 
 import { useState, useMemo } from "react";
 import { ArrowLeft, History, ChevronDown, ChevronUp, Receipt } from "lucide-react";
-import Link from "next/link";\nimport { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
+import Link from "next/link";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[] }) {
-  const { formatCurrency } = useBusinessCurrency();\n  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const { formatCurrency } = useBusinessCurrency();
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const toggleExpand = (id: number) => {
     setExpandedId((prev) => (prev === id ? null : id));
