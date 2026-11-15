@@ -169,7 +169,7 @@ export default function SpeakOn({ role }: { role: Role }) {
       } else if (pendingSignOut) {
         if (cancels) { setPendingSignOut(null); say("I cancelled the consignment sign-out. No stock was moved."); }
         else if (confirms) {
-          if (!pendingSignOut.quantity || pendingSignOut.quantity <= 0 || !pendingSignOut.recipientName?.trim() || !pendingSignOut.recipientPhone?.trim() || (pendingSignOut.kind === "scale" && !pendingSignOut.unit)) say("I still need the quantity, recipient name and phone number.");
+          if (!pendingSignOut.quantity || pendingSignOut.quantity <= 0 || (pendingSignOut.kind === "standard" && !Number.isInteger(pendingSignOut.quantity)) || !pendingSignOut.recipientName?.trim() || !pendingSignOut.recipientPhone?.trim() || (pendingSignOut.kind === "scale" && !pendingSignOut.unit)) say("I still need the quantity, recipient name and phone number.");
           else {
             const result = pendingSignOut.kind === "standard"
               ? await signOutConsignment({ recipientName: pendingSignOut.recipientName, recipientPhone: pendingSignOut.recipientPhone, items: [{ inventoryId: pendingSignOut.inventoryId, quantityOut: pendingSignOut.quantity }] })
@@ -461,7 +461,7 @@ export default function SpeakOn({ role }: { role: Role }) {
           const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
           const phone = text.match(/(?:\+?\d[\d\s()-]{6,}\d)/);
           const recipient = text.match(/\b(?:to|for)\s+([a-z][a-z .'-]{1,50})/i);
-          const pending: PendingSignOut = { kind: scaleIntent ? "scale" : "standard", inventoryId: item.id, productName: item.name, quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || (scaleIntent ? item.unit : undefined), recipientPhone: phone?.[0].replace(/\D/g, ""), recipientName: recipient?.[1]?.trim() };
+          const pending: PendingSignOut = { kind: scaleIntent ? "scale" : "standard", inventoryId: item.id, productName: item.name, quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || (scaleIntent ? item.unit : undefined), recipientPhone: phone?.[0].replace(/\D/g, ""), recipientName: recipient?.[1]?.replace(/\s+\d[\d\s()-]*$/, "").trim() };
           setPendingSignOut(pending);
           if (!pending.quantity) say("How much " + item.name + " should I sign out?");
           else if (scaleIntent && !pending.unit) say("What unit is the quantity in: kg, g, L or ml?");
