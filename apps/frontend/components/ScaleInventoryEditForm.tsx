@@ -1,5 +1,6 @@
 "use client";
 
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -49,6 +50,7 @@ export default function ScaleInventoryEditForm({
   initialTrackExpiry = false,
   initialExpiryDate = null,
 }: Props) {
+  const { currencyCode } = useBusinessCurrency();
   const [name, setName] = useState(initialName);
   const [quantity, setQuantity] = useState<number>(initialQuantity);
   const [costPrice, setCostPrice] = useState<number>(initialCostPrice);
@@ -256,7 +258,7 @@ export default function ScaleInventoryEditForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Cost Price (per {initialUnit}) *
+                Cost Price ({currencyCode} per {initialUnit}) *
               </label>
               <input
                 name="costPrice"
@@ -270,7 +272,7 @@ export default function ScaleInventoryEditForm({
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Selling Price (per {initialUnit}) *
+                Selling Price ({currencyCode} per {initialUnit}) *
               </label>
               <input
                 name="price"
