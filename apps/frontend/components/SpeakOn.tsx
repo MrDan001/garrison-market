@@ -230,7 +230,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt]);
 
   return (
     <>
