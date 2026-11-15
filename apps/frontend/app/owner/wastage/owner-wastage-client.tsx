@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Scale as ScaleIcon, Clock, CheckCircle2, XCircle, TrendingDown, ChevronDown, ChevronUp, Printer } from "lucide-react";
 import { approveWastageAction, declineWastageAction } from "@/lib/scale-wastage.actions";
 import { WASTAGE_REASON_LABELS } from "@/lib/wastage-constants";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 export default function OwnerWastageClient({ data }: { data: any }) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const { pending, monthly, monthTotal } = data;
 
@@ -129,7 +131,7 @@ export default function OwnerWastageClient({ data }: { data: any }) {
           <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
             <TrendingDown size={12} /> Total Wastage This Month ({monthTotal.month})
           </p>
-          <p className="text-2xl font-black text-[var(--text-primary)]">₦{monthTotal.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+          <p className="text-2xl font-black text-[var(--text-primary)]">{formatCurrency(monthTotal.value)}</p>
           <p className="text-xs text-slate-500 mt-0.5">Estimated value lost, based on current cost price</p>
         </div>
 
@@ -224,7 +226,7 @@ export default function OwnerWastageClient({ data }: { data: any }) {
                 >
                   <div className="text-left">
                     <p className="text-sm font-semibold text-[var(--text-primary)]">{bucket.month}</p>
-                    <p className="text-xs font-bold text-rose-500 dark:text-rose-400 mt-0.5">₦{bucket.value.toLocaleString(undefined, { maximumFractionDigits: 0 })} lost</p>
+                    <p className="text-xs font-bold text-rose-500 dark:text-rose-400 mt-0.5">{formatCurrency(bucket.value)} lost</p>
                   </div>
                   {openMonth === bucket.key ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
                 </button>
@@ -242,7 +244,7 @@ export default function OwnerWastageClient({ data }: { data: any }) {
                             </div>
                             <div className="text-right whitespace-nowrap ml-2">
                               <span className="font-bold text-[var(--text-primary)] block">{entry.quantity}{entry.unit}</span>
-                              <span className="text-[11px] text-rose-500 dark:text-rose-400 font-medium">₦{entryValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                              <span className="text-[11px] text-rose-500 dark:text-rose-400 font-medium">{formatCurrency(entryValue)}</span>
                             </div>
                           </div>
                         );
