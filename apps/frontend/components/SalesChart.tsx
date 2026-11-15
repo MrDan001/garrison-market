@@ -160,7 +160,7 @@ export default function SalesDashboard({
             {chartType === 'bar' ? (
               <BarChart data={processedData}>
                 <XAxis dataKey="name" stroke="#475569" fontSize={11} tickLine={false} />
-                <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `₦${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => formatCurrency(v)} />
                 <Tooltip content={customTooltip} cursor={{ fill: '#1e293b', opacity: 0.3 }} />
                 <Bar dataKey="sales" fill="#3b82f6" radius={[6, 6, 0, 0]} />
               </BarChart>
