@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { FormEvent, useState, useTransition } from "react";
 import { CheckCircle2, Globe2, Loader2, Save } from "lucide-react";
 import { BUSINESS_COUNTRIES, BUSINESS_CURRENCIES } from "@/lib/business-localization";
 import { updateBusinessLocalizationAction } from "@/lib/business-localization.actions";
@@ -23,7 +23,7 @@ export default function BusinessLocalizationForm({
     if (match) setCurrency(match.currency);
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
     const formData = new FormData(event.currentTarget);
