@@ -20,6 +20,7 @@ type PendingConsignment = { mode: "settle"; kind: "standard" | "scale"; consignm
 type PendingSignOut = { kind: "standard" | "scale"; inventoryId: number; productName: string; quantity?: number; unit?: string; recipientName?: string; recipientPhone?: string };
 type PendingScaleSale = { mode: "scale" | "merged-scale"; itemId: number; productName: string; quantity?: number; unit?: string; paymentMethod?: "cash" | "transfer"; price: number };
 type PendingMixedSale = { standardItemId: number; standardName: string; standardQty?: number; standardPrice: number; scaleConsignmentItemId: number; scaleName: string; scaleQty?: number; scaleUnit: string; scalePrice: number; paymentMethod?: "cash" | "transfer" };
+type PendingBasketSale = { items: { inventoryId: number; productName: string; quantity?: number; unitPrice: number }[]; paymentMethod?: "cash" | "transfer" };
 
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
@@ -67,6 +68,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [pendingSignOut, setPendingSignOut] = useState<PendingSignOut | null>(null);
   const [pendingScaleSale, setPendingScaleSale] = useState<PendingScaleSale | null>(null);
   const [pendingMixedSale, setPendingMixedSale] = useState<PendingMixedSale | null>(null);
+  const [pendingBasketSale, setPendingBasketSale] = useState<PendingBasketSale | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
@@ -144,7 +146,33 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingMixedSale) {
+      if (pendingBasketSale) {
+        if (cancels) {
+          setPendingBasketSale(null);
+          say("I cancelled the basket sale. No items were sold and stock was not changed.");
+        } else if (confirms) {
+          const p = pendingBasketSale;
+          if (p.items.some((item) => !item.quantity || item.quantity <= 0 || !Number.isInteger(item.quantity)) || !p.paymentMethod) {
+            say("I still need a valid whole-number quantity for every item and the payment method.");
+          } else {
+            const result = await processSaleAction(p.items.map((item) => ({ id: item.inventoryId, qty: item.quantity! })), p.paymentMethod);
+            setPendingBasketSale(null);
+            say("The basket sale was recorded successfully for " + p.items.map((item) => item.quantity + " × " + item.productName).join(", ") + "." + ("total" in result ? " Total: " + Number(result.total).toLocaleString() + "." : ""));
+          }
+        } else {
+          const nextItems = pendingBasketSale.items.map((item) => ({ ...item }));
+          const nextMissing = nextItems.findIndex((item) => item.quantity === undefined);
+          const qtyMatch = text.match(/\b(\d+)\b/);
+          if (nextMissing >= 0 && qtyMatch) nextItems[nextMissing].quantity = Number(qtyMatch[1]);
+          const method: "cash" | "transfer" | undefined = pendingBasketSale.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
+          const next = { ...pendingBasketSale, items: nextItems, paymentMethod: method };
+          setPendingBasketSale(next);
+          const missing = next.items.find((item) => item.quantity === undefined);
+          if (missing) say("How many units of " + missing.productName + " were sold?");
+          else if (!next.paymentMethod) say("Was the basket payment cash or transfer?");
+          else say("Please confirm this basket sale: " + next.items.map((item) => item.quantity + " × " + item.productName).join(", ") + ", paid by " + next.paymentMethod + ". Nothing has been recorded yet. Say yes or cancel.");
+        }
+      } else if (pendingMixedSale) {
         if (cancels) {
           setPendingMixedSale(null);
           say("I cancelled the mixed sale. No sale was recorded and no stock changed.");
@@ -569,8 +597,21 @@ export default function SpeakOn({ role }: { role: Role }) {
           .replace(/\b(sell|sale|checkout|sold|please|record|make|a|an|the|of|for|by|cash|transfer|unit|units)\b/gi, " ")
           .replace(/\b\d+\b/g, " ")
           .replace(/\s+/g, " ").trim().toLowerCase();
-        const matches = inventory.filter((item: any) => productQuery && item.name.toLowerCase().includes(productQuery));
-        if (matches.length === 1) {
+        const matches = inventory.filter((item: any) => item.name && text.toLowerCase().includes(String(item.name).toLowerCase()));
+        if (matches.length > 1) {
+          const items = matches.map((item: any) => {
+            const index = text.toLowerCase().indexOf(String(item.name).toLowerCase());
+            const before = text.slice(Math.max(0, index - 18), index);
+            const quantity = before.match(/\b(\d+)\s*(?:x|units?)?\s*$/i);
+            return { inventoryId: item.id, productName: item.name, quantity: quantity ? Number(quantity[1]) : undefined, unitPrice: Number(item.price) };
+          });
+          const pending: PendingBasketSale = { items, paymentMethod };
+          setPendingBasketSale(pending);
+          const missing = items.find((item) => item.quantity === undefined);
+          if (missing) say("I found a basket with " + items.map((item) => item.productName).join(" and ") + ". How many units of " + missing.productName + " were sold?");
+          else if (!paymentMethod) say("I found a basket with " + items.map((item) => item.quantity + " × " + item.productName).join(", ") + ". Was the payment cash or transfer?");
+          else say("Please confirm this basket sale: " + items.map((item) => item.quantity + " × " + item.productName).join(", ") + ", paid by " + paymentMethod + ". Nothing has been recorded yet. Say yes or cancel.");
+        } else if (matches.length === 1) {
           const item = matches[0];
           const next = { inventoryId: item.id, productName: item.name, quantity, paymentMethod, unitPrice: Number(item.price) };
           setPendingSale(next);
@@ -627,7 +668,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale, pendingBasketSale]);
 
   return (
     <>
