@@ -192,7 +192,7 @@ export default function SpeakOn({ role }: { role: Role }) {
         } else {
           const method: "cash" | "transfer" | undefined = pendingMixedSale.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
           const scaleAmount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b/i);
-          const standardAmount = text.match(/\b(\d+)\b/);
+          const standardAmount = pendingMixedSale.standardQty === undefined ? text.match(/\b(\d+)\b/) : null;
           const next = {
             ...pendingMixedSale,
             standardQty: pendingMixedSale.standardQty ?? (standardAmount ? Number(standardAmount[1]) : undefined),
@@ -593,10 +593,6 @@ export default function SpeakOn({ role }: { role: Role }) {
         const quantityMatch = text.match(/\b(\d+)\b/);
         const quantity = quantityMatch ? Number(quantityMatch[1]) : undefined;
         const paymentMethod: "cash" | "transfer" | undefined = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
-        const productQuery = text
-          .replace(/\b(sell|sale|checkout|sold|please|record|make|a|an|the|of|for|by|cash|transfer|unit|units)\b/gi, " ")
-          .replace(/\b\d+\b/g, " ")
-          .replace(/\s+/g, " ").trim().toLowerCase();
         const matches = inventory.filter((item: any) => item.name && text.toLowerCase().includes(String(item.name).toLowerCase()));
         if (matches.length > 1) {
           const items = matches.map((item: any) => {
