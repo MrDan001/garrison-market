@@ -35,10 +35,17 @@ export default async function StaffLayout({ children }: { children: React.ReactN
     redirect("/login");
   }
 
+  const staffProfile = await prisma.user.findUnique({ where: { id: session.id }, select: { ownerId: true } });
+  const ownerProfile = staffProfile?.ownerId
+    ? await prisma.user.findUnique({ where: { id: staffProfile.ownerId }, select: { currencyCode: true } })
+    : null;
+
   return (
+    <BusinessCurrencyProvider currencyCode={ownerProfile?.currencyCode || "NGN"}>
     <PushPermissionGate>
       {children}
       <IOSInstallNudge />
     </PushPermissionGate>
+    </BusinessCurrencyProvider>
   );
 }
