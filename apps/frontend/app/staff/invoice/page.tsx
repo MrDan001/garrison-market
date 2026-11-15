@@ -148,8 +148,7 @@ export default function StaffInvoicesPage() {
               <div className="flex justify-between items-center bg-slate-100/30 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/60 p-3 rounded-xl">
                 <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  {todaysOrders.length} sale{todaysOrders.length !== 1 ? "s" : ""} today &middot; ₦
-                  {dayTotal.toLocaleString()} total
+                  {todaysOrders.length} sale{todaysOrders.length !== 1 ? "s" : ""} today &middot; {formatCurrency(dayTotal)} total
                 </span>
                 <div className="flex items-center gap-2">
                   <button
