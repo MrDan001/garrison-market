@@ -6,6 +6,7 @@ import prisma from "@/lib/prisma";
 import { INACTIVITY_LIMIT_MS } from "@/lib/session-config";
 
 const SECRET = new TextEncoder().encode(process.env.SESSION_SECRET);
+const ACTIVITY_REFRESH_INTERVAL_MS = 60 * 1000;
 
 // --- Token Helpers ---
 
@@ -117,11 +118,20 @@ export const getSessionUser = cache(async function getSessionUser() {
       return null;
     }
 
-    // Refresh the activity clock, throttled to once a minute so normal
-    // browsing doesn't turn into an UPDATE on every single request.
-    if (now - lastActive > 60 * 1000) {
+    // Refresh the activity clock only when it is stale. The predicate is
+    // part of the database update so concurrent requests cannot all win the
+    // same refresh window and contend on the User row.
+    if (now - lastActive > ACTIVITY_REFRESH_INTERVAL_MS) {
       await prisma.user
-        .update({ where: { id: user.id }, data: { lastActivityAt: new Date(now) } })
+        .updateMany({
+          where: {
+            id: user.id,
+            lastActivityAt: {
+              lt: new Date(now - ACTIVITY_REFRESH_INTERVAL_MS),
+            },
+          },
+          data: { lastActivityAt: new Date(now) },
+        })
         .catch(() => {});
     }
 
