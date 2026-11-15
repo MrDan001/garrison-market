@@ -197,7 +197,7 @@ export default function SpeakOn({ role }: { role: Role }) {
         } else if (pendingWastage.mode === "submit") {
           const amountMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
           const quantity = pendingWastage.quantity ?? (amountMatch ? Number(amountMatch[1]) : undefined);
-          const unit = pendingWastage.unit || amountMatch?.[2]?.toLowerCase();
+          const unit = amountMatch?.[2]?.toLowerCase() || pendingWastage.unit;
           const reason = pendingWastage.reason || WASTAGE_REASONS.find((r) => new RegExp(r, "i").test(text));
           const next = { ...pendingWastage, quantity, unit, reason };
           setPendingWastage(next);
