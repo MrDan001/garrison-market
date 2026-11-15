@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import { compressImage } from "@/lib/image-compress";
-import { Store, Phone, MapPin, Upload, Camera, AlertCircle, Mail, Lock, Eye, EyeOff, Loader2, ChevronRight, ShoppingBag, Building2, Tag } from "lucide-react";
+import { Store, Phone, Upload, Camera, AlertCircle, Mail, Lock, Eye, EyeOff, Loader2, ChevronRight, ShoppingBag, Building2, Tag } from "lucide-react";
 import { registerOwnerAction } from "@/lib/auth.actions";
 import { BUSINESS_COUNTRIES, BUSINESS_CURRENCIES } from "@/lib/business-localization";
 
