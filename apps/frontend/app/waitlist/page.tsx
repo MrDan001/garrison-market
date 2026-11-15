@@ -31,8 +31,8 @@ const body = Inter({ subsets: ["latin"], variable: "--font-body" });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "Join the Waitlist",
-  description: "Garrison Market is opening a limited number of new shops. Join the waitlist to be first in line.",
+  title: "Join the Garrison Market Waitlist",
+  description: "Join the Garrison Market waitlist for access to inventory, sales, staff and business management tools in one workspace.",
 };
 
 export default async function WaitlistPage({
@@ -72,15 +72,15 @@ export default async function WaitlistPage({
           style={{ fontFamily: "var(--font-mono)" }}
         >
           <Users size={13} strokeWidth={2.5} />
-          {count.toLocaleString()} shop owners already in line
+          {count.toLocaleString()} business owners already in line
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-3 leading-tight" style={{ fontFamily: "var(--font-display)" }}>
           Join Garrison Market Early Access
         </h1>
         <p className="text-sm text-[var(--text-primary)]/70 leading-relaxed mb-10 max-w-lg">
-          0% fees for 1 months — track stock, staff, and sales from one dashboard. Join the
-          waitlist and we'll email you the moment a spot opens — refer other shop owners with
+          Manage inventory, sales, staff, expenses and customer records from one workspace. Join the
+          waitlist and we'll email you when access opens — refer other business owners with
           your personal link to move up the line.
         </p>
 
