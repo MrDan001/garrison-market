@@ -345,7 +345,7 @@ export default function SpeakOn({ role }: { role: Role }) {
           if (!next.quantity) say("How many units should I add to " + (next.productName || "this product") + "?");
           else say("Please confirm: add " + next.quantity + " units to " + next.productName + "? Nothing has changed yet. Say yes to confirm or cancel.");
         }
-      } else if (/\b(sell|sale|sold)\b/i.test(text) && /\b(kg|grams?|g|litres?|liters?|ml|millilit|scale|weight|volume)\b/i.test(text)) {
+      } else if (/\b(sell|sale|sold)\b/i.test(text) && ( /\d\s*(?:kg|g|l|ml)\b/i.test(text) || /\b(grams?|litres?|liters?|millilit|scale|weight|volume)\b/i.test(text) )) {
         const mixedIntent = /\b(mixed|combined|merged|both)\b/i.test(text) && /\b(and|plus|both)\b/i.test(text);
         if (mixedIntent) {
           const [standardInventory, openScaleConsignments] = await Promise.all([getInventoryForStaff(), getOpenScaleConsignmentsForStaff()]);
@@ -547,7 +547,7 @@ export default function SpeakOn({ role }: { role: Role }) {
           }
         }
       } else if (/\b(sign\s*out|send\s*out|consign\s+out)\b/i.test(text)) {
-        const scaleIntent = /\b(kg|grams?|g|litres?|liters?|ml|millilit)\b/i.test(text);
+        const scaleIntent = /\d\s*(?:kg|g|l|ml)\b/i.test(text) || /\b(grams?|litres?|liters?|millilit)\b/i.test(text);
         const inventory = scaleIntent ? await getScaleInventoryForStaff() : await getInventoryForStaff();
         const candidates = inventory.filter((item: any) => text.toLowerCase().includes(String(item.name).toLowerCase()));
         if (candidates.length !== 1) say(candidates.length > 1 ? "I found more than one matching item. Please name the exact item." : "I couldn't identify the item. Please say its exact inventory name and whether it is a weight/volume item.");
