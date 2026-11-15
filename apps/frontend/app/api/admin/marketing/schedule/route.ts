@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const connectionId = typeof payload?.connectionId === "string" ? payload.connectionId : "";
     const scheduledFor = parseScheduledFor(payload?.scheduledFor);
     const mediaUrls = Array.isArray(payload?.mediaUrls)
-      ? payload.mediaUrls.filter((value: unknown): value is string => typeof value === "string" && value.trim()).slice(0, 10)
+      ? payload.mediaUrls.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0).slice(0, 10)
       : draftId ? null : [];
 
     if (!draftId || !connectionId) {
