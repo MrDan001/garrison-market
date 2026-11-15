@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Search, Minus, Plus, Trash2 } from "lucide-react";
 import { updateInventoryQuantity } from "@/lib/business.actions";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 type InventoryItem = {
   id: number;
@@ -12,6 +13,7 @@ type InventoryItem = {
 };
 
 export default function InventorySearch({ items }: { items: InventoryItem[] }) {
+  const { formatCurrency, currencyCode } = useBusinessCurrency();
   const [query, setQuery] = useState("");
 
   const filtered = items.filter((item) =>
@@ -52,7 +54,7 @@ export default function InventorySearch({ items }: { items: InventoryItem[] }) {
               <tr>
                 <th className="px-5 py-3.5">Item Name</th>
                 <th className="px-5 py-3.5">Quantity</th>
-                <th className="px-5 py-3.5">Price (₦)</th>
+                <th className="px-5 py-3.5">Price</th>
                 <th className="px-5 py-3.5">Action</th>
               </tr>
             </thead>
@@ -78,7 +80,7 @@ export default function InventorySearch({ items }: { items: InventoryItem[] }) {
                     </div>
                   </td>
                   <td className="px-5 py-4 text-slate-700 dark:text-slate-300 font-medium">
-                    ₦{Number(item.price).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                    {formatCurrency(Number(item.price))}
                   </td>
                   <td className="px-5 py-4">
                     <button className="h-7 w-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-500 hover:text-rose-400 transition-colors">
