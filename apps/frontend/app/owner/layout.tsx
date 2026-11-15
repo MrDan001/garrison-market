@@ -40,6 +40,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
   ]);
 
   return (
+    <BusinessCurrencyProvider currencyCode={ownerProfile?.currencyCode || "NGN"}>
     <PushPermissionGate>
       <TrialTopBar
         isLocked={billingStatus.isLocked}
@@ -51,5 +52,6 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
       <AdminAnnouncementGate />
       <IOSInstallNudge />
     </PushPermissionGate>
+    </BusinessCurrencyProvider>
   );
 }
