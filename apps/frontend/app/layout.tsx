@@ -9,7 +9,7 @@ import "./styles.css";
 
 const siteUrl = 'https://gmstock.co';
 const siteDescription =
-  'Garrison Market is an all-in-one inventory and business management platform for owners and teams. Manage products, stock levels, sales, staff, expenses, customer records, invoices, reports and multiple business locations from one connected workspace.';
+  'Garrison Market is a global inventory and business management platform for owners and teams. Organize products and stock levels, manage sales, staff, expenses, customer records and invoices, and review business reports across supported locations in one connected workspace.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -20,8 +20,11 @@ export const metadata: Metadata = {
   description: siteDescription,
   keywords: [
     'inventory management software',
-    'stock management system',
-    'business management platform',
+    'stock management software',
+    'small business management software',
+    'retail inventory management',
+    'multi-location inventory management',
+    'business management software',
     'staff management software',
     'sales tracking',
     'expense tracking',
