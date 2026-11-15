@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 import { updateReportStatus, requestReportRevision } from "@/lib/business.actions";
 import {
   ClipboardList,
@@ -56,7 +57,7 @@ function ItemsTable({ items }: { items: any[] }) {
                         title={item.discountReason ?? "Discount applied"}
                         className="inline-flex items-center gap-1 text-[9px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-bold"
                       >
-                        -{item.discountType === "percent" ? `${item.discountValue}%` : `₦${Number(item.discountValue).toLocaleString()}`}
+                        -{item.discountType === "percent" ? `${item.discountValue}%` : formatCurrency(Number(item.discountValue))}
                       </span>
                     )}
                   </span>
@@ -65,11 +66,11 @@ function ItemsTable({ items }: { items: any[] }) {
                   )}
                 </td>
                 <td className="p-2.5 sm:p-3 text-center text-slate-600 dark:text-slate-400">
-                  ₦{Number(item.price).toLocaleString()}
+                  {formatCurrency(Number(item.price))}
                 </td>
                 <td className="p-2.5 sm:p-3 text-center font-bold text-blue-400">{item.quantity}</td>
                 <td className="p-2.5 sm:p-3 text-right font-bold text-[var(--text-primary)]">
-                  ₦{Number(item.total).toLocaleString()}
+                  {formatCurrency(Number(item.total))}
                 </td>
               </tr>
             ))
@@ -100,7 +101,7 @@ function ItemTypeToggle({
           view === "list" ? "bg-blue-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
         }`}
       >
-        <List size={12} /> List · ₦{listTotal.toLocaleString()}
+        <List size={12} /> List · {formatCurrency(listTotal)}
       </button>
       <button
         type="button"
@@ -109,7 +110,7 @@ function ItemTypeToggle({
           view === "scale" ? "bg-blue-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
         }`}
       >
-        <ScaleIcon size={12} /> Scale · ₦{scaleTotal.toLocaleString()}
+        <ScaleIcon size={12} /> Scale · {formatCurrency(scaleTotal)}
       </button>
     </div>
   );
@@ -120,6 +121,7 @@ export default function ReportsReviewClient({
 }: {
   initialReports: any[];
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [reports, setReports] = useState(initialReports);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
@@ -340,11 +342,11 @@ export default function ReportsReviewClient({
     <div className="grid grid-cols-2 gap-2.5 mb-3">
       <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
         <p className="text-[10px] text-emerald-400 font-bold uppercase">💵 Cash</p>
-        <p className="text-lg font-black text-[var(--text-primary)] mt-1">₦{report.cashTotal.toLocaleString()}</p>
+        <p className="text-lg font-black text-[var(--text-primary)] mt-1">{formatCurrency(report.cashTotal)}</p>
       </div>
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
         <p className="text-[10px] text-blue-400 font-bold uppercase">🏦 Transfer</p>
-        <p className="text-lg font-black text-[var(--text-primary)] mt-1">₦{report.transferTotal.toLocaleString()}</p>
+        <p className="text-lg font-black text-[var(--text-primary)] mt-1">{formatCurrency(report.transferTotal)}</p>
       </div>
     </div>
 
@@ -364,7 +366,7 @@ export default function ReportsReviewClient({
     <div className="border-t border-slate-200/60 dark:border-slate-800/60 pt-3">
       <span className="text-xs font-medium text-slate-600 dark:text-slate-400 block">Total Sales</span>
       <span className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight block mt-1">
-        ₦{Number(report.totalSales).toLocaleString()}
+        {formatCurrency(Number(report.totalSales))}
       </span>
     </div>
   </div>
