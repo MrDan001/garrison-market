@@ -21,6 +21,29 @@ export async function updateBusinessLocalizationAction(formData: FormData) {
     return { error: "Choose a supported operating currency." };
   }
 
+  const currentProfile = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { currencyCode: true },
+  });
+  if (!currentProfile) return { error: "Business profile not found." };
+
+  if (currentProfile.currencyCode !== currencyCode) {
+    const [products, scaleProducts, orders, expenses, reports, debts] = await Promise.all([
+      prisma.inventory.count({ where: { ownerId: session.id } }),
+      prisma.scaleInventory.count({ where: { ownerId: session.id } }),
+      prisma.order.count({ where: { ownerId: session.id } }),
+      prisma.expense.count({ where: { ownerId: session.id } }),
+      prisma.report.count({ where: { ownerId: session.id } }),
+      prisma.debt.count({ where: { ownerId: session.id } }),
+    ]);
+
+    if (products + scaleProducts + orders + expenses + reports + debts > 0) {
+      return {
+        error: "Your operating currency is locked after inventory or business records have been created. Contact support if you need help migrating to another currency.",
+      };
+    }
+  }
+
   await prisma.user.update({
     where: { id: session.id },
     data: { businessCountry, currencyCode },
