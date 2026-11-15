@@ -187,6 +187,7 @@ export default function CustomersClient({
   initial: CustomersData;
   initialDebts: DebtType[];
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [data, setData] = useState<CustomersData>(initial);
   const [debts, setDebts] = useState<DebtType[]>(initialDebts);
   const [isPending, startTransition] = useTransition();
