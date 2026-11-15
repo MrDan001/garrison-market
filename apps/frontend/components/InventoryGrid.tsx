@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Package, Plus, Home, BarChart3, ReceiptText, User, Edit2, CheckCircle2, Search, TrendingUp, TrendingDown, Wallet, ChevronDown, ChevronUp, Flame, Hash, Clock, Tag } from "lucide-react";
 import Link from "next/link";
 import { getExpiryStatus } from "@/lib/expiry-status";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface InventoryItem {
   id: number | string;
@@ -32,6 +33,7 @@ interface ProductCategoryOption {
 type Tab = "all" | "low-stock" | "out-of-stock" | "expiring" | "top-selling";
 
 export default function InventoryGrid({ items, categories = [] }: { items: InventoryItem[]; categories?: ProductCategoryOption[] }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [tab, setTab] = useState<Tab>("all");
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [isTotalsOpen, setIsTotalsOpen] = useState(false);
@@ -158,7 +160,7 @@ export default function InventoryGrid({ items, categories = [] }: { items: Inven
               <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Value Summary</span>
               {!isTotalsOpen && (
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg-app)] ${totalProfit >= 0 ? "text-emerald-400 border border-emerald-500/10" : "text-rose-400 border border-rose-500/10"}`}>
-                  Profit: ₦{totalProfit.toLocaleString()}
+                  Profit: {formatCurrency(totalProfit)}
                 </span>
               )}
             </div>
@@ -171,20 +173,20 @@ export default function InventoryGrid({ items, categories = [] }: { items: Inven
                 <p className="text-[8px] uppercase tracking-wide text-amber-400/70 font-semibold flex items-center justify-center gap-1 mb-0.5">
                   <Wallet size={8} /> Total Cost
                 </p>
-                <p className="text-[11px] font-bold text-amber-400 truncate px-1">₦{totalCost.toLocaleString()}</p>
+                <p className="text-[11px] font-bold text-amber-400 truncate px-1">{formatCurrency(totalCost)}</p>
               </div>
               <div className="flex-1 text-center py-1 border-r border-slate-200/60 dark:border-slate-800/60">
                 <p className="text-[8px] uppercase tracking-wide text-blue-400/70 font-semibold flex items-center justify-center gap-1 mb-0.5">
                   <TrendingUp size={8} /> Total Selling
                 </p>
-                <p className="text-[11px] font-bold text-blue-400 truncate px-1">₦{totalSelling.toLocaleString()}</p>
+                <p className="text-[11px] font-bold text-blue-400 truncate px-1">{formatCurrency(totalSelling)}</p>
               </div>
               <div className="flex-1 text-center py-1">
                 <p className={`text-[8px] uppercase tracking-wide font-semibold flex items-center justify-center gap-1 mb-0.5 ${totalProfit >= 0 ? "text-emerald-400/70" : "text-rose-400/70"}`}>
                   {totalProfit >= 0 ? <TrendingUp size={8} /> : <TrendingDown size={8} />} Profit
                 </p>
                 <p className={`text-[11px] font-bold truncate px-1 ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                  ₦{totalProfit.toLocaleString()}
+                  {formatCurrency(totalProfit)}
                 </p>
               </div>
             </div>
@@ -330,15 +332,15 @@ export default function InventoryGrid({ items, categories = [] }: { items: Inven
                   <p className={`text-xs ${isOutOfStock ? "text-rose-400 font-medium" : isLowStock ? "text-amber-400 font-medium" : "text-slate-600 dark:text-slate-400"}`}>
                     Qty: {item.quantity}
                   </p>
-                  <p className="text-xs font-bold text-blue-400">Sell: ₦{item.price.toLocaleString()}</p>
+                  <p className="text-xs font-bold text-blue-400">Sell: {formatCurrency(item.price)}</p>
                 </div>
 
                 {item.costPrice != null && (
                   <div className="flex justify-between items-center text-[10px] pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
-                    <span className="font-semibold text-amber-400">Cost: ₦{item.costPrice.toLocaleString()}</span>
+                    <span className="font-semibold text-amber-400">Cost: {formatCurrency(item.costPrice)}</span>
                     {margin != null && (
                       <span className={`font-semibold ${margin >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                        {margin >= 0 ? "+" : ""}₦{margin.toLocaleString()} margin
+                        {margin >= 0 ? "+" : ""}{formatCurrency(margin)} margin
                       </span>
                     )}
                   </div>
