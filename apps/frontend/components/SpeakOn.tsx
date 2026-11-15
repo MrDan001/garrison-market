@@ -6,11 +6,15 @@ import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
 import { addExpenseAction } from "@/lib/expense.actions";
 import { addStockToInventoryAction, getInventoryForStaff, processSaleAction } from "@/lib/business.actions";
 import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } from "@/lib/debt.actions";
+import { getScaleInventoryForStaff } from "@/lib/scale-inventory.actions";
+import { submitWastageAction, getWastageForOwner, approveWastageAction, declineWastageAction } from "@/lib/scale-wastage.actions";
+import { WASTAGE_REASONS, WASTAGE_REASON_LABELS } from "@/lib/wastage-constants";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
 type PendingSale = { inventoryId?: number; productName?: string; quantity?: number; paymentMethod?: "cash" | "transfer"; unitPrice?: number };
 type PendingStock = { inventoryId?: number; productName?: string; quantity?: number };
+type PendingWastage = { mode: "submit" | "approve" | "decline"; wastageId?: number; itemId?: number; productName?: string; quantity?: number; unit?: string; reason?: string; note?: string; declineReason?: string };
 
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
@@ -53,6 +57,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [pendingExpense, setPendingExpense] = useState<{ amount?: number; note?: string } | null>(null);
   const [pendingSale, setPendingSale] = useState<PendingSale | null>(null);
   const [pendingStock, setPendingStock] = useState<PendingStock | null>(null);
+  const [pendingWastage, setPendingWastage] = useState<PendingWastage | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
@@ -133,7 +138,44 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingStock) {
+      if (pendingWastage) {
+        if (cancels) {
+          setPendingWastage(null);
+          say("Okay. I cancelled the wastage action. No record or stock was changed.");
+        } else if (confirms) {
+          if (pendingWastage.mode === "submit" && pendingWastage.itemId && pendingWastage.quantity && pendingWastage.unit && pendingWastage.reason) {
+            await submitWastageAction({ scaleInventoryId: pendingWastage.itemId, quantity: pendingWastage.quantity, unit: pendingWastage.unit, reason: pendingWastage.reason, note: pendingWastage.note });
+            setPendingWastage(null);
+            say("Wastage was submitted for owner approval. Stock has not been changed.");
+          } else if (pendingWastage.mode === "approve" && pendingWastage.wastageId) {
+            await approveWastageAction(pendingWastage.wastageId);
+            setPendingWastage(null);
+            say("Wastage entry approved. The existing approval action has applied the stock adjustment.");
+          } else if (pendingWastage.mode === "decline" && pendingWastage.wastageId && pendingWastage.declineReason) {
+            await declineWastageAction(pendingWastage.wastageId, pendingWastage.declineReason);
+            setPendingWastage(null);
+            say("Wastage entry declined. The staff member will be notified.");
+          } else {
+            say(pendingWastage.mode === "decline" ? "Please give a reason for declining this entry." : "I still need the item, quantity, unit and reason before submitting wastage.");
+          }
+        } else if (pendingWastage.mode === "submit") {
+          const amountMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+          const quantity = pendingWastage.quantity ?? (amountMatch ? Number(amountMatch[1]) : undefined);
+          const unit = pendingWastage.unit || amountMatch?.[2]?.toLowerCase();
+          const reason = pendingWastage.reason || WASTAGE_REASONS.find((r) => new RegExp(r, "i").test(text));
+          const next = { ...pendingWastage, quantity, unit, reason };
+          setPendingWastage(next);
+          if (!quantity) say("How much " + (next.productName || "stock") + " was wasted? Include the unit.");
+          else if (!reason) say("What was the reason: trimming, spillage, spoilage, sample or other?");
+          else say("Please confirm: submit " + quantity + unit + " of " + next.productName + " as " + (WASTAGE_REASON_LABELS as any)[reason] + "? The owner must approve it. Say yes or cancel.");
+        } else if (pendingWastage.mode === "decline" && !pendingWastage.declineReason) {
+          const declineReason = text.replace(/^(because|reason)\s*/i, "").trim();
+          setPendingWastage({ ...pendingWastage, declineReason });
+          say("Please confirm declining " + pendingWastage.productName + " with this reason: " + declineReason + "? Say yes or cancel.");
+        } else {
+          say("Please say yes to confirm this wastage action, or cancel.");
+        }
+      } else if (pendingStock) {
         if (cancels) {
           setPendingStock(null);
           say("Okay. I cancelled that stock addition. Inventory has not changed.");
@@ -238,6 +280,40 @@ export default function SpeakOn({ role }: { role: Role }) {
             say("Please say yes to save this expense, or cancel to discard it.");
           }
         }
+      } else if (/\b(wastage|wasted|spoilt|spoiled|damaged)\b/i.test(text)) {
+        if (role === "staff") {
+          const inventory = await getScaleInventoryForStaff();
+          const amountMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+          const quantity = amountMatch ? Number(amountMatch[1]) : undefined;
+          const unit = amountMatch?.[2]?.toLowerCase();
+          const reason = WASTAGE_REASONS.find((r) => new RegExp(r, "i").test(text)) || (/\b(spoil|spoiled|spoilt)\b/i.test(text) ? "spoilage" : /\b(spill|spillage)\b/i.test(text) ? "spillage" : /\b(trim|trimming)\b/i.test(text) ? "trimming" : /\bsample\b/i.test(text) ? "sample" : undefined);
+          const productQuery = text.replace(/\b(log|submit|record|wastage|wasted|spoilt|spoiled|damaged|of|for|the|a|an|kg|g|l|ml|spoilage|spillage|trimming|sample|other)\b/gi, " ").replace(/\b\d+(?:\.\d+)?\b/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+          const matches = inventory.filter((item: any) => productQuery && item.name.toLowerCase().includes(productQuery));
+          if (matches.length !== 1) {
+            say(matches.length ? "I found more than one matching scale item. Please give me its exact name." : "I couldn't identify that weight/volume item. Wastage submission is available for scale inventory; open the wastage form to select it.");
+          } else {
+            const item = matches[0];
+            const next = { mode: "submit" as const, itemId: item.id, productName: item.name, quantity, unit: unit || item.unit, reason };
+            setPendingWastage(next);
+            if (!quantity) say("How much " + item.name + " was wasted? Include the unit, such as kg or g.");
+            else if (!reason) say("What was the reason: trimming, spillage, spoilage, sample or other?");
+            else say("Please confirm: submit " + quantity + (unit || item.unit) + " of " + item.name + " as " + (WASTAGE_REASON_LABELS as any)[reason] + "? The owner must approve it; stock will not change now. Say yes or cancel.");
+          }
+        } else {
+          const data = await getWastageForOwner();
+          const itemQuery = text.replace(/\b(approve|decline|reject|wastage|wasted|entry|for|the|of|please)\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
+          const matches = data.pending.filter((entry: any) => itemQuery && (entry.scaleInventory.name.toLowerCase().includes(itemQuery) || entry.staff?.fullName?.toLowerCase().includes(itemQuery)));
+          if (matches.length !== 1) {
+            say(matches.length ? "Several pending wastage entries match. Please specify the item or staff member more clearly." : data.pending.length ? "I couldn't identify the pending entry. Mention its item name or staff member." : "There are no pending wastage entries awaiting approval.");
+          } else {
+            const entry = matches[0];
+            const mode = /\b(decline|reject)\b/i.test(text) ? "decline" : "approve";
+            const declineReason = mode === "decline" ? text.split(/because|reason/i).slice(1).join(" ").trim() : undefined;
+            setPendingWastage({ mode, wastageId: entry.id, productName: entry.scaleInventory.name, quantity: Number(entry.quantity), unit: entry.unit, reason: entry.reason, declineReason });
+            if (mode === "decline" && !declineReason) say("What reason should I give for declining this wastage entry?");
+            else say("Please confirm: " + mode + " " + entry.quantity + entry.unit + " of " + entry.scaleInventory.name + " logged by " + (entry.staff?.fullName || "staff") + "? Say yes to confirm or cancel.");
+          }
+        }
       } else if (/\b(restock|add stock|receive stock|stock in)\b/i.test(text)) {
         if (role !== "owner") {
           say("Only the owner can add or restock inventory. I won't make any stock changes.");
@@ -329,7 +405,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage]);
 
   return (
     <>
@@ -355,7 +431,7 @@ export default function SpeakOn({ role }: { role: Role }) {
                 <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={listening ? "Listening… speak now" : "Speak or type your request"} className="min-w-0 flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-3 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"/>
                 <button type="button" onClick={send} disabled={!draft.trim() || busy} className="h-11 w-11 shrink-0 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 flex items-center justify-center" aria-label="Send request"><Send size={17}/></button>
               </div>
-              <p className="text-[10px] text-slate-400 text-center">Speak On asks for confirmation before recording supported sales, stock additions, expenses and debt payments. Staff cannot add stock. Other workflows open their existing forms.</p>
+              <p className="text-[10px] text-slate-400 text-center">Speak On asks for confirmation before recording supported sales, stock additions, expenses, debt payments and weight/volume wastage. Staff cannot add stock. Other workflows open their existing forms.</p>
             </div>
           </section>
         </div>
