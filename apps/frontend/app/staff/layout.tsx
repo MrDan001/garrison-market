@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import PushPermissionGate, { IOSInstallNudge } from "@/components/PushPermissionGate";
+import prisma from "@/lib/prisma";
+import { BusinessCurrencyProvider } from "@/components/BusinessCurrencyProvider";
 
 /**
  * Wraps every page under /staff/* (dashboard, inventory, orders, reports,
