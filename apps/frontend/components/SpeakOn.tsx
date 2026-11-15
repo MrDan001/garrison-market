@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
 import { addExpenseAction } from "@/lib/expense.actions";
+import { getInventoryForStaff, processSaleAction } from "@/lib/business.actions";
 import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } from "@/lib/debt.actions";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
+type PendingSale = { inventoryId?: number; productName?: string; quantity?: number; paymentMethod?: "cash" | "transfer"; unitPrice?: number };
 
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
@@ -48,6 +50,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [pendingExpense, setPendingExpense] = useState<{ amount?: number; note?: string } | null>(null);
+  const [pendingSale, setPendingSale] = useState<PendingSale | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
@@ -128,7 +131,29 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingDebt) {
+      if (pendingSale) {
+        if (cancels) {
+          setPendingSale(null);
+          say("Okay. I cancelled that sale. Nothing has been recorded and stock has not changed.");
+        } else if (confirms) {
+          if (!pendingSale.inventoryId || !pendingSale.quantity || pendingSale.quantity <= 0 || !pendingSale.paymentMethod) {
+            say("I still need the exact product, quantity, and payment method before I can prepare this sale.");
+          } else {
+            const result = await processSaleAction([{ id: pendingSale.inventoryId, qty: pendingSale.quantity }], pendingSale.paymentMethod);
+            setPendingSale(null);
+            say("The sale was recorded successfully. Total: " + Number(result.total).toLocaleString() + ". The app has updated stock.");
+          }
+        } else {
+          const quantityMatch = text.match(/\b(\d+)\b/);
+          const quantity = pendingSale.quantity ?? (quantityMatch ? Number(quantityMatch[1]) : undefined);
+          const paymentMethod = pendingSale.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
+          const next = { ...pendingSale, quantity, paymentMethod };
+          setPendingSale(next);
+          if (!next.quantity) say("How many " + (next.productName || "units") + " were sold?");
+          else if (!next.paymentMethod) say("Was the payment received by cash or transfer?");
+          else say("Please confirm: sell " + next.quantity + " × " + next.productName + " by " + next.paymentMethod + " (estimated total " + (Number(next.unitPrice || 0) * next.quantity).toLocaleString() + "). Nothing has been recorded yet. Say yes to confirm or cancel.");
+        }
+      } else if (pendingDebt) {
         if (cancels) {
           setPendingDebt(null);
           say("Okay. I cancelled the debt payment. Nothing was recorded.");
@@ -185,6 +210,28 @@ export default function SpeakOn({ role }: { role: Role }) {
             say("Please say yes to save this expense, or cancel to discard it.");
           }
         }
+      } else if (/\b(sell|sale|checkout|sold)\b/i.test(text)) {
+        const inventory = await getInventoryForStaff();
+        const quantityMatch = text.match(/\b(\d+)\b/);
+        const quantity = quantityMatch ? Number(quantityMatch[1]) : undefined;
+        const paymentMethod = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+        const productQuery = text
+          .replace(/\b(sell|sale|checkout|sold|please|record|make|a|an|the|of|for|by|cash|transfer|unit|units)\b/gi, " ")
+          .replace(/\b\d+\b/g, " ")
+          .replace(/\s+/g, " ").trim().toLowerCase();
+        const matches = inventory.filter((item: any) => productQuery && item.name.toLowerCase().includes(productQuery));
+        if (matches.length === 1) {
+          const item = matches[0];
+          const next = { inventoryId: item.id, productName: item.name, quantity, paymentMethod, unitPrice: Number(item.price) };
+          setPendingSale(next);
+          if (!quantity) say("I found " + item.name + ". How many units were sold?");
+          else if (!paymentMethod) say("I found " + item.name + ". Was the payment received by cash or transfer?");
+          else say("Please confirm: sell " + quantity + " × " + item.name + " by " + paymentMethod + " (estimated total " + (Number(item.price) * quantity).toLocaleString() + "). Nothing has been recorded yet. Say yes to confirm or cancel.");
+        } else if (matches.length > 1) {
+          say("I found several matching products. Please say the exact product name so I don't sell the wrong item.");
+        } else {
+          say("I couldn't match that product in the active store's inventory. Nothing has been recorded. Please use its exact inventory name.");
+        }
       } else if (/\b(debt|debtor|owe|payment from|paid by)\b/i.test(text)) {
         const debts = role === "owner" ? await getOpenDebtsForOwner() : await getOpenDebtsForStaff();
         const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
@@ -230,7 +277,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale]);
 
   return (
     <>
@@ -256,7 +303,7 @@ export default function SpeakOn({ role }: { role: Role }) {
                 <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={listening ? "Listening… speak now" : "Speak or type your request"} className="min-w-0 flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-3 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"/>
                 <button type="button" onClick={send} disabled={!draft.trim() || busy} className="h-11 w-11 shrink-0 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 flex items-center justify-center" aria-label="Send request"><Send size={17}/></button>
               </div>
-              <p className="text-[10px] text-slate-400 text-center">Speak On asks for confirmation before recording supported expenses and debt payments. Other workflows open their existing forms.</p>
+              <p className="text-[10px] text-slate-400 text-center">Speak On asks for confirmation before recording supported sales, expenses and debt payments. Other workflows open their existing forms.</p>
             </div>
           </section>
         </div>
