@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { ArrowLeft, History, ChevronDown, ChevronUp, Receipt, User, Calendar, List, Scale as ScaleIcon } from "lucide-react";
-import Link from "next/link";\nimport { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
+import Link from "next/link";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 // An order can carry BOTH standard Inventory lines (order.items) and
 // consignment-signed-out scale lines (order.scaleItems) on the same row —
@@ -28,7 +29,8 @@ function combinedLines(order: any) {
   return [...list, ...scale];
 }
 
-export default function OrderHistoryClient({ orders }: { orders: any[] }) {\n  const { formatCurrency } = useBusinessCurrency();
+export default function OrderHistoryClient({ orders }: { orders: any[] }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [tab, setTab] = useState<"day" | "customer">("day");
