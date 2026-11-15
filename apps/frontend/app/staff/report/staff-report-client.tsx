@@ -2,6 +2,7 @@
 
 "use client";
 
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitDailyReport } from "@/lib/business.actions";
@@ -16,6 +17,7 @@ import { resubmitReportAction } from "@/lib/business.actions";
 // before, just driven by hasList/hasScale instead of the old isScale
 // flag.
 export default function StaffReportClient({ staffId, reports, sales, pendingRevision, hasList, hasScale, scaleSummary }: any) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [complaint, setComplaint] = useState("");
@@ -121,10 +123,10 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
       {/* Sales Header */}
       <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-lg">
         <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Total Sales Today</p>
-        <h1 className="text-3xl sm:text-5xl font-bold text-[var(--text-primary)] mt-2">₦{totalValue.toLocaleString()}</h1>
+        <h1 className="text-3xl sm:text-5xl font-bold text-[var(--text-primary)] mt-2">{formatCurrency(totalValue)}</h1>
         {isMerged && (
           <p className="text-xs text-slate-500 mt-2">
-            List ₦{listTotal.toLocaleString()} · Scale ₦{scaleTotal.toLocaleString()}
+            List {formatCurrency(listTotal)} · Scale {formatCurrency(scaleTotal)}
           </p>
         )}
       </div>
@@ -148,7 +150,7 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
                     activeView === "list" ? "bg-blue-600 text-white" : "bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
                   }`}
                 >
-                  <List size={13} /> List · ₦{listTotal.toLocaleString()}
+                  <List size={13} /> List · {formatCurrency(listTotal)}
                 </button>
                 <button
                   type="button"
@@ -157,7 +159,7 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
                     activeView === "scale" ? "bg-blue-600 text-white" : "bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
                   }`}
                 >
-                  <ScaleIcon size={13} /> Scale · ₦{scaleTotal.toLocaleString()}
+                  <ScaleIcon size={13} /> Scale · {formatCurrency(scaleTotal)}
                 </button>
               </div>
             )}
@@ -176,7 +178,7 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
                         <p className="text-xs text-slate-500">{g.qty}{g.unit} sold</p>
                       </div>
                       <span className="font-bold text-[var(--text-primary)] text-sm shrink-0 ml-3">
-                        ₦{g.total.toLocaleString()}
+                        {formatCurrency(g.total)}
                       </span>
                     </div>
                   ))}
@@ -197,7 +199,7 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
                         <tr key={idx} className="border-b border-slate-200/50 dark:border-slate-800/50 last:border-0">
                           <td className="py-3 px-2">{g.name}</td>
                           <td className="py-3 px-2">{g.qty}{g.unit}</td>
-                          <td className="py-3 px-2 font-bold text-[var(--text-primary)]">₦{g.total.toLocaleString()}</td>
+                          <td className="py-3 px-2 font-bold text-[var(--text-primary)]">{formatCurrency(g.total)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -215,10 +217,10 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
                     <div key={idx} className="bg-[var(--bg-app)] border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
                       <div className="min-w-0">
                         <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{item.inventory?.name || "N/A"}</p>
-                        <p className="text-xs text-slate-500">₦{Number(item.priceAtTime).toLocaleString()} × {item.quantity}</p>
+                        <p className="text-xs text-slate-500">{formatCurrency(Number(item.priceAtTime))} × {item.quantity}</p>
                       </div>
                       <span className="font-bold text-[var(--text-primary)] text-sm shrink-0 ml-3">
-                        ₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}
+                        {formatCurrency(Number(item.priceAtTime) * item.quantity)}
                       </span>
                     </div>
                   ))}
@@ -239,9 +241,9 @@ export default function StaffReportClient({ staffId, reports, sales, pendingRevi
                       {allSoldItems.map((item: any, idx: number) => (
                         <tr key={idx} className="border-b border-slate-200/50 dark:border-slate-800/50 last:border-0">
                           <td className="py-3 px-2">{item.inventory?.name || "N/A"}</td>
-                          <td className="py-3 px-2">₦{Number(item.priceAtTime).toLocaleString()}</td>
+                          <td className="py-3 px-2">{formatCurrency(Number(item.priceAtTime))}</td>
                           <td className="py-3 px-2">{item.quantity}</td>
-                          <td className="py-3 px-2 font-bold text-[var(--text-primary)]">₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}</td>
+                          <td className="py-3 px-2 font-bold text-[var(--text-primary)]">{formatCurrency(Number(item.priceAtTime) * item.quantity)}</td>
                         </tr>
                       ))}
                     </tbody>
