@@ -9,12 +9,14 @@ import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } f
 import { getScaleInventoryForStaff } from "@/lib/scale-inventory.actions";
 import { submitWastageAction, getWastageForOwner, approveWastageAction, declineWastageAction } from "@/lib/scale-wastage.actions";
 import { WASTAGE_REASONS, WASTAGE_REASON_LABELS } from "@/lib/wastage-constants";
+import { getOpenConsignmentsForStaff, getOpenScaleConsignmentsForStaff, settleConsignment, settleScaleConsignment } from "@/lib/consignment.actions";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
 type PendingSale = { inventoryId?: number; productName?: string; quantity?: number; paymentMethod?: "cash" | "transfer"; unitPrice?: number };
 type PendingStock = { inventoryId?: number; productName?: string; quantity?: number };
 type PendingWastage = { mode: "submit" | "approve" | "decline"; wastageId?: number; itemId?: number; productName?: string; quantity?: number; unit?: string; reason?: string; note?: string; declineReason?: string };
+type PendingConsignment = { mode: "settle"; kind: "standard" | "scale"; consignmentId: number; recipientName: string; items: { itemId: number; name: string; quantityOut: number; unit?: string; quantitySold?: number }[]; currentIndex: number };
 
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
@@ -58,6 +60,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [pendingSale, setPendingSale] = useState<PendingSale | null>(null);
   const [pendingStock, setPendingStock] = useState<PendingStock | null>(null);
   const [pendingWastage, setPendingWastage] = useState<PendingWastage | null>(null);
+  const [pendingConsignment, setPendingConsignment] = useState<PendingConsignment | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
@@ -138,7 +141,40 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingWastage) {
+      if (pendingConsignment) {
+        if (cancels) {
+          setPendingConsignment(null);
+          say("Okay. I cancelled the consignment settlement. Nothing was settled and no stock was changed.");
+        } else if (confirms) {
+          const ready = pendingConsignment.items.every((item) => item.quantitySold !== undefined && item.quantitySold >= 0 && item.quantitySold <= item.quantityOut);
+          if (!ready) say("I still need a valid sold quantity for every item before settlement.");
+          else {
+            const settlements = pendingConsignment.items.map((item) => ({ itemId: item.itemId, quantitySold: item.quantitySold!, quantityReturned: Math.max(0, item.quantityOut - item.quantitySold!) }));
+            if (pendingConsignment.kind === "standard") await settleConsignment(pendingConsignment.consignmentId, settlements);
+            else await settleScaleConsignment(pendingConsignment.consignmentId, settlements);
+            setPendingConsignment(null);
+            say("Consignment for " + pendingConsignment.recipientName + " was settled successfully. Sold quantities were recorded and unsold quantities returned to stock.");
+          }
+        } else {
+          const current = pendingConsignment.items[pendingConsignment.currentIndex];
+          const match = text.match(/\b(\d+(?:\.\d+)?)\b/);
+          const sold = match ? Number(match[1]) : NaN;
+          if (!Number.isFinite(sold) || sold < 0 || sold > current.quantityOut) say("Please enter a valid sold quantity between 0 and " + current.quantityOut + (current.unit || "") + " for " + current.name + ".");
+          else {
+            const items = pendingConsignment.items.map((item, index) => index === pendingConsignment.currentIndex ? { ...item, quantitySold: sold } : item);
+            const nextIndex = items.findIndex((item) => item.quantitySold === undefined);
+            if (nextIndex >= 0) {
+              setPendingConsignment({ ...pendingConsignment, items, currentIndex: nextIndex });
+              const nextItem = items[nextIndex];
+              say("How many " + (nextItem.unit || "units") + " of " + nextItem.name + " were sold? " + nextItem.quantityOut + (nextItem.unit || "") + " were signed out.");
+            } else {
+              setPendingConsignment({ ...pendingConsignment, items, currentIndex: 0 });
+              const summary = items.map((item) => item.name + ": " + item.quantitySold + " sold, " + (item.quantityOut - item.quantitySold!) + " returned").join("; ");
+              say("Please confirm settlement for " + pendingConsignment.recipientName + ": " + summary + ". The existing settlement action will record the sale and return remaining stock. Say yes to confirm or cancel.");
+            }
+          }
+        }
+      } else if (pendingWastage) {
         if (cancels) {
           setPendingWastage(null);
           say("Okay. I cancelled the wastage action. No record or stock was changed.");
@@ -318,6 +354,26 @@ export default function SpeakOn({ role }: { role: Role }) {
             }
           }
         }
+      } else if (/\bsettle\b.*\bconsignment\b|\bconsignment\b.*\bsettle\b/i.test(text)) {
+        if (role !== "staff") say("Consignment settlement is completed by the staff member who signed the stock out. I can open the owner consignment records for reconciliation.");
+        else {
+          const [standard, scale] = await Promise.all([getOpenConsignmentsForStaff(), getOpenScaleConsignmentsForStaff()]);
+          const query = text.replace(/\b(settle|settlement|consignment|consignments|for|the|please|of)\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
+          const candidates = [
+            ...standard.map((entry: any) => ({ kind: "standard" as const, id: entry.id, recipientName: entry.recipientName, items: (entry.items || []).map((item: any) => ({ itemId: item.id, name: item.inventory?.name || "Item", quantityOut: Number(item.quantityOut) })) })),
+            ...scale.map((entry: any) => ({ kind: "scale" as const, id: entry.id, recipientName: entry.recipientName, items: (entry.scaleItems || []).map((item: any) => ({ itemId: item.id, name: item.scaleInventory?.name || "Item", quantityOut: Number(item.quantityOut), unit: item.unit })) })),
+          ];
+          const matches = candidates.filter((entry) => query && (entry.recipientName.toLowerCase().includes(query) || entry.items.some((item) => item.name.toLowerCase().includes(query))));
+          if (matches.length !== 1) say(matches.length > 1 ? "More than one open consignment matches. Please say the recipient's exact name." : candidates.length ? "I couldn't identify the open consignment. Please mention its recipient's name." : "You have no open consignments to settle.");
+          else if (!matches[0].items.length) say("That consignment has no items to settle. Please open the consignment page to review it.");
+          else {
+            const entry = matches[0];
+            const pending: PendingConsignment = { mode: "settle", kind: entry.kind, consignmentId: entry.id, recipientName: entry.recipientName, items: entry.items, currentIndex: 0 };
+            setPendingConsignment(pending);
+            const first = pending.items[0];
+            say("I found the open consignment for " + entry.recipientName + ". " + first.name + " has " + first.quantityOut + (first.unit || "") + " signed out. How many were sold? I will calculate the returned quantity.");
+          }
+        }
       } else if (/\b(restock|add stock|receive stock|stock in)\b/i.test(text)) {
         if (role !== "owner") {
           say("Only the owner can add or restock inventory. I won't make any stock changes.");
@@ -409,7 +465,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment]);
 
   return (
     <>
