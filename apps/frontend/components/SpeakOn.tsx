@@ -85,15 +85,32 @@ export default function SpeakOn({ role }: { role: Role }) {
 
   useEffect(() => {
     if (!open) return;
-    const timer = window.setTimeout(() => startListening(), 350);
-    return () => window.clearTimeout(timer);
+    let timer: ReturnType<typeof window.setTimeout> | undefined;
+    const beginListening = () => {
+      if (timer) window.clearTimeout(timer);
+      startListening();
+    };
+    if ("speechSynthesis" in window) {
+      const greeting = new SpeechSynthesisUtterance("Hi, I’m Speak On. What would you like to do?");
+      greeting.onend = beginListening;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(greeting);
+      timer = window.setTimeout(beginListening, 1800);
+    } else {
+      timer = window.setTimeout(beginListening, 250);
+    }
+    return () => { if (timer) window.clearTimeout(timer); };
   }, [open, startListening]);
 
   const send = useCallback(() => {
     const text = draft.trim();
     if (!text || busy) return;
     setBusy(true);
-    const result = resolveSpeakOnRequest(text, role);
+    const previousAction = [...messages].reverse().find((message) => message.role === "assistant" && message.href);
+    const isContextualOpen = /^(open it|go there|yes|continue|take me there)$/i.test(text);
+    const result = isContextualOpen && previousAction?.href
+      ? { reply: "I’ll open the workflow we were just discussing.", href: previousAction.href, label: previousAction.label }
+      : resolveSpeakOnRequest(text, role);
     setMessages((prev) => [...prev, { role: "user", text }, { role: "assistant", ...result }]);
     setDraft("");
     setBusy(false);
@@ -101,7 +118,7 @@ export default function SpeakOn({ role }: { role: Role }) {
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(new SpeechSynthesisUtterance(result.reply));
     }
-  }, [draft, busy, role]);
+  }, [draft, busy, role, messages]);
 
   useEffect(() => {
     setOpen(false);
