@@ -9,7 +9,7 @@ import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } f
 import { getScaleInventoryForStaff } from "@/lib/scale-inventory.actions";
 import { submitWastageAction, getWastageForOwner, approveWastageAction, declineWastageAction } from "@/lib/scale-wastage.actions";
 import { WASTAGE_REASONS, WASTAGE_REASON_LABELS } from "@/lib/wastage-constants";
-import { getOpenConsignmentsForStaff, getOpenScaleConsignmentsForStaff, settleConsignment, settleScaleConsignment } from "@/lib/consignment.actions";
+import { getOpenConsignmentsForStaff, getOpenScaleConsignmentsForStaff, settleConsignment, settleScaleConsignment, signOutConsignment, signOutScaleConsignment } from "@/lib/consignment.actions";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
@@ -17,6 +17,7 @@ type PendingSale = { inventoryId?: number; productName?: string; quantity?: numb
 type PendingStock = { inventoryId?: number; productName?: string; quantity?: number };
 type PendingWastage = { mode: "submit" | "approve" | "decline"; wastageId?: number; itemId?: number; productName?: string; quantity?: number; unit?: string; reason?: string; note?: string; declineReason?: string };
 type PendingConsignment = { mode: "settle"; kind: "standard" | "scale"; consignmentId: number; recipientName: string; items: { itemId: number; name: string; quantityOut: number; unit?: string; quantitySold?: number }[]; currentIndex: number };
+type PendingSignOut = { kind: "standard" | "scale"; inventoryId: number; productName: string; quantity?: number; unit?: string; recipientName?: string; recipientPhone?: string };
 
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
@@ -61,6 +62,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [pendingStock, setPendingStock] = useState<PendingStock | null>(null);
   const [pendingWastage, setPendingWastage] = useState<PendingWastage | null>(null);
   const [pendingConsignment, setPendingConsignment] = useState<PendingConsignment | null>(null);
+  const [pendingSignOut, setPendingSignOut] = useState<PendingSignOut | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
@@ -141,7 +143,29 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingConsignment) {
+      if (pendingSignOut) {
+        if (cancels) { setPendingSignOut(null); say("I cancelled the consignment sign-out. No stock was moved."); }
+        else if (confirms) {
+          if (!pendingSignOut.quantity || pendingSignOut.quantity <= 0 || !pendingSignOut.recipientName?.trim() || !pendingSignOut.recipientPhone?.trim() || (pendingSignOut.kind === "scale" && !pendingSignOut.unit)) say("I still need the quantity, recipient name and phone number.");
+          else {
+            const result = pendingSignOut.kind === "standard"
+              ? await signOutConsignment({ recipientName: pendingSignOut.recipientName, recipientPhone: pendingSignOut.recipientPhone, items: [{ inventoryId: pendingSignOut.inventoryId, quantityOut: pendingSignOut.quantity }] })
+              : await signOutScaleConsignment({ recipientName: pendingSignOut.recipientName, recipientPhone: pendingSignOut.recipientPhone, items: [{ scaleInventoryId: pendingSignOut.inventoryId, enteredQty: pendingSignOut.quantity, enteredUnit: pendingSignOut.unit! }] });
+            setPendingSignOut(null); say("Consignment stock was signed out for " + pendingSignOut.recipientName + ". Reference " + result.id + ".");
+          }
+        } else {
+          const phone = text.match(/(?:\+?\d[\d\s()-]{6,}\d)/);
+          const recipient = text.match(/\b(?:to|for)\s+([a-z][a-z .'-]{1,50})/i);
+          const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+          const next = { ...pendingSignOut, quantity: pendingSignOut.quantity ?? (amount ? Number(amount[1]) : undefined), unit: pendingSignOut.unit ?? amount?.[2]?.toLowerCase(), recipientPhone: pendingSignOut.recipientPhone ?? phone?.[0].replace(/\D/g, ""), recipientName: pendingSignOut.recipientName ?? recipient?.[1]?.trim() };
+          setPendingSignOut(next);
+          if (!next.quantity) say("How much " + next.productName + " should I sign out?");
+          else if (next.kind === "scale" && !next.unit) say("What unit is that quantity in: kg, g, L or ml?");
+          else if (!next.recipientName) say("Who is receiving the consignment?");
+          else if (!next.recipientPhone) say("What is " + next.recipientName + "'s phone number?");
+          else say("Confirm sign-out of " + next.quantity + (next.unit || " units") + " of " + next.productName + " to " + next.recipientName + " (" + next.recipientPhone + ")? Stock changes only after confirmation. Say yes or cancel.");
+        }
+      } else if (pendingConsignment) {
         if (cancels) {
           setPendingConsignment(null);
           say("Okay. I cancelled the consignment settlement. Nothing was settled and no stock was changed.");
@@ -373,6 +397,24 @@ export default function SpeakOn({ role }: { role: Role }) {
             say("I found the open consignment for " + entry.recipientName + ". " + first.name + " has " + first.quantityOut + (first.unit || "") + " signed out. How many were sold? I will calculate the returned quantity.");
           }
         }
+      } else if (/\b(sign\s*out|send\s*out|consign\s+out)\b/i.test(text)) {
+        const scaleIntent = /\b(kg|grams?|g|litres?|liters?|ml|millilit)\b/i.test(text);
+        const inventory = scaleIntent ? await getScaleInventoryForStaff() : await getInventoryForStaff();
+        const candidates = inventory.filter((item: any) => text.toLowerCase().includes(String(item.name).toLowerCase()));
+        if (candidates.length !== 1) say(candidates.length > 1 ? "I found more than one matching item. Please name the exact item." : "I couldn't identify the item. Please say its exact inventory name and whether it is a weight/volume item.");
+        else {
+          const item = candidates[0];
+          const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+          const phone = text.match(/(?:\+?\d[\d\s()-]{6,}\d)/);
+          const recipient = text.match(/\b(?:to|for)\s+([a-z][a-z .'-]{1,50})/i);
+          const pending: PendingSignOut = { kind: scaleIntent ? "scale" : "standard", inventoryId: item.id, productName: item.name, quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || (scaleIntent ? item.unit : undefined), recipientPhone: phone?.[0].replace(/\D/g, ""), recipientName: recipient?.[1]?.trim() };
+          setPendingSignOut(pending);
+          if (!pending.quantity) say("How much " + item.name + " should I sign out?");
+          else if (scaleIntent && !pending.unit) say("What unit is the quantity in: kg, g, L or ml?");
+          else if (!pending.recipientName) say("Who is receiving the consignment?");
+          else if (!pending.recipientPhone) say("What is " + pending.recipientName + "'s phone number?");
+          else say("Confirm sign-out of " + pending.quantity + (pending.unit || " units") + " of " + item.name + " to " + pending.recipientName + " (" + pending.recipientPhone + ")? Stock changes only after confirmation. Say yes or cancel.");
+        }
       } else if (/\b(restock|add stock|receive stock|stock in)\b/i.test(text)) {
         if (role !== "owner") {
           say("Only the owner can add or restock inventory. I won't make any stock changes.");
@@ -464,7 +506,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut]);
 
   return (
     <>
