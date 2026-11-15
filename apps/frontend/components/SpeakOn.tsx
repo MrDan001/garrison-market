@@ -4,12 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
 import { addExpenseAction } from "@/lib/expense.actions";
-import { getInventoryForStaff, processSaleAction } from "@/lib/business.actions";
+import { addStockToInventoryAction, getInventoryForStaff, processSaleAction } from "@/lib/business.actions";
 import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } from "@/lib/debt.actions";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
 type PendingSale = { inventoryId?: number; productName?: string; quantity?: number; paymentMethod?: "cash" | "transfer"; unitPrice?: number };
+type PendingStock = { inventoryId?: number; productName?: string; quantity?: number };
 
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
@@ -51,6 +52,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [busy, setBusy] = useState(false);
   const [pendingExpense, setPendingExpense] = useState<{ amount?: number; note?: string } | null>(null);
   const [pendingSale, setPendingSale] = useState<PendingSale | null>(null);
+  const [pendingStock, setPendingStock] = useState<PendingStock | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
@@ -131,7 +133,33 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingSale) {
+      if (pendingStock) {
+        if (cancels) {
+          setPendingStock(null);
+          say("Okay. I cancelled that stock addition. Inventory has not changed.");
+        } else if (confirms) {
+          if (role !== "owner") {
+            setPendingStock(null);
+            say("Only the owner can add stock. Nothing has changed.");
+          } else if (!pendingStock.inventoryId || !pendingStock.quantity || pendingStock.quantity <= 0) {
+            say("I still need the exact product and a valid quantity.");
+          } else {
+            const formData = new FormData();
+            formData.set("inventoryId", String(pendingStock.inventoryId));
+            formData.set("quantity", String(pendingStock.quantity));
+            const result = await addStockToInventoryAction(formData);
+            setPendingStock(null);
+            say(result.success ? "Stock was added successfully for " + pendingStock.productName + "." : result.error);
+          }
+        } else {
+          const quantityMatch = text.match(/\b(\d+)\b/);
+          const quantity = pendingStock.quantity ?? (quantityMatch ? Number(quantityMatch[1]) : undefined);
+          const next = { ...pendingStock, quantity };
+          setPendingStock(next);
+          if (!next.quantity) say("How many units should I add to " + (next.productName || "this product") + "?");
+          else say("Please confirm: add " + next.quantity + " units to " + next.productName + "? Nothing has changed yet. Say yes to confirm or cancel.");
+        }
+      } else if (pendingSale) {
         if (cancels) {
           setPendingSale(null);
           say("Okay. I cancelled that sale. Nothing has been recorded and stock has not changed.");
@@ -210,6 +238,30 @@ export default function SpeakOn({ role }: { role: Role }) {
             say("Please say yes to save this expense, or cancel to discard it.");
           }
         }
+      } else if (/\b(restock|add stock|receive stock|stock in)\b/i.test(text)) {
+        if (role !== "owner") {
+          say("Only the owner can add or restock inventory. I won't make any stock changes.");
+        } else {
+          const inventory = await getInventoryForStaff();
+          const quantityMatch = text.match(/\b(\d+)\b/);
+          const quantity = quantityMatch ? Number(quantityMatch[1]) : undefined;
+          const productQuery = text
+            .replace(/\b(restock|add|stock|receive|in|please|to|the|for|units|unit)\b/gi, " ")
+            .replace(/\b\d+\b/g, " ")
+            .replace(/\s+/g, " ").trim().toLowerCase();
+          const matches = inventory.filter((item: any) => productQuery && item.name.toLowerCase().includes(productQuery));
+          if (matches.length === 1) {
+            const item = matches[0];
+            const next = { inventoryId: item.id, productName: item.name, quantity };
+            setPendingStock(next);
+            if (!quantity) say("I found " + item.name + ". How many units should I add?");
+            else say("Please confirm: add " + quantity + " units to " + item.name + "? Nothing has changed yet. Say yes to confirm or cancel.");
+          } else if (matches.length > 1) {
+            say("I found several matching products. Please give me the exact product name.");
+          } else {
+            say("I couldn't match that product in the active store's inventory. Nothing has changed.");
+          }
+        }
       } else if (/\b(sell|sale|checkout|sold)\b/i.test(text)) {
         const inventory = await getInventoryForStaff();
         const quantityMatch = text.match(/\b(\d+)\b/);
@@ -277,7 +329,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock]);
 
   return (
     <>
@@ -303,7 +355,7 @@ export default function SpeakOn({ role }: { role: Role }) {
                 <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={listening ? "Listening… speak now" : "Speak or type your request"} className="min-w-0 flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-3 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"/>
                 <button type="button" onClick={send} disabled={!draft.trim() || busy} className="h-11 w-11 shrink-0 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 flex items-center justify-center" aria-label="Send request"><Send size={17}/></button>
               </div>
-              <p className="text-[10px] text-slate-400 text-center">Speak On asks for confirmation before recording supported sales, expenses and debt payments. Other workflows open their existing forms.</p>
+              <p className="text-[10px] text-slate-400 text-center">Speak On asks for confirmation before recording supported sales, stock additions, expenses and debt payments. Staff cannot add stock. Other workflows open their existing forms.</p>
             </div>
           </section>
         </div>
