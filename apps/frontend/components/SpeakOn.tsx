@@ -105,7 +105,7 @@ export default function SpeakOn({ role }: { role: Role }) {
 
   useEffect(() => {
     if (!open) return;
-    let timer: ReturnType<typeof window.setTimeout> | undefined;
+    let timer: number | undefined;
     let started = false;
     const beginListening = () => {
       if (started) return;
@@ -154,7 +154,7 @@ export default function SpeakOn({ role }: { role: Role }) {
               ? await processScaleSaleAction([{ id: pendingScaleSale.itemId, enteredQty: pendingScaleSale.quantity, enteredUnit: pendingScaleSale.unit, price: pendingScaleSale.price }], pendingScaleSale.paymentMethod)
               : await processMergedSaleAction([], [{ consignmentItemId: pendingScaleSale.itemId, enteredQty: pendingScaleSale.quantity, enteredUnit: pendingScaleSale.unit, price: pendingScaleSale.price }], pendingScaleSale.paymentMethod);
             setPendingScaleSale(null);
-            say("The " + pendingScaleSale.productName + " sale was recorded successfully. Total: " + Number(result.total).toLocaleString() + ".");
+            say("The " + pendingScaleSale.productName + " sale was recorded successfully." + ("total" in result ? " Total: " + Number(result.total).toLocaleString() + "." : ""));
           }
         } else {
           const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
@@ -325,7 +325,7 @@ export default function SpeakOn({ role }: { role: Role }) {
           } else {
             const result = await processSaleAction([{ id: pendingSale.inventoryId, qty: pendingSale.quantity }], pendingSale.paymentMethod);
             setPendingSale(null);
-            say("The sale was recorded successfully. Total: " + Number(result.total).toLocaleString() + ". The app has updated stock.");
+            say("The sale was recorded successfully." + ("total" in result ? " Total: " + Number(result.total).toLocaleString() + "." : "") + " The app has updated stock.");
           }
         } else {
           const quantityMatch = text.match(/\b(\d+)\b/);
@@ -440,7 +440,7 @@ export default function SpeakOn({ role }: { role: Role }) {
             ...standard.map((entry: any) => ({ kind: "standard" as const, id: entry.id, recipientName: entry.recipientName, items: (entry.items || []).map((item: any) => ({ itemId: item.id, name: item.inventory?.name || "Item", quantityOut: Number(item.quantityOut) })) })),
             ...scale.filter((entry: any) => entry.staffId !== null).map((entry: any) => ({ kind: "scale" as const, id: entry.id, recipientName: entry.recipientName, items: (entry.scaleItems || []).map((item: any) => ({ itemId: item.id, name: item.scaleInventory?.name || "Item", quantityOut: Number(item.quantityOut), unit: item.unit })) })),
           ];
-          const matches = candidates.filter((entry) => query && (entry.recipientName.toLowerCase().includes(query) || entry.items.some((item) => item.name.toLowerCase().includes(query))));
+          const matches = candidates.filter((entry) => query && (entry.recipientName.toLowerCase().includes(query) || entry.items.some((item: { name: string }) => item.name.toLowerCase().includes(query))));
           if (matches.length !== 1) say(matches.length > 1 ? "More than one open consignment matches. Please say the recipient's exact name." : candidates.length ? "I couldn't identify the open consignment. Please mention its recipient's name." : "You have no open consignments to settle.");
           else if (!matches[0].items.length) say("That consignment has no items to settle. Please open the consignment page to review it.");
           else {
