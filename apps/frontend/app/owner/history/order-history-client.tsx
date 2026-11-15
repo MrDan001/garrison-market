@@ -3,8 +3,10 @@
 import { useState, useMemo } from "react";
 import { ArrowLeft, History, ChevronDown, ChevronUp, Receipt } from "lucide-react";
 import Link from "next/link";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[] }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const toggleExpand = (id: number) => {
@@ -86,12 +88,12 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
                     <div className="text-right flex items-center gap-4">
                       <div>
                         <span className="text-[10px] block uppercase text-slate-500 font-bold tracking-tight">Sales</span>
-                        <span className="text-sm font-bold text-blue-400">₦{totalSales.toLocaleString()}</span>
+                        <span className="text-sm font-bold text-blue-400">{formatCurrency(totalSales)}</span>
                       </div>
                       <div>
                         <span className="text-[10px] block uppercase text-slate-500 font-bold tracking-tight">Net Profit</span>
                         <span className={`text-sm font-bold ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                          ₦{totalProfit.toLocaleString()}
+                          {formatCurrency(totalProfit)}
                         </span>
                       </div>
                     </div>
@@ -117,7 +119,7 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
                             <div className="min-w-0 flex-1 flex items-center justify-between pr-2">
                               <div>
                                 <p className="font-bold text-[var(--text-primary)] text-base">
-                                  ₦{Number(order.total || 0).toLocaleString()}
+                                  {formatCurrency(Number(order.total || 0))}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-0.5">
                                   {itemCount} item{itemCount !== 1 ? "s" : ""} ·{" "}
@@ -127,7 +129,7 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
                               <div className="text-right mr-2">
                                 <span className="text-[9px] block text-slate-500 uppercase font-semibold">Margin</span>
                                 <span className={`text-xs font-semibold ${order.profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                                  {order.profit >= 0 ? "+" : ""}₦{order.profit.toLocaleString()}
+                                  {order.profit >= 0 ? "+" : ""}{formatCurrency(order.profit)}
                                 </span>
                               </div>
                             </div>
@@ -152,15 +154,15 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
                                         {item.inventory?.name || "Deleted Item"}
                                       </span>
                                       <span className="text-[10px] text-slate-500">
-                                        Qty: {item.quantity} × ₦{Number(item.priceAtTime).toLocaleString()}
+                                        Qty: {item.quantity} × {formatCurrency(Number(item.priceAtTime))}
                                       </span>
                                     </div>
                                     <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center text-[11px] font-semibold shrink-0">
                                       <span className="text-slate-600 dark:text-slate-400">
-                                        Total: ₦{(Number(item.priceAtTime) * item.quantity).toLocaleString()}
+                                        Total: {formatCurrency(Number(item.priceAtTime) * item.quantity)}
                                       </span>
                                       <span className={currentMargin >= 0 ? "text-emerald-500/90 text-[10px]" : "text-rose-500/90 text-[10px]"}>
-                                        Profit: {currentMargin >= 0 ? "+" : ""}₦{(currentMargin * item.quantity).toLocaleString()}
+                                        Profit: {currentMargin >= 0 ? "+" : ""}{formatCurrency(currentMargin * item.quantity)}
                                       </span>
                                     </div>
                                   </div>
@@ -183,10 +185,10 @@ export default function OwnerOrderHistoryClient({ orders = [] }: { orders: any[]
                                     </div>
                                     <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center text-[11px] font-semibold shrink-0">
                                       <span className="text-slate-600 dark:text-slate-400">
-                                        Total: ₦{Number(item.priceAtTime).toLocaleString()}
+                                        Total: {formatCurrency(Number(item.priceAtTime))}
                                       </span>
                                       <span className={lineMargin >= 0 ? "text-emerald-500/90 text-[10px]" : "text-rose-500/90 text-[10px]"}>
-                                        Profit: {lineMargin >= 0 ? "+" : ""}₦{lineMargin.toLocaleString()}
+                                        Profit: {lineMargin >= 0 ? "+" : ""}{formatCurrency(lineMargin)}
                                       </span>
                                     </div>
                                   </div>

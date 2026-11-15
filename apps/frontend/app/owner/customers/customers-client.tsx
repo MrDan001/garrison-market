@@ -12,6 +12,7 @@ import Link from "next/link";
 import { ArrowLeft, Users, Trophy, Phone, Receipt, HandCoins, ChevronDown, User, Package, Clock, Crown } from "lucide-react";
 import { getCustomersForOwner } from "@/lib/customer.actions";
 import { getOpenDebtsForOwner } from "@/lib/debt.actions";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 type CustomerRow = {
   id: number;
@@ -73,7 +74,7 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-const NAIRA = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
+
 
 // A debt's order can be a plain "list" sale, a scale sale, or a merged mix
 // of both — items and scaleItems have to be flattened into one line format.
@@ -97,6 +98,7 @@ function saleLines(order: DebtType["order"]) {
 }
 
 function DebtCard({ debt }: { debt: DebtType }) {
+  const { formatCurrency } = useBusinessCurrency();
   const remaining = debt.totalAmount - debt.amountPaid;
   const lines = saleLines(debt.order);
 
@@ -111,7 +113,7 @@ function DebtCard({ debt }: { debt: DebtType }) {
         </div>
         <div className="text-right shrink-0">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Owed</p>
-          <p className="text-base font-bold text-amber-500">{NAIRA.format(remaining)}</p>
+          <p className="text-base font-bold text-amber-500">{formatCurrency(remaining)}</p>
         </div>
       </div>
 
@@ -127,15 +129,15 @@ function DebtCard({ debt }: { debt: DebtType }) {
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="bg-slate-50/60 dark:bg-slate-950/60 rounded-xl p-2">
           <p className="text-[10px] text-slate-500">Total</p>
-          <p className="text-xs font-bold text-[var(--text-primary)]">{NAIRA.format(debt.totalAmount)}</p>
+          <p className="text-xs font-bold text-[var(--text-primary)]">{formatCurrency(debt.totalAmount)}</p>
         </div>
         <div className="bg-slate-50/60 dark:bg-slate-950/60 rounded-xl p-2">
           <p className="text-[10px] text-slate-500">Paid</p>
-          <p className="text-xs font-bold text-emerald-500">{NAIRA.format(debt.amountPaid)}</p>
+          <p className="text-xs font-bold text-emerald-500">{formatCurrency(debt.amountPaid)}</p>
         </div>
         <div className="bg-slate-50/60 dark:bg-slate-950/60 rounded-xl p-2">
           <p className="text-[10px] text-slate-500">Remaining</p>
-          <p className="text-xs font-bold text-amber-500">{NAIRA.format(remaining)}</p>
+          <p className="text-xs font-bold text-amber-500">{formatCurrency(remaining)}</p>
         </div>
       </div>
 
@@ -152,7 +154,7 @@ function DebtCard({ debt }: { debt: DebtType }) {
                 <span className="text-slate-600 dark:text-slate-400 truncate">
                   {line.name} {line.qtyLabel}
                 </span>
-                <span className="text-slate-600 dark:text-slate-400 shrink-0">{NAIRA.format(line.total)}</span>
+                <span className="text-slate-600 dark:text-slate-400 shrink-0">{formatCurrency(line.total)}</span>
               </div>
             ))
           )}
@@ -168,7 +170,7 @@ function DebtCard({ debt }: { debt: DebtType }) {
                 <span className="text-slate-600 dark:text-slate-400">
                   {new Date(p.createdAt).toLocaleString()} — {p.staff?.fullName || "Staff"}
                 </span>
-                <span className="font-semibold text-emerald-500 shrink-0">{NAIRA.format(p.amount)}</span>
+                <span className="font-semibold text-emerald-500 shrink-0">{formatCurrency(p.amount)}</span>
               </div>
             ))}
           </div>
@@ -185,6 +187,7 @@ export default function CustomersClient({
   initial: CustomersData;
   initialDebts: DebtType[];
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [data, setData] = useState<CustomersData>(initial);
   const [debts, setDebts] = useState<DebtType[]>(initialDebts);
   const [isPending, startTransition] = useTransition();
@@ -345,7 +348,7 @@ export default function CustomersClient({
                                 also happens to be a top spender. */}
                             {owed != null && owed > 0 && (
                               <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
-                                <HandCoins size={9} /> Owes {NAIRA.format(owed)}
+                                <HandCoins size={9} /> Owes {formatCurrency(owed)}
                               </span>
                             )}
                           </div>
@@ -359,7 +362,7 @@ export default function CustomersClient({
                         </span>
 
                         <span className="text-sm font-bold text-emerald-500 text-right">
-                          {NAIRA.format(c.totalSpent)}
+                          {formatCurrency(c.totalSpent)}
                         </span>
                       </div>
                     );
@@ -374,7 +377,7 @@ export default function CustomersClient({
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-5 flex items-center justify-between">
                 <div>
                   <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide">Total Outstanding</p>
-                  <p className="text-2xl font-bold text-[var(--text-primary)]">{NAIRA.format(totalOutstanding)}</p>
+                  <p className="text-2xl font-bold text-[var(--text-primary)]">{formatCurrency(totalOutstanding)}</p>
                 </div>
                 <div className="h-11 w-11 rounded-xl bg-amber-500/15 flex items-center justify-center">
                   <HandCoins size={20} className="text-amber-500" />
@@ -441,12 +444,12 @@ export default function CustomersClient({
                           </p>
                           {owed != null && owed > 0 && (
                             <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-1.5">
-                              <HandCoins size={9} /> Owes {NAIRA.format(owed)}
+                              <HandCoins size={9} /> Owes {formatCurrency(owed)}
                             </span>
                           )}
                         </div>
                         <p className="text-xl font-bold text-emerald-500 text-right shrink-0">
-                          {NAIRA.format(champion.totalSpent)}
+                          {formatCurrency(champion.totalSpent)}
                         </p>
                       </div>
                     );
@@ -481,7 +484,7 @@ export default function CustomersClient({
                                 <p className="font-semibold text-[var(--text-primary)] text-sm truncate">{c.name}</p>
                                 {owed != null && owed > 0 && (
                                   <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
-                                    <HandCoins size={9} /> Owes {NAIRA.format(owed)}
+                                    <HandCoins size={9} /> Owes {formatCurrency(owed)}
                                   </span>
                                 )}
                               </div>
@@ -495,7 +498,7 @@ export default function CustomersClient({
                             </span>
 
                             <span className="text-sm font-bold text-emerald-500 text-right">
-                              {NAIRA.format(c.totalSpent)}
+                              {formatCurrency(c.totalSpent)}
                             </span>
                           </div>
                         );

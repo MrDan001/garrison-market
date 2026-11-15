@@ -2,6 +2,7 @@
 import { useState, useMemo } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Award, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { useBusinessCurrency } from '@/components/BusinessCurrencyProvider';
 
 export default function SalesDashboard({ 
   data, 
@@ -10,6 +11,7 @@ export default function SalesDashboard({
   data: any[]; 
   analyticsData?: any[]; 
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [view, setView] = useState<'day' | 'week' | 'month'>('day');
   const [chartType, setChartType] = useState<'bar' | 'line' | 'summary'>('bar');
 
@@ -120,7 +122,7 @@ export default function SalesDashboard({
     if (active && payload && payload.length) {
       return (
         <div className="bg-[var(--bg-app)] border border-slate-300 dark:border-slate-700 p-3 rounded-xl shadow-xl">
-          <p className="text-sm font-bold text-[var(--text-primary)] mb-1">₦{payload[0].value.toLocaleString()}</p>
+          <p className="text-sm font-bold text-[var(--text-primary)] mb-1">{formatCurrency(payload[0].value)}</p>
           <p className="text-xs text-slate-600 dark:text-slate-400">{view === 'day' ? 'Daily Sales Total' : view === 'week' ? 'Weekly Output' : 'Monthly Accumulation'}</p>
         </div>
       );
@@ -158,7 +160,7 @@ export default function SalesDashboard({
             {chartType === 'bar' ? (
               <BarChart data={processedData}>
                 <XAxis dataKey="name" stroke="#475569" fontSize={11} tickLine={false} />
-                <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `₦${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => formatCurrency(v)} />
                 <Tooltip content={customTooltip} cursor={{ fill: '#1e293b', opacity: 0.3 }} />
                 <Bar dataKey="sales" fill="#3b82f6" radius={[6, 6, 0, 0]} />
               </BarChart>
@@ -178,7 +180,7 @@ export default function SalesDashboard({
           {/* Main Total Summary Card */}
           <div className="flex flex-col justify-center items-center py-8 px-6 text-center bg-slate-50/40 dark:bg-slate-950/40 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
             <h4 className="text-sm font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">Total {view} Turnover</h4>
-            <p className="text-4xl font-black text-[var(--text-primary)] tracking-tight">₦{totalSales.toLocaleString()}</p>
+            <p className="text-4xl font-black text-[var(--text-primary)] tracking-tight">{formatCurrency(totalSales)}</p>
             <p className="text-xs text-slate-500 mt-2 max-w-sm">Aggregated processing tracking for the configured dashboard view boundaries.</p>
           </div>
 
@@ -194,7 +196,7 @@ export default function SalesDashboard({
                 </div>
                 <p className="text-lg font-bold text-[var(--text-primary)] truncate">{analytics.bestStaff.name}</p>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                  Generated <span className="text-emerald-400 font-semibold">₦{analytics.bestStaff.revenue.toLocaleString()}</span> across {analytics.bestStaff.orders} custom invoice records.
+                  Generated <span className="text-emerald-400 font-semibold">{formatCurrency(analytics.bestStaff.revenue)}</span> across {analytics.bestStaff.orders} custom invoice records.
                 </p>
               </div>
               <div className="mt-4 pt-3 border-t border-slate-200/40 dark:border-slate-800/40 text-[11px] text-slate-500">

@@ -2,7 +2,7 @@ import {
   ChevronRight, Store, LayoutDashboard,
   Activity, CreditCard, Users, Receipt,
   LogOut, ArrowLeft, History,
-  Zap, Calendar, Gift, ChevronDown, UserPlus, Scale as ScaleIcon, Mail
+  Zap, Calendar, Gift, ChevronDown, UserPlus, Scale as ScaleIcon, Mail, Globe2
 } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -94,6 +94,17 @@ export default async function MorePage() {
           <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800/60 flex items-center justify-center text-slate-400 shrink-0">
             <ChevronRight size={18} />
           </div>
+        </a>
+
+        <a href="/owner/settings/business" className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-slate-200/80 dark:border-slate-800/80 flex items-center gap-4 hover:border-slate-400 dark:hover:border-slate-600 transition-all shadow-xs">
+          <div className="h-11 w-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <Globe2 size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-sm text-[var(--text-primary)]">Business region & currency</h3>
+            <p className="text-xs text-slate-500">Set your operating country and local currency</p>
+          </div>
+          <ChevronRight size={18} className="text-slate-400 shrink-0" />
         </a>
 
         {/* Subscription + Growth & Rewards — Combined Dropdown */}

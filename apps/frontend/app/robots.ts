@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/owner/', '/admin/', '/api/', '/change-password', '/forgot-password'],
+        disallow: ['/owner/', '/admin/', '/api/', '/change-password', '/forgot-password', '/login', '/register'],
       },
     ],
     sitemap: 'https://gmstock.co/sitemap.xml',

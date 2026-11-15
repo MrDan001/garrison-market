@@ -28,6 +28,7 @@ import { getBillingStatus } from "@/lib/subscription-guard";
 import { getActiveStore } from "@/lib/store-context";
 import RushCard from "@/components/RushCard";
 import { getRushProfile } from "@/lib/rush.actions";
+import { formatBusinessCurrency } from "@/lib/business-localization";
 
 type ActivityItem =
   | { type: "sale"; id: string; date: Date; amount: number }
@@ -43,6 +44,9 @@ export default async function StaffDashboard() {
     where: { email: session.email },
     select: { id: true, fullName: true, role: true, status: true, image: true, ownerId: true, notificationsEnabled: true, staffStoreId: true },
   });
+
+  const businessOwner = staff?.ownerId ? await prisma.user.findUnique({ where: { id: staff.ownerId }, select: { currencyCode: true } }) : null;
+  const currencyCode = businessOwner?.currencyCode || "NGN";
 
   const userRole = staff?.role?.toLowerCase().trim();
   const userStatus = staff?.status?.toLowerCase().trim();
@@ -303,7 +307,7 @@ export default async function StaffDashboard() {
                   <TrendingUp size={14} className="text-emerald-400" />
                   <p className="text-[11px] text-slate-500 uppercase tracking-wider">Today's Sales</p>
                 </div>
-                <p className="text-xl font-bold text-[var(--text-primary)]">₦{todaySales.toLocaleString()}</p>
+                <p className="text-xl font-bold text-[var(--text-primary)]">{formatBusinessCurrency(todaySales, currencyCode)}</p>
               </div>
               <div className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-2">
@@ -425,7 +429,7 @@ export default async function StaffDashboard() {
             <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recent Activity</h2>
             <div className="space-y-3">
               {activityFeed.length > 0 ? (
-                activityFeed.map((item) => <ActivityRow key={item.id} item={item} />)
+                activityFeed.map((item) => <ActivityRow key={item.id} item={item} currencyCode={currencyCode} />)
               ) : (
                 <div className="bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center">
                   <ShoppingBag size={28} className="mx-auto mb-2 text-slate-300 dark:text-slate-700" />
@@ -482,7 +486,7 @@ export default async function StaffDashboard() {
   );
 }
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item, currencyCode }: { item: ActivityItem; currencyCode: string }) {
   if (item.type === "sale") {
     return (
       <div className="flex justify-between items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
@@ -492,7 +496,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
           </div>
           <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">Sale confirmed</p>
         </div>
-        <p className="text-sm font-bold text-emerald-400 shrink-0">₦{item.amount.toLocaleString()}</p>
+        <p className="text-sm font-bold text-emerald-400 shrink-0">{formatBusinessCurrency(item.amount, currencyCode)}</p>
       </div>
     );
   }

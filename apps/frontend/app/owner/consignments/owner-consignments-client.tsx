@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Truck, Calendar, User, Store, RotateCcw, Plus, Minus, X, Phone, FileText, PackagePlus } from "lucide-react";
 import { ownerReconcileScaleConsignmentAction, signOutConsignment } from "@/lib/consignment.actions";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface InventoryItem {
   id: number;
@@ -31,6 +32,7 @@ export default function OwnerConsignmentsClient({
   enabled?: boolean;
   inventory?: InventoryItem[];
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [filter, setFilter] = useState<"all" | "out" | "settled">("all");
   const [storeFilter, setStoreFilter] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
@@ -367,7 +369,7 @@ export default function OwnerConsignmentsClient({
                   <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-slate-500">Value signed out</span>
-                      <span className="text-sm font-bold text-amber-400">₦{totalOutValue.toLocaleString()}</span>
+                      <span className="text-sm font-bold text-amber-400">{formatCurrency(totalOutValue)}</span>
                     </div>
                     {c.isScale && (
                       <>
@@ -391,7 +393,7 @@ export default function OwnerConsignmentsClient({
                 {c.status === "settled" && (
                   <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800">
                     <span className="text-xs text-slate-500">Revenue from consignment</span>
-                    <span className="text-sm font-bold text-emerald-400">₦{totalValue.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-emerald-400">{formatCurrency(totalValue)}</span>
                   </div>
                 )}
               </div>

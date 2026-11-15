@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { toggleStaffStatus, deleteStaff } from "@/lib/auth.actions";
 import { updateStaffStoreAction } from "@/lib/store.actions";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface Staff {
   id: number;
@@ -34,6 +35,7 @@ export default function StaffDetailClient({
   monthSales: number;
   monthOrders: number;
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [selectedStore, setSelectedStore] = useState(staff.staffStoreId ?? "");
@@ -108,7 +110,7 @@ export default function StaffDetailClient({
               <TrendingUp size={13} className="text-emerald-400" />
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Sales This Month</p>
             </div>
-            <p className="text-lg font-bold text-[var(--text-primary)]">₦{monthSales.toLocaleString()}</p>
+            <p className="text-lg font-bold text-[var(--text-primary)]">{formatCurrency(monthSales)}</p>
           </div>
           <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-1.5">

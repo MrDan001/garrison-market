@@ -7,6 +7,7 @@ import {
   User, Phone, FileText, CheckCircle2, Clock, Store,
 } from "lucide-react";
 import { signOutConsignment, settleConsignment } from "@/lib/consignment.actions";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface InventoryItem {
   id: number;
@@ -33,6 +34,7 @@ export default function StaffConsignmentClient({
   openConsignments: any[];
   history: any[];
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [tab, setTab] = useState<"new" | "open" | "history">(openConsignments.length > 0 ? "open" : "new");
 
@@ -306,13 +308,13 @@ export default function StaffConsignmentClient({
                     {c.items.map((item: any) => (
                       <div key={item.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
                         <span>{item.inventory?.name}</span>
-                        <span>{item.quantityOut} units · ₦{Number(item.priceAtTime).toLocaleString()} each</span>
+                        <span>{item.quantityOut} units · {formatCurrency(Number(item.priceAtTime))} each</span>
                       </div>
                     ))}
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800">
                     <span className="text-xs text-slate-500">Total value signed out</span>
-                    <span className="text-sm font-bold text-amber-400">₦{totalOutValue.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-amber-400">{formatCurrency(totalOutValue)}</span>
                   </div>
                   {settlingId === c.id ? (
                     <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">

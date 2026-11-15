@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { deleteScaleItemAction } from "@/lib/scale-inventory.actions";
 import ScaleProductReportTab from "@/components/ScaleProductReportTab";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface ScaleProductItem {
   id: number;
@@ -41,6 +42,7 @@ interface BatchSummary {
 type Tab = "batches" | "details" | "report";
 
 export default function ScaleProductDetailClient({ item, batches }: { item: ScaleProductItem; batches: BatchSummary[] }) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("batches");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -255,8 +257,8 @@ export default function ScaleProductDetailClient({ item, batches }: { item: Scal
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Pricing</p>
               <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-800">
-                <Row label="Selling Price" value={`₦${item.price.toLocaleString()} / ${item.unit}`} />
-                <Row label="Last Cost Price" value={item.costPrice != null ? `₦${item.costPrice.toLocaleString()} / ${item.unit}` : "—"} />
+                <Row label="Selling Price" value={`${formatCurrency(item.price)} / ${item.unit}`} />
+                <Row label="Last Cost Price" value={item.costPrice != null ? `${formatCurrency(item.costPrice)} / ${item.unit}` : "—"} />
                 <Row label="Margin" value={item.margin != null ? `${item.margin}%` : "—"} valueClassName="text-emerald-500 font-bold" />
               </div>
             </div>

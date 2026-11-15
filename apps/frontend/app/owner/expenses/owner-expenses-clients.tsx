@@ -1,4 +1,5 @@
 "use client";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 // FILE: apps/frontend/app/owner/expenses/owner-expenses-client.tsx
 
 import { useState, useTransition, useEffect } from "react";
@@ -44,10 +45,6 @@ type Overview = {
 } | null;
 type Period = "day" | "month" | "year";
 
-function naira(n: number) {
-  return `₦${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
 export default function OwnerExpensesClient({
   categories: initialCategories,
   overview,
@@ -59,6 +56,7 @@ export default function OwnerExpensesClient({
   initialPeriod: Period;
   initialData: PeriodData;
 }) {
+  const { formatCurrency, currencyCode } = useBusinessCurrency();
   const [categories, setCategories] = useState(initialCategories);
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [referenceDate, setReferenceDate] = useState(new Date());
@@ -203,7 +201,7 @@ export default function OwnerExpensesClient({
 
                     <div className="mt-3">
                       <p className="text-2xl sm:text-3xl font-black tracking-tight">
-                        {naira(slide.amount)}
+                        {formatCurrency(slide.amount)}
                       </p>
                       <p className="text-xs font-medium text-white/80 mt-1">
                         {slide.count} expense record{slide.count === 1 ? "" : "s"} logged
@@ -282,7 +280,7 @@ export default function OwnerExpensesClient({
               <span className="text-slate-700 dark:text-slate-200 font-bold">{data.count}</span> expense{data.count === 1 ? "" : "s"}
             </span>
             <span className="text-sm font-black text-rose-500">
-              {naira(data.total)}
+              {formatCurrency(data.total)}
             </span>
           </div>
         </div>
@@ -328,7 +326,7 @@ export default function OwnerExpensesClient({
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-rose-500">{naira(Number(e.amount))}</p>
+                  <p className="text-sm font-bold text-rose-500">{formatCurrency(Number(e.amount))}</p>
                 </div>
               </div>
             ))}
@@ -380,6 +378,7 @@ function AddExpenseModal({
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const { currencyCode } = useBusinessCurrency();
   const [categoryId, setCategoryId] = useState<number | "">("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -441,7 +440,7 @@ function AddExpenseModal({
           <div>
             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Amount</label>
             <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-bold">₦</span>
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-bold">{currencyCode}</span>
               <input
                 type="number"
                 inputMode="decimal"

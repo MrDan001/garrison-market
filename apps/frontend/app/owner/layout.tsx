@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getBillingStatus } from "@/lib/subscription-guard";
+import prisma from "@/lib/prisma";
+import { BusinessCurrencyProvider } from "@/components/BusinessCurrencyProvider";
 import TrialTopBar from "@/components/TrialTopBar";
 import OwnerSupportBubble from "@/components/OwnerSupportBubble";
 import AdminAnnouncementGate from "@/components/AdminAnnouncementGate";
@@ -32,9 +34,13 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
     redirect("/login");
   }
 
-  const billingStatus = await getBillingStatus(session.id);
+  const [billingStatus, ownerProfile] = await Promise.all([
+    getBillingStatus(session.id),
+    prisma.user.findUnique({ where: { id: session.id }, select: { currencyCode: true } }),
+  ]);
 
   return (
+    <BusinessCurrencyProvider currencyCode={ownerProfile?.currencyCode || "NGN"}>
     <PushPermissionGate>
       <TrialTopBar
         isLocked={billingStatus.isLocked}
@@ -46,5 +52,6 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
       <AdminAnnouncementGate />
       <IOSInstallNudge />
     </PushPermissionGate>
+    </BusinessCurrencyProvider>
   );
 }

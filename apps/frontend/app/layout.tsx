@@ -9,15 +9,25 @@ import "./styles.css";
 
 const siteUrl = 'https://gmstock.co';
 const siteDescription =
-  'Garrison Market is an all-in-one inventory and sales management app for shop and market owners. Track stock by piece or by weight (kg, g, L, ml), manage staff and multiple stores, process sales, generate daily reports, and handle consignments and wastage — all from your phone.';
+  'Garrison Market is an all-in-one inventory and business management platform for owners and teams. Manage products, stock levels, sales, staff, expenses, customer records, invoices, reports and multiple business locations from one connected workspace.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: 'Garrison Market — Inventory & Sales Management',
+    default: 'Garrison Market — Inventory & Business Management',
     template: '%s | Garrison Market',
   },
   description: siteDescription,
+  keywords: [
+    'inventory management software',
+    'stock management system',
+    'business management platform',
+    'staff management software',
+    'sales tracking',
+    'expense tracking',
+    'customer management',
+    'multi-location inventory',
+  ],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

@@ -9,6 +9,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { getProductReport } from "@/lib/product-report.actions";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 type RangeKey =
   | "today" | "yesterday" | "thisWeek" | "lastWeek"
@@ -97,10 +98,9 @@ interface ReportData {
   dayOfWeekSeries: { day: string; revenue: number }[];
 }
 
-const naira = (n: number) => `₦${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-const nairaCompact = (n: number) => (Math.abs(n) >= 1000 ? `₦${(n / 1000).toFixed(1)}k` : `₦${n}`);
-
 export default function ProductReportTab({ itemId }: { itemId: number }) {
+  const { formatCurrency } = useBusinessCurrency();
+  const formatCompactCurrency = (n: number) => Math.abs(n) >= 1000 ? `${formatCurrency(n / 1000)}k` : formatCurrency(n);
   const [rangeKey, setRangeKey] = useState<RangeKey>("thisMonth");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -177,8 +177,8 @@ export default function ProductReportTab({ itemId }: { itemId: number }) {
         <>
           {/* Summary cards */}
           <div className="grid grid-cols-2 gap-2">
-            <SummaryCard label="Revenue" value={naira(report.summary.revenue)} valueClassName="text-emerald-500" />
-            <SummaryCard label="Profit" value={naira(report.summary.profit)} valueClassName="text-blue-500" />
+            <SummaryCard label="Revenue" value={formatCurrency(report.summary.revenue)} valueClassName="text-emerald-500" />
+            <SummaryCard label="Profit" value={formatCurrency(report.summary.profit)} valueClassName="text-blue-500" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <SummaryCard icon={<ShoppingBag size={14} />} label="Qty Sold" value={String(report.summary.qtySold)} />
@@ -188,7 +188,7 @@ export default function ProductReportTab({ itemId }: { itemId: number }) {
             <SummaryCard icon={<Users size={14} />} label="Customers" value={String(report.summary.customers)} />
             <SummaryCard icon={<PieChartIcon size={14} />} label="Margin" value={`${report.summary.margin}%`} valueClassName="text-emerald-500" />
           </div>
-          <SummaryCard icon={<TrendingDown size={14} />} label="Total Discounts" value={naira(report.summary.totalDiscounts)} full />
+          <SummaryCard icon={<TrendingDown size={14} />} label="Total Discounts" value={formatCurrency(report.summary.totalDiscounts)} full />
 
           {/* Revenue Analytics */}
           <div>
@@ -199,9 +199,9 @@ export default function ProductReportTab({ itemId }: { itemId: number }) {
                   <LineChart data={report.dailySeries}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.15} vertical={false} />
                     <XAxis dataKey="date" tickFormatter={(d) => new Date(d).getDate().toString()} stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={nairaCompact} width={40} />
+                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactCurrency} width={40} />
                     <Tooltip
-                      formatter={(v: any, name: any) => [naira(Number(v) || 0), name === "revenue" ? "Revenue" : "Profit"]}
+                      formatter={(v: any, name: any) => [formatCurrency(Number(v) || 0), name === "revenue" ? "Revenue" : "Profit"]}
                       labelFormatter={(d) => new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}
                       contentStyle={{ background: "var(--bg-app)", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }}
                     />
@@ -226,9 +226,9 @@ export default function ProductReportTab({ itemId }: { itemId: number }) {
                   <BarChart data={report.dailySeries}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.15} vertical={false} />
                     <XAxis dataKey="date" tickFormatter={(d) => new Date(d).getDate().toString()} stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={nairaCompact} width={40} />
+                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactCurrency} width={40} />
                     <Tooltip
-                      formatter={(v: any, name: any) => [naira(Number(v) || 0), name === "profit" ? "Profit" : "Revenue"]}
+                      formatter={(v: any, name: any) => [formatCurrency(Number(v) || 0), name === "profit" ? "Profit" : "Revenue"]}
                       labelFormatter={(d) => new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}
                       contentStyle={{ background: "var(--bg-app)", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }}
                     />
@@ -253,9 +253,9 @@ export default function ProductReportTab({ itemId }: { itemId: number }) {
                   <BarChart data={report.dayOfWeekSeries}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.15} vertical={false} />
                     <XAxis dataKey="day" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={nairaCompact} width={40} />
+                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactCurrency} width={40} />
                     <Tooltip
-                      formatter={(v: any) => [naira(Number(v) || 0), "Revenue"]}
+                      formatter={(v: any) => [formatCurrency(Number(v) || 0), "Revenue"]}
                       contentStyle={{ background: "var(--bg-app)", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }}
                     />
                     <Bar dataKey="revenue" fill="#60a5fa" radius={[4, 4, 0, 0]} />

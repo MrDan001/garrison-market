@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, History, ChevronDown, ChevronUp, Receipt, User, Calendar, List, Scale as ScaleIcon } from "lucide-react";
 import Link from "next/link";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 // An order can carry BOTH standard Inventory lines (order.items) and
 // consignment-signed-out scale lines (order.scaleItems) on the same row —
@@ -29,6 +30,7 @@ function combinedLines(order: any) {
 }
 
 export default function OrderHistoryClient({ orders }: { orders: any[] }) {
+  const { formatCurrency } = useBusinessCurrency();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [tab, setTab] = useState<"day" | "customer">("day");
@@ -143,7 +145,7 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                   <div className="flex items-center justify-between mb-3 px-1">
                     <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">{day}</h2>
                     <span className="text-sm font-bold text-emerald-400">
-                      ₦{dayTotal.toLocaleString()}
+                      {formatCurrency(dayTotal)}
                     </span>
                   </div>
 
@@ -167,7 +169,7 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="font-semibold text-[var(--text-primary)]">
-                                  ₦{Number(order.total).toLocaleString()}
+                                  {formatCurrency(Number(order.total))}
                                 </p>
                                 {hasList && hasScale && (
                                   <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-slate-200 dark:bg-slate-800 text-slate-500">
@@ -200,7 +202,7 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                                     {line.name} {line.qtyLabel}
                                   </span>
                                   <span className="text-slate-600 dark:text-slate-400 shrink-0">
-                                    ₦{line.total.toLocaleString()}
+                                    {formatCurrency(line.total)}
                                   </span>
                                 </div>
                               ))}
@@ -279,7 +281,7 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
                           {group.phone ? `${group.phone} · ` : ""}
-                          {group.orders.length} order{group.orders.length !== 1 ? "s" : ""} · ₦{groupTotal.toLocaleString()}
+                          {group.orders.length} order{group.orders.length !== 1 ? "s" : ""} · {formatCurrency(groupTotal)}
                         </p>
                       </div>
                     </div>
@@ -301,7 +303,7 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                             {Array.from(listTally.entries()).map(([name, v]) => (
                               <div key={name} className="flex justify-between text-sm">
                                 <span className="text-slate-700 dark:text-slate-300 truncate pr-2">{name} × {v.qty}</span>
-                                <span className="text-slate-600 dark:text-slate-400 shrink-0">₦{v.total.toLocaleString()}</span>
+                                <span className="text-slate-600 dark:text-slate-400 shrink-0">{formatCurrency(v.total)}</span>
                               </div>
                             ))}
                           </div>
@@ -316,7 +318,7 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                             {Array.from(scaleTally.entries()).map(([name, v]) => (
                               <div key={name} className="flex justify-between text-sm">
                                 <span className="text-slate-700 dark:text-slate-300 truncate pr-2">{name} — {v.qty}{v.unit}</span>
-                                <span className="text-slate-600 dark:text-slate-400 shrink-0">₦{v.total.toLocaleString()}</span>
+                                <span className="text-slate-600 dark:text-slate-400 shrink-0">{formatCurrency(v.total)}</span>
                               </div>
                             ))}
                           </div>
@@ -329,7 +331,7 @@ export default function OrderHistoryClient({ orders }: { orders: any[] }) {
                           {group.orders.map((o: any) => (
                             <div key={o.id} className="flex justify-between text-xs text-slate-500">
                               <span>{new Date(o.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {new Date(o.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                              <span>₦{Number(o.total).toLocaleString()}</span>
+                              <span>{formatCurrency(Number(o.total))}</span>
                             </div>
                           ))}
                         </div>

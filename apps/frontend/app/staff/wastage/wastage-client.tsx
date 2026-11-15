@@ -6,6 +6,7 @@ import { ArrowLeft, Scale as ScaleIcon, Clock, CheckCircle2, XCircle, Lock, Tren
 import { submitWastageAction } from "@/lib/scale-wastage.actions";
 import { WASTAGE_REASON_LABELS, WASTAGE_REASONS } from "@/lib/wastage-constants";
 import { unitsForBase } from "@/lib/scale-units";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface ScaleItem {
   id: number;
@@ -45,6 +46,7 @@ export default function StaffWastageClient({
   canViewReport: boolean;
   report: WastageReport | null;
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [itemId, setItemId] = useState("");
   const [amount, setAmount] = useState("");
@@ -253,7 +255,7 @@ export default function StaffWastageClient({
                 <TrendingDown size={12} /> Total Wastage This Month ({report.month})
               </p>
               <p className="text-2xl font-black text-[var(--text-primary)]">
-                ₦{report.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                {formatCurrency(report.totalValue)}
               </p>
               <p className="text-xs text-slate-500 mt-1">{report.count} entr{report.count === 1 ? "y" : "ies"} logged</p>
             </div>
@@ -275,7 +277,7 @@ export default function StaffWastageClient({
                       </div>
                     </div>
                     <span className="font-bold text-[var(--text-primary)] text-sm shrink-0">
-                      ₦{p.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      {formatCurrency(p.value)}
                     </span>
                   </div>
                 ))

@@ -16,6 +16,7 @@ import { logoutAction } from "@/lib/auth.actions";
 import NotificationBell from "@/components/NotificationBell";
 import { getActiveStoreId } from "@/lib/store-context";
 import RushCard from "@/components/RushCard";
+import { formatBusinessCurrency } from "@/lib/business-localization";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -48,6 +49,7 @@ export default async function OwnerDashboardPage() {
         image: true,
         status: true,
         notificationsEnabled: true,
+        currencyCode: true,
       },
     });
 
@@ -316,10 +318,10 @@ export default async function OwnerDashboardPage() {
 
           {/* Aggregated Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="Today's Revenue" value={`₦${todaySalesRevenue.toLocaleString()}`} sub={`Cash: ₦${cashSalesToday.toLocaleString()} | Transfer: ₦${transferSalesToday.toLocaleString()}`} icon={<Banknote size={17} />} accent="emerald" />
+            <StatCard title="Today's Revenue" value={formatBusinessCurrency(todaySalesRevenue, user.currencyCode)} sub={`Cash: ${formatBusinessCurrency(cashSalesToday, user.currencyCode)} | Transfer: ${formatBusinessCurrency(transferSalesToday, user.currencyCode)}`} icon={<Banknote size={17} />} accent="emerald" />
             <StatCard title="Orders Today" value={ordersToday.toString()} sub="Transactions today" icon={<TrendingUp size={17} />} accent="blue" />
             <StatCard title="Active Products" value={totalProducts.toString()} sub="In inventory" icon={<Package size={17} />} accent="violet" />
-            <StatCard title="90-Day Revenue" value={`₦${totalSales.toLocaleString()}`} sub="Last 90 days gross" icon={<ShoppingCart size={17} />} accent="blue" />
+            <StatCard title="90-Day Revenue" value={formatBusinessCurrency(totalSales, user.currencyCode)} sub="Last 90 days gross" icon={<ShoppingCart size={17} />} accent="blue" />
           </div>
 
           {/* Rush entry point — sits as one more card in the stack, styled
@@ -345,7 +347,7 @@ export default async function OwnerDashboardPage() {
                 <h2 className="text-base font-semibold text-[var(--text-primary)] mb-4">Recent Activity</h2>
                 <div className="space-y-3">
                   {activityFeed.length > 0 ? (
-                    activityFeed.map((item) => <ActivityRow key={item.id} item={item} />)
+                    activityFeed.map((item) => <ActivityRow key={item.id} item={item} currencyCode={user.currencyCode} />)
                   ) : (
                     <p className="text-slate-500 text-sm text-center py-4">No recent activity.</p>
                   )}
@@ -407,7 +409,7 @@ export default async function OwnerDashboardPage() {
   }
 }
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item, currencyCode }: { item: ActivityItem; currencyCode: string }) {
   const getTheme = () => {
     switch (item.type) {
       case "sale":
@@ -450,7 +452,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
       <div className="pr-4 text-right shrink-0">
         <span className={`block font-mono text-xs font-bold ${t.text}`}>
-          {item.type === "sale" ? `+₦${item.amount.toLocaleString()}` : 
+          {item.type === "sale" ? `+${formatBusinessCurrency(item.amount, currencyCode)}` : 
            item.type === "alert" && "isOutOfStock" in item ? (item.isOutOfStock ? "EMPTY" : `${item.quantity} UNITS`) :
            item.type === "restock" ? `${item.quantity} UNITS` :
            "REVIEW"}

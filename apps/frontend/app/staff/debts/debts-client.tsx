@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { recordDebtPaymentAction } from "@/lib/debt.actions";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface DebtItem {
   id: number;
@@ -67,11 +68,8 @@ function saleLines(order: DebtType["order"]) {
   return [...list, ...scale];
 }
 
-function naira(n: number) {
-  return `₦${n.toLocaleString()}`;
-}
-
 export default function DebtsClient({ debts: initialDebts }: { debts: DebtType[] }) {
+  const { formatCurrency, currencyCode } = useBusinessCurrency();
   const [debts, setDebts] = useState(initialDebts);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [payingDebt, setPayingDebt] = useState<DebtType | null>(null);
@@ -97,7 +95,7 @@ export default function DebtsClient({ debts: initialDebts }: { debts: DebtType[]
       return;
     }
     if (amount > remaining) {
-      alert(`That's more than what's owed (${naira(remaining)} remaining).`);
+      alert(`That's more than what's owed (${formatCurrency(remaining)} remaining).`);
       return;
     }
 
@@ -140,7 +138,7 @@ export default function DebtsClient({ debts: initialDebts }: { debts: DebtType[]
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-5 flex items-center justify-between">
           <div>
             <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide">Total Outstanding</p>
-            <p className="text-2xl font-bold text-[var(--text-primary)]">{naira(totalOwed)}</p>
+            <p className="text-2xl font-bold text-[var(--text-primary)]">{formatCurrency(totalOwed)}</p>
           </div>
           <div className="h-11 w-11 rounded-xl bg-amber-500/15 flex items-center justify-center">
             <HandCoins size={20} className="text-amber-500" />
@@ -184,7 +182,7 @@ export default function DebtsClient({ debts: initialDebts }: { debts: DebtType[]
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="text-right">
                         <p className="text-[10px] text-slate-500 uppercase tracking-wide">Owed</p>
-                        <p className="text-base font-bold text-amber-500">{naira(remaining)}</p>
+                        <p className="text-base font-bold text-amber-500">{formatCurrency(remaining)}</p>
                       </div>
                       <ChevronDown
                         size={18}
@@ -198,15 +196,15 @@ export default function DebtsClient({ debts: initialDebts }: { debts: DebtType[]
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="bg-slate-50/60 dark:bg-slate-950/60 rounded-xl p-2">
                           <p className="text-[10px] text-slate-500">Total</p>
-                          <p className="text-xs font-bold text-[var(--text-primary)]">{naira(debt.totalAmount)}</p>
+                          <p className="text-xs font-bold text-[var(--text-primary)]">{formatCurrency(debt.totalAmount)}</p>
                         </div>
                         <div className="bg-slate-50/60 dark:bg-slate-950/60 rounded-xl p-2">
                           <p className="text-[10px] text-slate-500">Paid</p>
-                          <p className="text-xs font-bold text-emerald-500">{naira(debt.amountPaid)}</p>
+                          <p className="text-xs font-bold text-emerald-500">{formatCurrency(debt.amountPaid)}</p>
                         </div>
                         <div className="bg-slate-50/60 dark:bg-slate-950/60 rounded-xl p-2">
                           <p className="text-[10px] text-slate-500">Remaining</p>
-                          <p className="text-xs font-bold text-amber-500">{naira(remaining)}</p>
+                          <p className="text-xs font-bold text-amber-500">{formatCurrency(remaining)}</p>
                         </div>
                       </div>
 
@@ -222,7 +220,7 @@ export default function DebtsClient({ debts: initialDebts }: { debts: DebtType[]
                                 {line.name} {line.qtyLabel}
                               </span>
                               <span className="text-slate-600 dark:text-slate-400 shrink-0">
-                                {naira(line.total)}
+                                {formatCurrency(line.total)}
                               </span>
                             </div>
                           ))}
@@ -240,7 +238,7 @@ export default function DebtsClient({ debts: initialDebts }: { debts: DebtType[]
                                 <span className="text-slate-600 dark:text-slate-400">
                                   {new Date(p.createdAt).toLocaleString()} — {p.staff?.fullName || "Staff"}
                                 </span>
-                                <span className="font-semibold text-emerald-500 shrink-0">{naira(p.amount)}</span>
+                                <span className="font-semibold text-emerald-500 shrink-0">{formatCurrency(p.amount)}</span>
                               </div>
                             ))}
                           </div>
@@ -276,14 +274,14 @@ export default function DebtsClient({ debts: initialDebts }: { debts: DebtType[]
 
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">{payingDebt.customer.name}</p>
             <p className="text-xs text-slate-500 mb-4">
-              {naira(payingDebt.totalAmount - payingDebt.amountPaid)} remaining
+              {formatCurrency(payingDebt.totalAmount - payingDebt.amountPaid)} remaining
             </p>
 
             <input
               type="number"
               min={0}
               max={payingDebt.totalAmount - payingDebt.amountPaid}
-              placeholder="Amount received now (₦)"
+              placeholder="Amount received now (currencyCode)"
               value={amountInput}
               onChange={(e) => setAmountInput(e.target.value)}
               autoFocus
