@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
 import { addExpenseAction } from "@/lib/expense.actions";
+import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } from "@/lib/debt.actions";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
@@ -47,6 +48,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [pendingExpense, setPendingExpense] = useState<{ amount?: number; note?: string } | null>(null);
+  const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
   ]);
@@ -126,7 +128,40 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingExpense) {
+      if (pendingDebt) {
+        if (cancels) {
+          setPendingDebt(null);
+          say("Okay. I cancelled the debt payment. Nothing was recorded.");
+        } else if (confirms) {
+          if (!pendingDebt.debtId || !pendingDebt.amount || !pendingDebt.paymentMethod) {
+            say("I still need the customer, amount, and payment method before I can prepare this payment.");
+          } else {
+            const result = await recordDebtPaymentAction(pendingDebt.debtId, pendingDebt.amount, pendingDebt.paymentMethod);
+            setPendingDebt(null);
+            say(result.settled ? "The payment was recorded and the debt is now fully settled." : "The debt payment was recorded successfully.");
+          }
+        } else {
+          const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
+          const amount = pendingDebt.amount ?? (amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : undefined);
+          const paymentMethod = pendingDebt.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
+          let debtId = pendingDebt.debtId;
+          let customerName = pendingDebt.customerName;
+          if (!debtId) {
+            const debts = role === "owner" ? await getOpenDebtsForOwner() : await getOpenDebtsForStaff();
+            const match = debts.filter((d: any) => customerName ? d.customer.name.toLowerCase() === customerName.toLowerCase() : d.customer.name.toLowerCase() === text.toLowerCase());
+            if (match.length === 1) { debtId = match[0].id; customerName = match[0].customer.name; }
+            else if (match.length > 1) say("I found more than one open debt for that customer. Please use the customer's full name.");
+            else say("I couldn't match that to an open debt. Please give me the customer's exact name as it appears in Debtors.");
+          }
+          if (debtId) {
+            const next = { ...pendingDebt, debtId, customerName, amount, paymentMethod };
+            setPendingDebt(next);
+            if (!amount) say("How much did " + customerName + " pay?");
+            else if (!paymentMethod) say("Was the payment received by cash or transfer?");
+            else say("Please confirm: record " + amount.toLocaleString() + " received from " + customerName + " by " + paymentMethod + ". Nothing has been recorded yet. Say yes to confirm or cancel.");
+          }
+        }
+      } else if (pendingExpense) {
         if (cancels) {
           setPendingExpense(null);
           say("Okay. I cancelled that expense. Nothing has been saved.");
@@ -149,6 +184,28 @@ export default function SpeakOn({ role }: { role: Role }) {
           } else {
             say("Please say yes to save this expense, or cancel to discard it.");
           }
+        }
+      } else if (/\b(debt|debtor|owe|payment from|paid by)\b/i.test(text)) {
+        const debts = role === "owner" ? await getOpenDebtsForOwner() : await getOpenDebtsForStaff();
+        const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
+        const amount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : undefined;
+        const paymentMethod = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+        const customerQuery = text
+          .replace(/\b(record|log|a|the|debt|debtor|payment|paid|pay|from|by|customer|owe|owes|cash|transfer|naira|ngn)\b/gi, " ")
+          .replace(/(?:₦|\$|£)?\s*\d[\d,]*(?:\.\d{1,2})?/g, " ")
+          .replace(/\s+/g, " ").trim();
+        const matches = debts.filter((d: any) => customerQuery && d.customer.name.toLowerCase().includes(customerQuery.toLowerCase()));
+        if (matches.length === 1) {
+          const next = { debtId: matches[0].id, customerName: matches[0].customer.name, amount, paymentMethod };
+          setPendingDebt(next);
+          if (!amount) say("I found " + next.customerName + "'s open debt. How much did they pay?");
+          else if (!paymentMethod) say("I found " + next.customerName + "'s open debt. Was the " + amount.toLocaleString() + " received by cash or transfer?");
+          else say("Please confirm: record " + amount.toLocaleString() + " received from " + next.customerName + " by " + paymentMethod + ". Nothing has been recorded yet. Say yes to confirm or cancel.");
+        } else if (matches.length > 1) {
+          say("I found multiple matching debt records. Please give me the customer's exact full name.");
+          setPendingDebt({ amount, paymentMethod });
+        } else {
+          say(debts.length ? "I couldn't identify that customer. Check the exact name on the Debtors page; nothing has been recorded." : "There are no open debt records available to pay.");
         }
       } else if (/\b(expense|spent|spending|log.*cost)\b/i.test(text)) {
         const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
@@ -199,7 +256,7 @@ export default function SpeakOn({ role }: { role: Role }) {
                 <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={listening ? "Listening… speak now" : "Speak or type your request"} className="min-w-0 flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-3 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"/>
                 <button type="button" onClick={send} disabled={!draft.trim() || busy} className="h-11 w-11 shrink-0 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 flex items-center justify-center" aria-label="Send request"><Send size={17}/></button>
               </div>
-              <p className="text-[10px] text-slate-400 text-center">Speak On prepares supported actions for your confirmation before saving. Other workflows open their existing forms.</p>
+              <p className="text-[10px] text-slate-400 text-center">Speak On asks for confirmation before recording supported expenses and debt payments. Other workflows open their existing forms.</p>
             </div>
           </section>
         </div>
