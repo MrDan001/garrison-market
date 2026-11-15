@@ -159,7 +159,7 @@ export default function SpeakOn({ role }: { role: Role }) {
           const current = pendingConsignment.items[pendingConsignment.currentIndex];
           const match = text.match(/\b(\d+(?:\.\d+)?)\b/);
           const sold = match ? Number(match[1]) : NaN;
-          if (!Number.isFinite(sold) || sold < 0 || sold > current.quantityOut) say("Please enter a valid sold quantity between 0 and " + current.quantityOut + (current.unit || "") + " for " + current.name + ".");
+          if (!Number.isFinite(sold) || sold < 0 || sold > current.quantityOut || (pendingConsignment.kind === "standard" && !Number.isInteger(sold))) say("Please enter a valid sold quantity between 0 and " + current.quantityOut + (current.unit || "") + " for " + current.name + (pendingConsignment.kind === "standard" ? " using a whole number." : "."));
           else {
             const items = pendingConsignment.items.map((item, index) => index === pendingConsignment.currentIndex ? { ...item, quantitySold: sold } : item);
             const nextIndex = items.findIndex((item) => item.quantitySold === undefined);
@@ -355,8 +355,7 @@ export default function SpeakOn({ role }: { role: Role }) {
           }
         }
       } else if (/\bsettle\b.*\bconsignment\b|\bconsignment\b.*\bsettle\b/i.test(text)) {
-        if (role !== "staff") say("Consignment settlement is completed by the staff member who signed the stock out. I can open the owner consignment records for reconciliation.");
-        else {
+        {
           const [standard, scale] = await Promise.all([getOpenConsignmentsForStaff(), getOpenScaleConsignmentsForStaff()]);
           const query = text.replace(/\b(settle|settlement|consignment|consignments|for|the|please|of)\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
           const candidates = [
