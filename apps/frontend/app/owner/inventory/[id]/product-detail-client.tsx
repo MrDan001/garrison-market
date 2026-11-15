@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { deleteInventoryAction } from "@/lib/business.actions";
 import ProductReportTab from "@/components/ProductReportTab";
+import { useBusinessCurrency } from "@/components/BusinessCurrencyProvider";
 
 interface ProductItem {
   id: number;
@@ -38,7 +39,7 @@ interface BatchSummary {
 
 type Tab = "batches" | "details" | "report";
 
-export default function ProductDetailClient({ item, batches }: { item: ProductItem; batches: BatchSummary[] }) {
+export default function ProductDetailClient({ item, batches }: { item: ProductItem; batches: BatchSummary[] }) {\n  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("batches");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -249,8 +250,8 @@ export default function ProductDetailClient({ item, batches }: { item: ProductIt
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Pricing</p>
               <div className="bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-800">
-                <Row label="Selling Price" value={`₦${item.price.toLocaleString()}`} />
-                <Row label="Last Cost Price" value={item.costPrice != null ? `₦${item.costPrice.toLocaleString()}` : "—"} />
+                <Row label="Selling Price" value={formatCurrency(item.price)} />
+                <Row label="Last Cost Price" value={item.costPrice != null ? formatCurrency(item.costPrice) : "—"} />
                 <Row label="Margin" value={item.margin != null ? `${item.margin}%` : "—"} valueClassName="text-emerald-500 font-bold" />
               </div>
             </div>
