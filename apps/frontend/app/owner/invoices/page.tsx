@@ -287,7 +287,7 @@ export default function InvoicesPage({ searchParams }: InvoicesPageProps) {
                     <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-800 border-dashed items-center print:border-slate-700 print:dark:border-slate-300">
                       <span className="font-bold text-[var(--text-primary)]">Amount Settled</span>
                       <span className="text-base font-black text-blue-400 print:text-black">
-                        ₦{Number(selectedOrder.calculatedTotal || selectedOrder.total || 0).toLocaleString()}
+                        {formatCurrency(Number(selectedOrder.calculatedTotal || selectedOrder.total || 0))}
                       </span>
                     </div>
                   </div>
