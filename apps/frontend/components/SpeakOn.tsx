@@ -113,7 +113,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     const result = isContextualOpen && previousAction?.href
       ? { reply: "I’ll open the workflow we were just discussing.", href: previousAction.href, label: previousAction.label }
       : resolveSpeakOnRequest(text, role);
-    setMessages((prev) => [...prev, { role: "user", text }, { role: "assistant", ...result }]);
+    setMessages((prev) => [...prev, { role: "user", text }, { role: "assistant", text: result.reply, href: result.href, label: result.label }]);
     setDraft("");
     setBusy(false);
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
