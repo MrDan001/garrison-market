@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { Mic, MicOff, X, Send, Volume2, ArrowRight, MessageCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
@@ -49,7 +49,6 @@ export default function SpeakOn({ role }: { role: Role }) {
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
   ]);
   const recognitionRef = useRef<any>(null);
-  const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
@@ -86,7 +85,10 @@ export default function SpeakOn({ role }: { role: Role }) {
   useEffect(() => {
     if (!open) return;
     let timer: ReturnType<typeof window.setTimeout> | undefined;
+    let started = false;
     const beginListening = () => {
+      if (started) return;
+      started = true;
       if (timer) window.clearTimeout(timer);
       startListening();
     };
@@ -95,7 +97,7 @@ export default function SpeakOn({ role }: { role: Role }) {
       greeting.onend = beginListening;
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(greeting);
-      timer = window.setTimeout(beginListening, 1800);
+      timer = window.setTimeout(beginListening, 5000);
     } else {
       timer = window.setTimeout(beginListening, 250);
     }
@@ -119,10 +121,6 @@ export default function SpeakOn({ role }: { role: Role }) {
       window.speechSynthesis.speak(new SpeechSynthesisUtterance(result.reply));
     }
   }, [draft, busy, role, messages]);
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
 
   return (
     <>
