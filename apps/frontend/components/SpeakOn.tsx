@@ -318,35 +318,68 @@ export default function SpeakOn({ role }: { role: Role }) {
           else say("Please confirm: add " + next.quantity + " units to " + next.productName + "? Nothing has changed yet. Say yes to confirm or cancel.");
         }
       } else if (/\b(sell|sale|sold)\b/i.test(text) && /\b(kg|grams?|g|litres?|liters?|ml|millilit|scale|weight|volume)\b/i.test(text)) {
-        const mergedIntent = /\b(merged|combined)\b/i.test(text);
-        if (mergedIntent) {
-          const consignments = await getOpenScaleConsignmentsForStaff();
-          const matches = consignments.flatMap((entry: any) => (entry.scaleItems || []).map((line: any) => ({ line, entry }))).filter(({ line }: any) => text.toLowerCase().includes(String(line.scaleInventory?.name || "").toLowerCase()));
-          if (matches.length !== 1) say(matches.length ? "More than one consigned item matches. Please specify the exact item." : "I couldn't find that item in your open weight/volume consignments.");
-          else {
-            const { line } = matches[0];
-            const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
-            const method = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
-            const pending: PendingScaleSale = { mode: "merged-scale", itemId: line.id, productName: line.scaleInventory?.name || "scale item", quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || line.unit, paymentMethod: method, price: Number(line.priceAtTime) };
-            setPendingScaleSale(pending);
-            if (!pending.quantity) say("How much " + pending.productName + " was sold?");
+        const mixedIntent = /\b(mixed|combined|merged|both)\b/i.test(text) && /\b(and|plus|both)\b/i.test(text);
+        if (mixedIntent) {
+          const [standardInventory, openScaleConsignments] = await Promise.all([getInventoryForStaff(), getOpenScaleConsignmentsForStaff()]);
+          const standardMatches = standardInventory.filter((item: any) => text.toLowerCase().includes(String(item.name).toLowerCase()));
+          const scaleMatches = openScaleConsignments.flatMap((entry: any) => (entry.scaleItems || []).map((line: any) => ({ line, entry }))).filter(({ line }: any) => text.toLowerCase().includes(String(line.scaleInventory?.name || "").toLowerCase()));
+          if (standardMatches.length !== 1 || scaleMatches.length !== 1) {
+            say("For a mixed sale I need exactly one ordinary inventory item and one weight/volume item from your open consignment. Please say both exact item names.");
+          } else {
+            const standardItem = standardMatches[0];
+            const { line } = scaleMatches[0];
+            const scaleAmount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b/i);
+            const numbers = [...text.matchAll(/\b(\d+(?:\.\d+)?)\b/g)].map((m) => Number(m[1]));
+            const standardQty = numbers.find((n) => Number.isInteger(n) && n !== (scaleAmount ? Number(scaleAmount[1]) : -1));
+            const method: "cash" | "transfer" | undefined = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+            const pending: PendingMixedSale = {
+              standardItemId: standardItem.id,
+              standardName: standardItem.name,
+              standardQty,
+              standardPrice: Number(standardItem.price),
+              scaleConsignmentItemId: line.id,
+              scaleName: line.scaleInventory?.name || "scale item",
+              scaleQty: scaleAmount ? Number(scaleAmount[1]) : undefined,
+              scaleUnit: scaleAmount?.[2]?.toLowerCase() || line.unit,
+              scalePrice: Number(line.priceAtTime),
+              paymentMethod: method,
+            };
+            setPendingMixedSale(pending);
+            if (!pending.standardQty) say("I found both items. How many units of " + pending.standardName + " were sold?");
+            else if (!pending.scaleQty) say("How much " + pending.scaleName + " was sold? Include kg, g, L or ml.");
             else if (!pending.paymentMethod) say("Was the payment cash or transfer?");
-            else say("Confirm sale of " + pending.quantity + pending.unit + " of " + pending.productName + " by " + pending.paymentMethod + "? Say yes or cancel.");
+            else say("Please confirm one mixed sale: " + pending.standardQty + " × " + pending.standardName + " and " + pending.scaleQty + pending.scaleUnit + " of " + pending.scaleName + ", paid by " + pending.paymentMethod + ". Nothing has been recorded yet. Say yes to confirm or cancel.");
           }
         } else {
-          const inventory = await getScaleInventoryForStaff();
-          const matches = inventory.filter((item: any) => text.toLowerCase().includes(String(item.name).toLowerCase()));
-          if (matches.length !== 1) say(matches.length ? "More than one weight/volume item matches. Please name the exact item." : "I couldn't identify that weight/volume inventory item.");
-          else {
-            const item = matches[0];
-            const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
-            const method = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
-            const pending: PendingScaleSale = { mode: "scale", itemId: item.id, productName: item.name, quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || item.unit, paymentMethod: method, price: Number(item.price) };
-            setPendingScaleSale(pending);
-            if (!pending.quantity) say("How much " + item.name + " was sold?");
-            else if (!pending.paymentMethod) say("Was the payment cash or transfer?");
-            else say("Confirm sale of " + pending.quantity + pending.unit + " of " + item.name + " by " + pending.paymentMethod + "? Estimated total: " + (pending.quantity * pending.price).toLocaleString() + ". Say yes or cancel.");
-          }
+          const mergedIntent = /\b(merged|combined)\b/i.test(text);
+          if (mergedIntent) {
+            const consignments = await getOpenScaleConsignmentsForStaff();
+            const matches = consignments.flatMap((entry: any) => (entry.scaleItems || []).map((line: any) => ({ line, entry }))).filter(({ line }: any) => text.toLowerCase().includes(String(line.scaleInventory?.name || "").toLowerCase()));
+            if (matches.length !== 1) say(matches.length ? "More than one consigned item matches. Please specify the exact item." : "I couldn't find that item in your open weight/volume consignments.");
+            else {
+              const { line } = matches[0];
+              const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+              const method: "cash" | "transfer" | undefined = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+              const pending: PendingScaleSale = { mode: "merged-scale", itemId: line.id, productName: line.scaleInventory?.name || "scale item", quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || line.unit, paymentMethod: method, price: Number(line.priceAtTime) };
+              setPendingScaleSale(pending);
+              if (!pending.quantity) say("How much " + pending.productName + " was sold?");
+              else if (!pending.paymentMethod) say("Was the payment cash or transfer?");
+              else say("Confirm sale of " + pending.quantity + pending.unit + " of " + pending.productName + " by " + pending.paymentMethod + "? Say yes or cancel.");
+            }
+          } else {
+            const inventory = await getScaleInventoryForStaff();
+            const matches = inventory.filter((item: any) => text.toLowerCase().includes(String(item.name).toLowerCase()));
+            if (matches.length !== 1) say(matches.length ? "More than one weight/volume item matches. Please name the exact item." : "I couldn't identify that weight/volume inventory item.");
+            else {
+              const item = matches[0];
+              const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+              const method: "cash" | "transfer" | undefined = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+              const pending: PendingScaleSale = { mode: "scale", itemId: item.id, productName: item.name, quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || item.unit, paymentMethod: method, price: Number(item.price) };
+              setPendingScaleSale(pending);
+              if (!pending.quantity) say("How much " + item.name + " was sold?");
+              else if (!pending.paymentMethod) say("Was the payment cash or transfer?");
+              else say("Confirm sale of " + pending.quantity + pending.unit + " of " + item.name + " by " + pending.paymentMethod + "? Estimated total: " + (pending.quantity * pending.price).toLocaleString() + ". Say yes or cancel.");
+            }
           }
         }
       } else if (pendingSale) {
@@ -386,7 +419,7 @@ export default function SpeakOn({ role }: { role: Role }) {
         } else {
           const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
           const amount = pendingDebt.amount ?? (amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : undefined);
-          const paymentMethod = pendingDebt.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
+          const paymentMethod: "cash" | "transfer" | undefined = pendingDebt.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
           let debtId = pendingDebt.debtId;
           let customerName = pendingDebt.customerName;
           if (!debtId) {
