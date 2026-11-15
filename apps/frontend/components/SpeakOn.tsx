@@ -19,6 +19,7 @@ type PendingWastage = { mode: "submit" | "approve" | "decline"; wastageId?: numb
 type PendingConsignment = { mode: "settle"; kind: "standard" | "scale"; consignmentId: number; recipientName: string; items: { itemId: number; name: string; quantityOut: number; unit?: string; quantitySold?: number }[]; currentIndex: number };
 type PendingSignOut = { kind: "standard" | "scale"; inventoryId: number; productName: string; quantity?: number; unit?: string; recipientName?: string; recipientPhone?: string };
 type PendingScaleSale = { mode: "scale" | "merged-scale"; itemId: number; productName: string; quantity?: number; unit?: string; paymentMethod?: "cash" | "transfer"; price: number };
+type PendingMixedSale = { standardItemId: number; standardName: string; standardQty?: number; standardPrice: number; scaleConsignmentItemId: number; scaleName: string; scaleQty?: number; scaleUnit: string; scalePrice: number; paymentMethod?: "cash" | "transfer" };
 
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
@@ -65,6 +66,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [pendingConsignment, setPendingConsignment] = useState<PendingConsignment | null>(null);
   const [pendingSignOut, setPendingSignOut] = useState<PendingSignOut | null>(null);
   const [pendingScaleSale, setPendingScaleSale] = useState<PendingScaleSale | null>(null);
+  const [pendingMixedSale, setPendingMixedSale] = useState<PendingMixedSale | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
@@ -142,7 +144,41 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingScaleSale) {
+      if (pendingMixedSale) {
+        if (cancels) {
+          setPendingMixedSale(null);
+          say("I cancelled the mixed sale. No sale was recorded and no stock changed.");
+        } else if (confirms) {
+          const p = pendingMixedSale;
+          if (!p.standardQty || p.standardQty <= 0 || !Number.isInteger(p.standardQty) || !p.scaleQty || p.scaleQty <= 0 || !p.paymentMethod) {
+            say("I still need a whole-number quantity for " + p.standardName + ", a valid weight/volume quantity for " + p.scaleName + ", and the payment method.");
+          } else {
+            const result = await processMergedSaleAction(
+              [{ id: p.standardItemId, qty: p.standardQty, price: p.standardPrice }],
+              [{ consignmentItemId: p.scaleConsignmentItemId, enteredQty: p.scaleQty, enteredUnit: p.scaleUnit, price: p.scalePrice }],
+              p.paymentMethod
+            );
+            setPendingMixedSale(null);
+            say("The mixed sale containing " + p.standardName + " and " + p.scaleName + " was recorded successfully." + ("total" in result ? " Total: " + Number(result.total).toLocaleString() + "." : ""));
+          }
+        } else {
+          const method: "cash" | "transfer" | undefined = pendingMixedSale.paymentMethod ?? (/\\btransfer\\b/i.test(text) ? "transfer" : /\\bcash\\b/i.test(text) ? "cash" : undefined);
+          const scaleAmount = text.match(/\\b(\\d+(?:\\.\\d+)?)\\s*(kg|g|l|ml)\\b/i);
+          const standardAmount = text.match(/\\b(\\d+)\\b/);
+          const next = {
+            ...pendingMixedSale,
+            standardQty: pendingMixedSale.standardQty ?? (standardAmount ? Number(standardAmount[1]) : undefined),
+            scaleQty: pendingMixedSale.scaleQty ?? (scaleAmount ? Number(scaleAmount[1]) : undefined),
+            scaleUnit: scaleAmount?.[2]?.toLowerCase() || pendingMixedSale.scaleUnit,
+            paymentMethod: method,
+          };
+          setPendingMixedSale(next);
+          if (!next.standardQty) say("How many units of " + next.standardName + " were sold?");
+          else if (!next.scaleQty) say("How much " + next.scaleName + " was sold? Include kg, g, L or ml.");
+          else if (!next.paymentMethod) say("Was the payment cash or transfer?");
+          else say("Please confirm one mixed sale: " + next.standardQty + " × " + next.standardName + " and " + next.scaleQty + next.scaleUnit + " of " + next.scaleName + ", paid by " + next.paymentMethod + ". Nothing has been recorded yet. Say yes to confirm or cancel.");
+        }
+      } else if (pendingScaleSale) {
         if (cancels) { setPendingScaleSale(null); say("I cancelled that weight/volume sale. No sale or stock change was made."); }
         else if (confirms) {
           if (!pendingScaleSale.quantity || pendingScaleSale.quantity <= 0 || !pendingScaleSale.unit || !pendingScaleSale.paymentMethod) say("I still need a valid quantity, unit and payment method.");
@@ -310,6 +346,7 @@ export default function SpeakOn({ role }: { role: Role }) {
             if (!pending.quantity) say("How much " + item.name + " was sold?");
             else if (!pending.paymentMethod) say("Was the payment cash or transfer?");
             else say("Confirm sale of " + pending.quantity + pending.unit + " of " + item.name + " by " + pending.paymentMethod + "? Estimated total: " + (pending.quantity * pending.price).toLocaleString() + ". Say yes or cancel.");
+          }
           }
         }
       } else if (pendingSale) {
@@ -557,7 +594,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale]);
 
   return (
     <>
