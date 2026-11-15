@@ -378,6 +378,7 @@ function AddExpenseModal({
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const { currencyCode } = useBusinessCurrency();
   const [categoryId, setCategoryId] = useState<number | "">("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
