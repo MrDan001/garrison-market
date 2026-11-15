@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSpeakOnRequest } from "../SpeakOn";
+import { resolveSpeakOnRequest } from "@/lib/speak-on-routing";
 
 describe("Speak On request routing", () => {
   it("directs staff product creation to the owner without opening a form", () => {
