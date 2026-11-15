@@ -99,7 +99,7 @@ export default function InventorySearch({ items }: { items: InventoryItem[] }) {
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{item.name}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    ₦{Number(item.price).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                    {formatCurrency(Number(item.price))}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
