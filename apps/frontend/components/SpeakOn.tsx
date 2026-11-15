@@ -6,10 +6,10 @@ import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
 import { addExpenseAction } from "@/lib/expense.actions";
 import { addStockToInventoryAction, getInventoryForStaff, processSaleAction } from "@/lib/business.actions";
 import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } from "@/lib/debt.actions";
-import { getScaleInventoryForStaff } from "@/lib/scale-inventory.actions";
+import { getScaleInventoryForStaff, processScaleSaleAction } from "@/lib/scale-inventory.actions";
 import { submitWastageAction, getWastageForOwner, approveWastageAction, declineWastageAction } from "@/lib/scale-wastage.actions";
 import { WASTAGE_REASONS, WASTAGE_REASON_LABELS } from "@/lib/wastage-constants";
-import { getOpenConsignmentsForStaff, getOpenScaleConsignmentsForStaff, settleConsignment, settleScaleConsignment, signOutConsignment, signOutScaleConsignment } from "@/lib/consignment.actions";
+import { getOpenConsignmentsForStaff, getOpenScaleConsignmentsForStaff, settleConsignment, settleScaleConsignment, signOutConsignment, signOutScaleConsignment, processMergedSaleAction } from "@/lib/consignment.actions";
 
 type Role = "owner" | "staff";
 type Entry = { role: "user" | "assistant"; text: string; href?: string; label?: string };
@@ -18,6 +18,7 @@ type PendingStock = { inventoryId?: number; productName?: string; quantity?: num
 type PendingWastage = { mode: "submit" | "approve" | "decline"; wastageId?: number; itemId?: number; productName?: string; quantity?: number; unit?: string; reason?: string; note?: string; declineReason?: string };
 type PendingConsignment = { mode: "settle"; kind: "standard" | "scale"; consignmentId: number; recipientName: string; items: { itemId: number; name: string; quantityOut: number; unit?: string; quantitySold?: number }[]; currentIndex: number };
 type PendingSignOut = { kind: "standard" | "scale"; inventoryId: number; productName: string; quantity?: number; unit?: string; recipientName?: string; recipientPhone?: string };
+type PendingScaleSale = { mode: "scale" | "merged-scale"; itemId: number; productName: string; quantity?: number; unit?: string; paymentMethod?: "cash" | "transfer"; price: number };
 
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
@@ -63,6 +64,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [pendingWastage, setPendingWastage] = useState<PendingWastage | null>(null);
   const [pendingConsignment, setPendingConsignment] = useState<PendingConsignment | null>(null);
   const [pendingSignOut, setPendingSignOut] = useState<PendingSignOut | null>(null);
+  const [pendingScaleSale, setPendingScaleSale] = useState<PendingScaleSale | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
@@ -143,7 +145,28 @@ export default function SpeakOn({ role }: { role: Role }) {
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
 
-      if (pendingSignOut) {
+      if (pendingScaleSale) {
+        if (cancels) { setPendingScaleSale(null); say("I cancelled that weight/volume sale. No sale or stock change was made."); }
+        else if (confirms) {
+          if (!pendingScaleSale.quantity || pendingScaleSale.quantity <= 0 || !pendingScaleSale.unit || !pendingScaleSale.paymentMethod) say("I still need a valid quantity, unit and payment method.");
+          else {
+            const result = pendingScaleSale.mode === "scale"
+              ? await processScaleSaleAction([{ id: pendingScaleSale.itemId, enteredQty: pendingScaleSale.quantity, enteredUnit: pendingScaleSale.unit, price: pendingScaleSale.price }], pendingScaleSale.paymentMethod)
+              : await processMergedSaleAction([], [{ consignmentItemId: pendingScaleSale.itemId, enteredQty: pendingScaleSale.quantity, enteredUnit: pendingScaleSale.unit, price: pendingScaleSale.price }], pendingScaleSale.paymentMethod);
+            setPendingScaleSale(null);
+            say("The " + pendingScaleSale.productName + " sale was recorded successfully. Total: " + Number(result.total).toLocaleString() + ".");
+          }
+        } else {
+          const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+          const method = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+          const next = { ...pendingScaleSale, quantity: pendingScaleSale.quantity ?? (amount ? Number(amount[1]) : undefined), unit: pendingScaleSale.unit ?? amount?.[2]?.toLowerCase(), paymentMethod: pendingScaleSale.paymentMethod ?? method };
+          setPendingScaleSale(next);
+          if (!next.quantity) say("How much " + next.productName + " was sold?");
+          else if (!next.unit) say("Which unit was used: kg, g, L or ml?");
+          else if (!next.paymentMethod) say("Was the payment cash or transfer?");
+          else say("Confirm sale of " + next.quantity + next.unit + " of " + next.productName + " by " + next.paymentMethod + "? Estimated total: " + (next.quantity * next.price).toLocaleString() + ". Nothing has been recorded yet. Say yes or cancel.");
+        }
+      } else if (pendingSignOut) {
         if (cancels) { setPendingSignOut(null); say("I cancelled the consignment sign-out. No stock was moved."); }
         else if (confirms) {
           if (!pendingSignOut.quantity || pendingSignOut.quantity <= 0 || !pendingSignOut.recipientName?.trim() || !pendingSignOut.recipientPhone?.trim() || (pendingSignOut.kind === "scale" && !pendingSignOut.unit)) say("I still need the quantity, recipient name and phone number.");
@@ -260,6 +283,37 @@ export default function SpeakOn({ role }: { role: Role }) {
           setPendingStock(next);
           if (!next.quantity) say("How many units should I add to " + (next.productName || "this product") + "?");
           else say("Please confirm: add " + next.quantity + " units to " + next.productName + "? Nothing has changed yet. Say yes to confirm or cancel.");
+        }
+      } else if (/\b(sell|sale|sold)\b/i.test(text) && /\b(kg|grams?|g|litres?|liters?|ml|millilit|scale|weight|volume)\b/i.test(text)) {
+        const mergedIntent = /\b(merged|combined)\b/i.test(text);
+        if (mergedIntent) {
+          const consignments = await getOpenScaleConsignmentsForStaff();
+          const matches = consignments.flatMap((entry: any) => (entry.scaleItems || []).map((line: any) => ({ line, entry }))).filter(({ line }: any) => text.toLowerCase().includes(String(line.scaleInventory?.name || "").toLowerCase()));
+          if (matches.length !== 1) say(matches.length ? "More than one consigned item matches. Please specify the exact item." : "I couldn't find that item in your open weight/volume consignments.");
+          else {
+            const { line } = matches[0];
+            const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+            const method = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+            const pending: PendingScaleSale = { mode: "merged-scale", itemId: line.id, productName: line.scaleInventory?.name || "scale item", quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || line.unit, paymentMethod: method, price: Number(line.priceAtTime) };
+            setPendingScaleSale(pending);
+            if (!pending.quantity) say("How much " + pending.productName + " was sold?");
+            else if (!pending.paymentMethod) say("Was the payment cash or transfer?");
+            else say("Confirm sale of " + pending.quantity + pending.unit + " of " + pending.productName + " by " + pending.paymentMethod + "? Say yes or cancel.");
+          }
+        } else {
+          const inventory = await getScaleInventoryForStaff();
+          const matches = inventory.filter((item: any) => text.toLowerCase().includes(String(item.name).toLowerCase()));
+          if (matches.length !== 1) say(matches.length ? "More than one weight/volume item matches. Please name the exact item." : "I couldn't identify that weight/volume inventory item.");
+          else {
+            const item = matches[0];
+            const amount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)?\b/i);
+            const method = /\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined;
+            const pending: PendingScaleSale = { mode: "scale", itemId: item.id, productName: item.name, quantity: amount ? Number(amount[1]) : undefined, unit: amount?.[2]?.toLowerCase() || item.unit, paymentMethod: method, price: Number(item.price) };
+            setPendingScaleSale(pending);
+            if (!pending.quantity) say("How much " + item.name + " was sold?");
+            else if (!pending.paymentMethod) say("Was the payment cash or transfer?");
+            else say("Confirm sale of " + pending.quantity + pending.unit + " of " + item.name + " by " + pending.paymentMethod + "? Estimated total: " + (pending.quantity * pending.price).toLocaleString() + ". Say yes or cancel.");
+          }
         }
       } else if (pendingSale) {
         if (cancels) {
@@ -506,7 +560,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale]);
 
   return (
     <>
