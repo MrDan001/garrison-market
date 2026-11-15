@@ -34,6 +34,7 @@ export default function StaffConsignmentClient({
   openConsignments: any[];
   history: any[];
 }) {
+  const { formatCurrency } = useBusinessCurrency();
   const router = useRouter();
   const [tab, setTab] = useState<"new" | "open" | "history">(openConsignments.length > 0 ? "open" : "new");
 
