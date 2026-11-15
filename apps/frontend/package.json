@@ -29,6 +29,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "test:ask-me:e2e": "node scripts/ask-me-e2e.mjs",
     "seed-db": "tsx prisma/seed.ts",
     "generate-vapid-keys": "tsx scripts/generate-vapid-keys.ts",
