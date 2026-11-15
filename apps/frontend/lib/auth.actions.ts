@@ -29,6 +29,7 @@ import { resolveWaitlistAttributionByEmail, markWaitlistSignupRegistered } from 
 import { checkRateLimit, resetRateLimit, getClientIp } from "@/lib/rate-limit";
 import { isRegistrationOpen } from "@/lib/system-settings.actions";
 import { syncMarketingConsentForUser } from "@/lib/marketing-consent";
+import { BUSINESS_COUNTRIES, isSupportedCurrency } from "@/lib/business-localization";
 
 function isNextRedirectError(error: unknown): boolean {
   return (
@@ -245,6 +246,20 @@ export async function registerOwnerAction(formData: FormData) {
 
   const consentRecordedAt = new Date();
 
+  const businessCountry = String(data.businessCountry || "NG").trim().toUpperCase();
+  const currencyCode = String(data.currencyCode || "NGN").trim().toUpperCase();
+  const phoneNumber = String(data.phoneNumber || "").replace(/[\\s().-]/g, "");
+
+  if (!BUSINESS_COUNTRIES.some((country) => country.code === businessCountry)) {
+    return { error: "Please select a supported business country." };
+  }
+  if (!isSupportedCurrency(currencyCode)) {
+    return { error: "Please select a supported business currency." };
+  }
+  if (!/^\\+[1-9]\\d{7,14}$/.test(phoneNumber)) {
+    return { error: "Enter a valid international phone number, including your country calling code." };
+  }
+
   const passwordCheck = validatePassword(data.password as string);
   if (!passwordCheck.valid) {
     return { error: passwordCheck.error };
@@ -298,7 +313,9 @@ export async function registerOwnerAction(formData: FormData) {
         password: hashedPassword,
         fullName: data.fullName as string,
         storeName: targetStoreName || "N/A",
-        phoneNumber: data.phoneNumber as string,
+        phoneNumber,
+        businessCountry,
+        currencyCode,
         shopAddress: (data.shopAddress as string) || null,
         shopCity: (data.shopCity as string) || null,
         shopState: (data.shopState as string) || null,
