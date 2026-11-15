@@ -354,11 +354,11 @@ export default function ReportsReviewClient({
       <div className="grid grid-cols-2 gap-2.5 mb-3">
         <div className="bg-slate-500/10 border border-slate-500/20 rounded-xl p-3">
           <p className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1"><List size={10} /> List</p>
-          <p className="text-sm font-black text-[var(--text-primary)] mt-1">₦{listTotal.toLocaleString()}</p>
+          <p className="text-sm font-black text-[var(--text-primary)] mt-1">{formatCurrency(listTotal)}</p>
         </div>
         <div className="bg-slate-500/10 border border-slate-500/20 rounded-xl p-3">
           <p className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1"><ScaleIcon size={10} /> Scale</p>
-          <p className="text-sm font-black text-[var(--text-primary)] mt-1">₦{scaleTotal.toLocaleString()}</p>
+          <p className="text-sm font-black text-[var(--text-primary)] mt-1">{formatCurrency(scaleTotal)}</p>
         </div>
       </div>
     )}
