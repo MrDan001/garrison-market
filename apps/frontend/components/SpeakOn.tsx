@@ -162,9 +162,9 @@ export default function SpeakOn({ role }: { role: Role }) {
             say("The mixed sale containing " + p.standardName + " and " + p.scaleName + " was recorded successfully." + ("total" in result ? " Total: " + Number(result.total).toLocaleString() + "." : ""));
           }
         } else {
-          const method: "cash" | "transfer" | undefined = pendingMixedSale.paymentMethod ?? (/\\btransfer\\b/i.test(text) ? "transfer" : /\\bcash\\b/i.test(text) ? "cash" : undefined);
-          const scaleAmount = text.match(/\\b(\\d+(?:\\.\\d+)?)\\s*(kg|g|l|ml)\\b/i);
-          const standardAmount = text.match(/\\b(\\d+)\\b/);
+          const method: "cash" | "transfer" | undefined = pendingMixedSale.paymentMethod ?? (/\btransfer\b/i.test(text) ? "transfer" : /\bcash\b/i.test(text) ? "cash" : undefined);
+          const scaleAmount = text.match(/\b(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b/i);
+          const standardAmount = text.match(/\b(\d+)\b/);
           const next = {
             ...pendingMixedSale,
             standardQty: pendingMixedSale.standardQty ?? (standardAmount ? Number(standardAmount[1]) : undefined),
