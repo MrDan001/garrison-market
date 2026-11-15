@@ -13,7 +13,7 @@ type InventoryItem = {
 };
 
 export default function InventorySearch({ items }: { items: InventoryItem[] }) {
-  const { formatCurrency, currencyCode } = useBusinessCurrency();
+  const { formatCurrency } = useBusinessCurrency();
   const [query, setQuery] = useState("");
 
   const filtered = items.filter((item) =>
