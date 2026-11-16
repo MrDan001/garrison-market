@@ -23,6 +23,7 @@ type PendingSignOut = { kind: "standard" | "scale"; inventoryId: number; product
 type PendingScaleSale = { mode: "scale" | "merged-scale"; itemId: number; productName: string; quantity?: number; unit?: string; paymentMethod?: "cash" | "transfer"; price: number };
 type PendingMixedSale = { standardItemId: number; standardName: string; standardQty?: number; standardPrice: number; scaleConsignmentItemId: number; scaleName: string; scaleQty?: number; scaleUnit: string; scalePrice: number; paymentMethod?: "cash" | "transfer" };
 type PendingBasketSale = { items: { inventoryId: number; productName: string; quantity?: number; unitPrice: number }[]; paymentMethod?: "cash" | "transfer" };
+type PendingCreditSale = { inventoryId?: number; productName?: string; unitPrice?: number; quantity?: number; targetAmount?: number; customerName?: string; customerPhone?: string };
 
 export default function SpeakOn({ role }: { role: Role }) {
   const [open, setOpen] = useState(false);
@@ -39,6 +40,7 @@ export default function SpeakOn({ role }: { role: Role }) {
   const [pendingMixedSale, setPendingMixedSale] = useState<PendingMixedSale | null>(null);
   const [pendingBasketSale, setPendingBasketSale] = useState<PendingBasketSale | null>(null);
   const [pendingDebt, setPendingDebt] = useState<{ debtId?: number; customerName?: string; amount?: number; paymentMethod?: "cash" | "transfer" } | null>(null);
+  const [pendingCreditSale, setPendingCreditSale] = useState<PendingCreditSale | null>(null);
   const [messages, setMessages] = useState<Entry[]>([
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
   ]);
@@ -80,7 +82,7 @@ export default function SpeakOn({ role }: { role: Role }) {
       const recognition = new SpeechRecognition();
       recognition.lang = "en-NG";
       recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+      recognition.maxAlternatives = 3;
       recognition.onstart = () => setListening(true);
       recognition.onresult = (event: any) => {
         const spoken = String(event.results?.[0]?.[0]?.transcript ?? "").trim();
@@ -181,7 +183,7 @@ export default function SpeakOn({ role }: { role: Role }) {
       const normalized = text.toLowerCase();
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
-      const hasPendingAction = Boolean(pendingBasketSale || pendingMixedSale || pendingScaleSale || pendingSignOut || pendingConsignment || pendingWastage || pendingStock || pendingSale || pendingDebt || pendingExpense);
+      const hasPendingAction = Boolean(pendingBasketSale || pendingMixedSale || pendingScaleSale || pendingSignOut || pendingConsignment || pendingWastage || pendingStock || pendingSale || pendingCreditSale || pendingDebt || pendingExpense);
       const isInformationalQuestion = /^(how|what|which|when|where|why|who|can you|could you|tell me|show me|explain|do we|is there|are there)\\b/i.test(text) || /\\?$/.test(text);
 
       if (!hasPendingAction && isInformationalQuestion) {
@@ -478,6 +480,36 @@ export default function SpeakOn({ role }: { role: Role }) {
           else if (!next.paymentMethod) say("Was the payment received by cash or transfer?");
           else say("Please confirm: sell " + next.quantity + " × " + next.productName + " by " + next.paymentMethod + " (estimated total " + (Number(next.unitPrice || 0) * next.quantity).toLocaleString() + "). Nothing has been recorded yet. Say yes to confirm or cancel.");
         }
+      } else if (pendingCreditSale) {
+        if (cancels) {
+          setPendingCreditSale(null);
+          say("I cancelled the credit sale. No sale, debt or stock change was recorded.");
+        } else if (confirms) {
+          const p = pendingCreditSale;
+          if (!p.inventoryId || !p.quantity || !Number.isInteger(p.quantity) || p.quantity <= 0 || !p.customerName?.trim() || !p.customerPhone?.trim() || !p.targetAmount || !p.unitPrice || p.quantity * p.unitPrice !== p.targetAmount) {
+            say("I still need a matching product, whole-number quantity, customer name and phone number, and a total that matches the outstanding amount.");
+          } else {
+            const result = await processSaleAction([{ id: p.inventoryId, qty: p.quantity }], "cash", p.customerName, p.customerPhone, "partial", 0);
+            setPendingCreditSale(null);
+            say("The credit sale was recorded successfully for " + p.customerName + ": " + p.quantity + " × " + p.productName + ". Total and outstanding debt: " + Number(("total" in result ? result.total : p.targetAmount)).toLocaleString() + ". No payment was collected at checkout.");
+          }
+        } else {
+          const phoneMatch = text.match(/(?:\+?\d[\d\s()-]{6,}\d)/);
+          const quantityMatch = text.match(/\b(\d+)\b/);
+          const next = {
+            ...pendingCreditSale,
+            customerPhone: pendingCreditSale.customerPhone ?? phoneMatch?.[0].replace(/\D/g, ""),
+            quantity: pendingCreditSale.quantity ?? (quantityMatch ? Number(quantityMatch[1]) : undefined),
+            customerName: pendingCreditSale.customerName ?? (/\b(?:customer|name)\s+(?:is\s+)?([a-z][a-z .'-]{1,40})/i.exec(text)?.[1]?.trim()),
+          };
+          setPendingCreditSale(next);
+          if (!next.inventoryId) say("Which exact product in your active inventory was supplied?");
+          else if (!next.quantity) say("How many units of " + next.productName + " were supplied? Its listed unit price is " + Number(next.unitPrice).toLocaleString() + ".");
+          else if (next.quantity * Number(next.unitPrice) !== next.targetAmount) say("At the listed price, " + next.quantity + " × " + next.productName + " totals " + (next.quantity * Number(next.unitPrice)).toLocaleString() + ", not " + Number(next.targetAmount).toLocaleString() + ". Please clarify the quantity or the correct outstanding amount.");
+          else if (!next.customerName) say("Who is the customer who owes this amount?");
+          else if (!next.customerPhone) say("What is " + next.customerName + "'s phone number? A phone number is required to link and follow up this debt.");
+          else say("Please confirm this credit sale: " + next.quantity + " × " + next.productName + " for " + next.customerName + " (" + next.customerPhone + "). Total sale and outstanding balance: " + Number(next.targetAmount).toLocaleString() + ". No payment was collected. Stock and debt will change only after you confirm. Say yes or cancel.");
+        }
       } else if (pendingDebt) {
         if (cancels) {
           setPendingDebt(null);
@@ -665,6 +697,32 @@ export default function SpeakOn({ role }: { role: Role }) {
         } else {
           say("I couldn't match that product in the active store's inventory. Nothing has been recorded. Please use its exact inventory name.");
         }
+      } else if (/\b(outstanding debt|credit sale|customer owes|owes us|record.*debt)\b/i.test(text)) {
+        const inventory = await getInventoryForStaff();
+        const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
+        const targetAmount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : undefined;
+        const productMatches = inventory.filter((item: any) => item.name && text.toLowerCase().includes(String(item.name).toLowerCase()));
+        const nameMatch = /\b(?:from|for)\s+([a-z][a-z .'-]{1,40}?)(?=\s+(?:is|owes|owing|customer|₦|\d)|$)/i.exec(text);
+        if (productMatches.length > 1) {
+          say("I found more than one matching inventory product. Please give me the exact product name.");
+        } else {
+          const product = productMatches[0];
+          const quantityMatch = text.match(/\b(\d+)\s*(?:units?|pieces?|pcs?|cartons?)\b/i);
+          const quantityFromAmount = product && targetAmount && Number(product.price) > 0 && Number.isInteger(targetAmount / Number(product.price)) ? targetAmount / Number(product.price) : undefined;
+          const pending: PendingCreditSale = {
+            inventoryId: product?.id, productName: product?.name,
+            unitPrice: product ? Number(product.price) : undefined,
+            targetAmount, quantity: quantityMatch ? Number(quantityMatch[1]) : quantityFromAmount,
+            customerName: nameMatch?.[1]?.trim(),
+          };
+          setPendingCreditSale(pending);
+          if (!targetAmount) say("What is the exact outstanding amount?");
+          else if (!product) say("I have the outstanding amount. Which exact product in your active inventory was supplied?");
+          else if (!pending.quantity) say("I found " + product.name + " at " + Number(product.price).toLocaleString() + " per unit. How many units were supplied?");
+          else if (pending.quantity * Number(product.price) !== targetAmount) say("The listed price gives " + (pending.quantity * Number(product.price)).toLocaleString() + ", which does not match the outstanding amount of " + targetAmount.toLocaleString() + ". Please clarify the quantity or amount.");
+          else if (!pending.customerName) say("Which customer owes this amount?");
+          else say("I found " + product.name + " and " + pending.customerName + ". What is the customer's phone number so I can link the debt to the right customer?");
+        }
       } else if (/\b(debt|debtor|owe|payment from|paid by)\b/i.test(text)) {
         const debts = role === "owner" ? await getOpenDebtsForOwner() : await getOpenDebtsForStaff();
         const amountMatch = text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/);
@@ -725,7 +783,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale, pendingBasketSale, startListening]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale, pendingBasketSale, pendingCreditSale, startListening]);
 
   sendRef.current = send;
 
