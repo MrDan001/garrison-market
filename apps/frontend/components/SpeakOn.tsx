@@ -715,7 +715,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale, pendingBasketSale]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale, pendingBasketSale, startListening]);
 
   sendRef.current = send;
 
