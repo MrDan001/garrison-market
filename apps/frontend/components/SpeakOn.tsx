@@ -42,6 +42,7 @@ export default function SpeakOn({ role }: { role: Role }) {
     { role: "assistant", text: "Hi, I’m Speak On. Tell me what you want to do in the store. You can speak or type, and I’ll guide you to the right existing workflow." },
   ]);
   const recognitionRef = useRef<any>(null);
+  const micPermissionHelpShownRef = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -98,12 +99,18 @@ export default function SpeakOn({ role }: { role: Role }) {
     } catch (error: any) {
       const denied = error?.name === "NotAllowedError" || error?.name === "SecurityError";
       const unavailable = error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError";
-      const message = denied
-        ? "Microphone permission is not granted. Allow microphone access for Garrison Market in Chrome's site settings, then tap the microphone again."
-        : unavailable
+      if (denied) {
+        // Chrome suppresses the native prompt after a site permission has been blocked.
+        if (!micPermissionHelpShownRef.current) {
+          micPermissionHelpShownRef.current = true;
+          setMessages((prev) => [...prev, { role: "assistant", text: "Chrome has microphone access set to Block for Garrison Market, so it cannot show the Allow popup again yet. To turn it back on: open Chrome Settings → Site settings → Microphone → gmstock.co → Allow. Then return here and tap the purple microphone. If Chrome asks, choose Allow. You only need to do this once." }]);
+        }
+      } else {
+        const message = unavailable
           ? "No microphone was found on this device. Check your phone's microphone and try again."
           : "Chrome could not start microphone access (" + String(error?.name || "unknown error") + "). Check the app's microphone permission and try again.";
-      setMessages((prev) => [...prev, { role: "assistant", text: message }]);
+        setMessages((prev) => [...prev, { role: "assistant", text: message }]);
+      }
       setListening(false);
     }
   }, [listening]);
