@@ -105,14 +105,13 @@ const securityHeaders = [
   // gmstock.co, not just this app. Add "; preload" yourself once you're
   // sure every subdomain you have or will ever add is HTTPS-only.
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
-  // Conservative and narrow on purpose: only disables hardware/sensor
-  // APIs nothing in this codebase uses (checked — no camera, mic,
-  // geolocation, USB, or Payment Request API usage anywhere). Push
-  // notifications are unaffected — that's a separate browser permission,
-  // not something Permissions-Policy gates.
+  // Keep unused hardware/sensor APIs disabled, but explicitly allow the
+  // same-origin microphone used by Speak On. microphone=() blocks
+  // getUserMedia() even when Android and Chrome site permissions are enabled.
+  // Push notifications use their own browser permission.
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), usb=(), gyroscope=(), magnetometer=(), payment=()",
+    value: "camera=(), microphone=(self), geolocation=(), usb=(), gyroscope=(), magnetometer=(), payment=()",
   },
 ];
 

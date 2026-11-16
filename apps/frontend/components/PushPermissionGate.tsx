@@ -107,8 +107,8 @@ export default function PushPermissionGate({ children }: { children: React.React
                 Turn On Notifications
               </h2>
               <p className="text-sm text-slate-500 leading-relaxed">
-                Garrison Market needs your permission to send order alerts, admin updates, and announcements — even
-                when the app is closed. Please allow notifications to continue.
+                Turn on notifications to receive order alerts, admin updates, and announcements — even when the app
+                is closed. You can also continue now and enable notifications later in your browser settings.
               </p>
             </div>
             <div className="px-6 pb-6 pt-1">
@@ -121,8 +121,15 @@ export default function PushPermissionGate({ children }: { children: React.React
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Bell size={16} />}
                 {busy ? "Requesting…" : "Enable Notifications"}
               </button>
-              <p className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 mt-3">
-                <ShieldAlert size={12} /> Required to access your dashboard
+              <button
+                type="button"
+                onClick={() => setDismissed(true)}
+                className="w-full mt-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:text-[var(--text-primary)] transition-colors"
+              >
+                Continue without notifications
+              </button>
+              <p className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 mt-2">
+                <ShieldAlert size={12} /> You can enable notifications later
               </p>
             </div>
           </>
