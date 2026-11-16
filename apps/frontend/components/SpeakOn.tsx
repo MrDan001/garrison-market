@@ -181,8 +181,18 @@ export default function SpeakOn({ role }: { role: Role }) {
       const normalized = text.toLowerCase();
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
+      const hasPendingAction = Boolean(pendingBasketSale || pendingMixedSale || pendingScaleSale || pendingSignOut || pendingConsignment || pendingWastage || pendingStock || pendingSale || pendingDebt || pendingExpense);
+      const isInformationalQuestion = /^(how|what|which|when|where|why|who|can you|could you|tell me|show me|explain|do we|is there|are there)\\b/i.test(text) || /\\?$/.test(text);
 
-      if (pendingBasketSale) {
+      if (!hasPendingAction && isInformationalQuestion) {
+        const history = [
+          ...messages.slice(-8).map((message) => ({ role: message.role, content: message.text })),
+          { role: "user" as const, content: text },
+        ];
+        const result = await askStoreAssistant(history);
+        if (result.success && result.reply) say(result.reply);
+        else say("I’m having trouble reaching the store assistant right now. " + (result.success ? "Please try asking again." : result.error));
+      } else if (pendingBasketSale) {
         if (cancels) {
           setPendingBasketSale(null);
           say("I cancelled the basket sale. No items were sold and stock was not changed.");
