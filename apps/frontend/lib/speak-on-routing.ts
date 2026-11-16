@@ -1,3 +1,5 @@
+type Role = "owner" | "staff";
+
 export const resolveSpeakOnRequest = (text: string, role: Role): { reply: string; href?: string; label?: string } => {
   const q = text.toLowerCase();
   if (/\b(add|create|new)\b.*\b(product|item)\b/.test(q)) {
