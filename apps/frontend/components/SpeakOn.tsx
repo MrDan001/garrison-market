@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
 import { resolveSpeakOnRequest } from "@/lib/speak-on-routing";
+import { askStoreAssistant } from "@/lib/store-assistant.actions";
 import { addExpenseAction } from "@/lib/expense.actions";
 import { addStockToInventoryAction, getInventoryForStaff, processSaleAction } from "@/lib/business.actions";
 import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } from "@/lib/debt.actions";
@@ -43,6 +44,8 @@ export default function SpeakOn({ role }: { role: Role }) {
   ]);
   const recognitionRef = useRef<any>(null);
   const micPermissionHelpShownRef = useRef(false);
+  const sendRef = useRef<((spokenText?: string) => void) | null>(null);
+  const voiceConversationRef = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -81,7 +84,10 @@ export default function SpeakOn({ role }: { role: Role }) {
       recognition.onstart = () => setListening(true);
       recognition.onresult = (event: any) => {
         const spoken = String(event.results?.[0]?.[0]?.transcript ?? "").trim();
-        if (spoken) setDraft((current) => current ? current + " " + spoken : spoken);
+        // In voice-conversation mode, a completed utterance is submitted directly
+        // to the assistant. It is not left sitting in the text field for manual send.
+        if (spoken && voiceConversationRef.current) sendRef.current?.(spoken);
+        else if (spoken) setDraft((current) => current ? current + " " + spoken : spoken);
       };
       recognition.onerror = (event: any) => {
         const messages: Record<string, string> = {
@@ -150,8 +156,8 @@ export default function SpeakOn({ role }: { role: Role }) {
     };
   }, [open]);
 
-  const send = useCallback(async () => {
-    const text = draft.trim();
+  const send = useCallback(async (spokenText?: string) => {
+    const text = (spokenText ?? draft).trim();
     if (!text || busy) return;
     setBusy(true);
     setMessages((prev) => [...prev, { role: "user", text }]);
@@ -161,7 +167,13 @@ export default function SpeakOn({ role }: { role: Role }) {
       setMessages((prev) => [...prev, { role: "assistant", text: reply, href, label }]);
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(new SpeechSynthesisUtterance(reply));
+        const utterance = new SpeechSynthesisUtterance(reply);
+        utterance.onend = () => {
+          // Keep the voice session conversational: after the assistant finishes
+          // speaking, reopen recognition for the user's next turn.
+          if (voiceConversationRef.current) window.setTimeout(() => startListening(), 350);
+        };
+        window.speechSynthesis.speak(utterance);
       }
     };
 
@@ -169,8 +181,18 @@ export default function SpeakOn({ role }: { role: Role }) {
       const normalized = text.toLowerCase();
       const confirms = /^(yes|confirm|confirm it|go ahead|do it|save it)$/i.test(normalized);
       const cancels = /^(no|cancel|stop|don't|dont)$/i.test(normalized);
+      const hasPendingAction = Boolean(pendingBasketSale || pendingMixedSale || pendingScaleSale || pendingSignOut || pendingConsignment || pendingWastage || pendingStock || pendingSale || pendingDebt || pendingExpense);
+      const isInformationalQuestion = /^(how|what|which|when|where|why|who|can you|could you|tell me|show me|explain|do we|is there|are there)\\b/i.test(text) || /\\?$/.test(text);
 
-      if (pendingBasketSale) {
+      if (!hasPendingAction && isInformationalQuestion) {
+        const history = [
+          ...messages.slice(-8).map((message) => ({ role: message.role, content: message.text })),
+          { role: "user" as const, content: text },
+        ];
+        const result = await askStoreAssistant(history);
+        if (result.success && result.reply) say(result.reply);
+        else say("I’m having trouble reaching the store assistant right now. " + (result.success ? "Please try asking again." : result.error));
+      } else if (pendingBasketSale) {
         if (cancels) {
           setPendingBasketSale(null);
           say("I cancelled the basket sale. No items were sold and stock was not changed.");
@@ -678,17 +700,34 @@ export default function SpeakOn({ role }: { role: Role }) {
       } else {
         const previousAction = [...messages].reverse().find((message) => message.role === "assistant" && message.href);
         const isContextualOpen = /^(open it|go there|yes|continue|take me there)$/i.test(text);
-        const result = isContextualOpen && previousAction?.href
-          ? { reply: "I’ll open the workflow we were just discussing.", href: previousAction.href, label: previousAction.label }
-          : resolveSpeakOnRequest(text, role);
-        say(result.reply, result.href, result.label);
+        if (isContextualOpen && previousAction?.href) {
+          say("I’ll open the workflow we were just discussing.", previousAction.href, previousAction.label);
+        } else {
+          // Speak On shares the authenticated, store-scoped Ask Me intelligence.
+          // The conversation history lets it answer follow-up questions naturally;
+          // it is read-only here. Mutations still use the explicit, confirmed
+          // Speak On action flows above and the existing server actions.
+          const history = [
+            ...messages.slice(-8).map((message) => ({ role: message.role, content: message.text })),
+            { role: "user" as const, content: text },
+          ];
+          const result = await askStoreAssistant(history);
+          if (result.success && result.reply) {
+            say(result.reply);
+          } else {
+            const fallback = resolveSpeakOnRequest(text, role);
+            say(result.success ? fallback.reply : "I’m having trouble reaching the store assistant right now. " + result.error);
+          }
+        }
       }
     } catch (error: any) {
       say(error?.message || "I couldn't complete that request. No success has been assumed.");
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale, pendingBasketSale]);
+  }, [draft, busy, role, messages, pendingExpense, pendingDebt, pendingSale, pendingStock, pendingWastage, pendingConsignment, pendingSignOut, pendingScaleSale, pendingMixedSale, pendingBasketSale, startListening]);
+
+  sendRef.current = send;
 
   return (
     <>
@@ -700,7 +739,7 @@ export default function SpeakOn({ role }: { role: Role }) {
           <section className="w-full sm:max-w-md h-[min(78vh,680px)] rounded-t-3xl sm:rounded-3xl bg-[var(--bg-surface)] border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
             <header className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2"><span className="h-9 w-9 rounded-xl bg-violet-600/10 text-violet-500 flex items-center justify-center"><MessageCircle size={18}/></span><div><p className="text-sm font-bold text-[var(--text-primary)]">Speak On</p><p className="text-[11px] text-slate-500">Voice assistance · {role}</p></div></div>
-              <button type="button" onClick={() => { recognitionRef.current?.stop?.(); setOpen(false); }} aria-label="Close Speak On" className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={19}/></button>
+              <button type="button" onClick={() => { voiceConversationRef.current = false; window.speechSynthesis?.cancel?.(); recognitionRef.current?.stop?.(); setOpen(false); }} aria-label="Close Speak On" className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={19}/></button>
             </header>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.map((m, i) => <div key={i} className={m.role === "user" ? "ml-8" : "mr-5"}>
@@ -710,9 +749,9 @@ export default function SpeakOn({ role }: { role: Role }) {
             </div>
             <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
               <div className="flex items-center gap-2">
-                <button type="button" onClick={listening ? () => recognitionRef.current?.stop?.() : startListening} className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center text-white ${listening ? "bg-rose-600" : "bg-violet-600"}`} aria-label={listening ? "Stop listening" : "Start voice input"}>{listening ? <MicOff size={18}/> : <Mic size={18}/>}</button>
+                <button type="button" onClick={listening ? () => { voiceConversationRef.current = false; recognitionRef.current?.stop?.(); } : () => { voiceConversationRef.current = true; startListening(); }} className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center text-white ${listening ? "bg-rose-600" : "bg-violet-600"}`} aria-label={listening ? "Stop listening" : "Start voice input"}>{listening ? <MicOff size={18}/> : <Mic size={18}/>}</button>
                 <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={listening ? "Listening… speak now" : "Speak or type your request"} className="min-w-0 flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-3 text-sm text-[var(--text-primary)] outline-none focus:border-violet-500"/>
-                <button type="button" onClick={send} disabled={!draft.trim() || busy} className="h-11 w-11 shrink-0 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 flex items-center justify-center" aria-label="Send request"><Send size={17}/></button>
+                <button type="button" onClick={() => send()} disabled={!draft.trim() || busy} className="h-11 w-11 shrink-0 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 flex items-center justify-center" aria-label="Send request"><Send size={17}/></button>
               </div>
               <p className="text-[10px] text-slate-400 text-center">Speak On asks for confirmation before recording supported sales, stock additions, expenses, debt payments and weight/volume wastage. Staff cannot add stock. Other workflows open their existing forms.</p>
             </div>
