@@ -505,7 +505,8 @@ export default function SpeakOn({ role }: { role: Role }) {
             productName: pendingCreditSale.productName ?? resolvedProduct?.name,
             unitPrice: pendingCreditSale.unitPrice ?? (resolvedProduct ? Number(resolvedProduct.price) : undefined),
             customerPhone: pendingCreditSale.customerPhone ?? phoneMatch?.[0].replace(/\D/g, ""),
-            quantity: pendingCreditSale.quantity ?? (quantityMatch ? Number(quantityMatch[1]) : undefined),
+            quantity: quantityMatch && pendingCreditSale.quantity * Number(pendingCreditSale.unitPrice) !== pendingCreditSale.targetAmount ? Number(quantityMatch[1]) : (pendingCreditSale.quantity ?? (quantityMatch ? Number(quantityMatch[1]) : undefined)),
+            targetAmount: /(?:amount|owing|owes|debt)\b/i.test(text) && /(?:₦|\$|£|\bamount\b)/i.test(text) ? (text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/) ? Number(text.match(/(?:₦|\$|£)?\s*(\d[\d,]*(?:\.\d{1,2})?)/)![1].replace(/,/g, "")) : pendingCreditSale.targetAmount) : pendingCreditSale.targetAmount,
             customerName: pendingCreditSale.customerName ?? (/\b(?:customer|name)\s+(?:is\s+)?([a-z][a-z .'-]{1,40})/i.exec(text)?.[1]?.trim()),
           };
           setPendingCreditSale(next);
