@@ -66,7 +66,19 @@ export default function SpeakOn({ role }: { role: Role }) {
       return;
     }
 
+    let microphonePermission: PermissionState | "unknown" = "unknown";
     try {
+      // Read the browser's site-level permission state when the Permissions API supports it.
+      // The OS microphone privacy switch and Android app permission are separate controls.
+      if (navigator.permissions?.query) {
+        try {
+          const permission = await navigator.permissions.query({ name: "microphone" as PermissionName });
+          microphonePermission = permission.state;
+        } catch {
+          microphonePermission = "unknown";
+        }
+      }
+
       // Request microphone permission directly from the user's microphone-button tap.
       // SpeechRecognition does not expose a reliable permission prompt/status API.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -100,10 +112,16 @@ export default function SpeakOn({ role }: { role: Role }) {
       const denied = error?.name === "NotAllowedError" || error?.name === "SecurityError";
       const unavailable = error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError";
       if (denied) {
-        // Chrome suppresses the native prompt after a site permission has been blocked.
+        // Do not assume this is a site-level block: Android's microphone privacy
+        // toggle, OS app permission, browser policy, and site permission can all deny capture.
         if (!micPermissionHelpShownRef.current) {
           micPermissionHelpShownRef.current = true;
-          setMessages((prev) => [...prev, { role: "assistant", text: "Chrome has microphone access set to Block for Garrison Market, so it cannot show the Allow popup again yet. To turn it back on: open Chrome Settings → Site settings → Microphone → gmstock.co → Allow. Then return here and tap the purple microphone. If Chrome asks, choose Allow. You only need to do this once." }]);
+          const message = microphonePermission === "denied"
+            ? "Chrome reports that microphone permission for this site is blocked. Open the site controls for gmstock.co → Permissions → Microphone and change Block to Allow. If gmstock.co is not listed, check Chrome → Settings → Site settings → Microphone → Blocked."
+            : microphonePermission === "granted"
+              ? "Chrome says this site is allowed, but Android/browser microphone capture was still denied. Check Android Quick Settings and make sure the Microphone access privacy toggle is ON. Also check Android Settings → Apps → Chrome → Permissions → Microphone. Close other apps using the microphone, then retry."
+              : "The microphone request was denied, but Chrome could not confirm that the website itself is blocked. Check Android Quick Settings and make sure the Microphone access privacy toggle is ON, then check Android Settings → Apps → Chrome → Permissions → Microphone. In Chrome, check gmstock.co → site controls → Permissions → Microphone. If it still fails, the browser is denying capture despite these settings.";
+          setMessages((prev) => [...prev, { role: "assistant", text: message }]);
         }
       } else {
         const message = unavailable
