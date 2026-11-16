@@ -53,46 +53,77 @@ export default function SpeakOn({ role }: { role: Role }) {
     };
   }, [open]);
 
-  const startListening = useCallback(() => {
-    if (typeof window === "undefined") return;
+  const startListening = useCallback(async () => {
+    if (typeof window === "undefined" || listening) return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setMessages((prev) => [...prev, { role: "assistant", text: "Voice recognition is not available in this browser. You can type your request below instead." }]);
+      setMessages((prev) => [...prev, { role: "assistant", text: "Voice recognition is not supported by this version of Chrome. Please update Chrome or type your request." }]);
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-NG";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = (event: any) => {
-      const spoken = String(event.results?.[0]?.[0]?.transcript ?? "").trim();
-      if (spoken) setDraft((current) => current ? current + " " + spoken : spoken);
-    };
-    recognition.onerror = () => setMessages((prev) => [...prev, { role: "assistant", text: "I couldn’t hear that clearly. Please try again or type it." }]);
-    recognition.onend = () => setListening(false);
-    recognitionRef.current = recognition;
-    setListening(true);
-    recognition.start();
-  }, []);
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setMessages((prev) => [...prev, { role: "assistant", text: "Chrome cannot access the microphone in this app context. Open Garrison Market using its secure Chrome app and check the microphone permission." }]);
+      return;
+    }
+
+    try {
+      // Request microphone permission directly from the user's microphone-button tap.
+      // SpeechRecognition does not expose a reliable permission prompt/status API.
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-NG";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.onstart = () => setListening(true);
+      recognition.onresult = (event: any) => {
+        const spoken = String(event.results?.[0]?.[0]?.transcript ?? "").trim();
+        if (spoken) setDraft((current) => current ? current + " " + spoken : spoken);
+      };
+      recognition.onerror = (event: any) => {
+        const messages: Record<string, string> = {
+          "not-allowed": "Microphone access was blocked. Allow microphone access for Garrison Market in Chrome's site settings, then tap the microphone again.",
+          "service-not-allowed": "Chrome's speech recognition service is unavailable or blocked. Check your internet connection and Chrome permissions, or type your request.",
+          "audio-capture": "Chrome has permission, but it cannot access a working microphone. Check that your phone microphone is not being used by another app.",
+          "no-speech": "I didn't detect speech. Please speak after tapping the microphone, then try again.",
+          "network": "Chrome's speech recognition service could not connect. Check your internet connection and try again.",
+          "aborted": "Voice input was stopped. Tap the microphone to try again.",
+        };
+        const message = messages[event?.error] || "Voice input failed (" + String(event?.error || "unknown error") + "). You can try the microphone again or type your request.";
+        setMessages((prev) => [...prev, { role: "assistant", text: message }]);
+      };
+      recognition.onend = () => setListening(false);
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (error: any) {
+      const denied = error?.name === "NotAllowedError" || error?.name === "SecurityError";
+      const unavailable = error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError";
+      const message = denied
+        ? "Microphone permission is not granted. Allow microphone access for Garrison Market in Chrome's site settings, then tap the microphone again."
+        : unavailable
+          ? "No microphone was found on this device. Check your phone's microphone and try again."
+          : "Chrome could not start microphone access (" + String(error?.name || "unknown error") + "). Check the app's microphone permission and try again.";
+      setMessages((prev) => [...prev, { role: "assistant", text: message }]);
+      setListening(false);
+    }
+  }, [listening]);
 
   useEffect(() => {
     if (!open) return;
-    let started = false;
-    const beginListening = () => {
-      if (started) return;
-      started = true;
-      startListening();
-    };
+    // Speak the greeting, but do not start listening automatically. On Android,
+    // microphone permission must be requested from an explicit user gesture.
     if ("speechSynthesis" in window) {
       const greeting = new SpeechSynthesisUtterance("Hi, I’m Speak On. What would you like to do?");
-      greeting.onend = beginListening;
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(greeting);
-    } else {
-      beginListening();
     }
-    return () => { window.speechSynthesis?.cancel?.(); };
-  }, [open, startListening]);
+    return () => {
+      window.speechSynthesis?.cancel?.();
+      recognitionRef.current?.stop?.();
+      recognitionRef.current = null;
+      setListening(false);
+    };
+  }, [open]);
 
   const send = useCallback(async () => {
     const text = draft.trim();
