@@ -495,15 +495,22 @@ export default function SpeakOn({ role }: { role: Role }) {
           }
         } else {
           const phoneMatch = text.match(/(?:\+?\d[\d\s()-]{6,}\d)/);
-          const quantityMatch = text.match(/\b(\d+)\b/);
+          const quantityMatch = !phoneMatch ? text.match(/\b(\d+)\b/) : null;
+          const inventory = pendingCreditSale.inventoryId ? [] : await getInventoryForStaff();
+          const productMatches = inventory.filter((item: any) => item.name && text.toLowerCase().includes(String(item.name).toLowerCase()));
+          const resolvedProduct = productMatches.length === 1 ? productMatches[0] : null;
           const next = {
             ...pendingCreditSale,
+            inventoryId: pendingCreditSale.inventoryId ?? resolvedProduct?.id,
+            productName: pendingCreditSale.productName ?? resolvedProduct?.name,
+            unitPrice: pendingCreditSale.unitPrice ?? (resolvedProduct ? Number(resolvedProduct.price) : undefined),
             customerPhone: pendingCreditSale.customerPhone ?? phoneMatch?.[0].replace(/\D/g, ""),
             quantity: pendingCreditSale.quantity ?? (quantityMatch ? Number(quantityMatch[1]) : undefined),
             customerName: pendingCreditSale.customerName ?? (/\b(?:customer|name)\s+(?:is\s+)?([a-z][a-z .'-]{1,40})/i.exec(text)?.[1]?.trim()),
           };
           setPendingCreditSale(next);
-          if (!next.inventoryId) say("Which exact product in your active inventory was supplied?");
+          if (productMatches.length > 1) say("I found more than one matching product. Please say its exact inventory name.");
+          else if (!next.inventoryId) say("Which exact product in your active inventory was supplied?");
           else if (!next.quantity) say("How many units of " + next.productName + " were supplied? Its listed unit price is " + Number(next.unitPrice).toLocaleString() + ".");
           else if (next.quantity * Number(next.unitPrice) !== next.targetAmount) say("At the listed price, " + next.quantity + " × " + next.productName + " totals " + (next.quantity * Number(next.unitPrice)).toLocaleString() + ", not " + Number(next.targetAmount).toLocaleString() + ". Please clarify the quantity or the correct outstanding amount.");
           else if (!next.customerName) say("Who is the customer who owes this amount?");
