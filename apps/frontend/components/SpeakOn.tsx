@@ -68,19 +68,9 @@ export default function SpeakOn({ role }: { role: Role }) {
 
     let microphonePermission: PermissionState | "unknown" = "unknown";
     try {
-      // Read the browser's site-level permission state when the Permissions API supports it.
-      // The OS microphone privacy switch and Android app permission are separate controls.
-      if (navigator.permissions?.query) {
-        try {
-          const permission = await navigator.permissions.query({ name: "microphone" as PermissionName });
-          microphonePermission = permission.state;
-        } catch {
-          microphonePermission = "unknown";
-        }
-      }
-
-      // Request microphone permission directly from the user's microphone-button tap.
-      // SpeechRecognition does not expose a reliable permission prompt/status API.
+      // IMPORTANT: request capture immediately in the microphone button's user gesture.
+      // Awaiting Permissions.query() first can consume transient user activation on Android
+      // Chrome, preventing the native Allow prompt from appearing.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());
 
@@ -109,6 +99,16 @@ export default function SpeakOn({ role }: { role: Role }) {
       recognitionRef.current = recognition;
       recognition.start();
     } catch (error: any) {
+      // Only inspect permission state after the capture request has been made.
+      // This keeps the initial getUserMedia() call inside the original tap gesture.
+      if (navigator.permissions?.query) {
+        try {
+          const permission = await navigator.permissions.query({ name: "microphone" as PermissionName });
+          microphonePermission = permission.state;
+        } catch {
+          microphonePermission = "unknown";
+        }
+      }
       const denied = error?.name === "NotAllowedError" || error?.name === "SecurityError";
       const unavailable = error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError";
       if (denied) {
