@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mic, MicOff, X, Send, ArrowRight, MessageCircle } from "lucide-react";
 import { resolveSpeakOnRequest } from "@/lib/speak-on-routing";
+import { askStoreAssistant } from "@/lib/store-assistant.actions";
 import { addExpenseAction } from "@/lib/expense.actions";
 import { addStockToInventoryAction, getInventoryForStaff, processSaleAction } from "@/lib/business.actions";
 import { getOpenDebtsForOwner, getOpenDebtsForStaff, recordDebtPaymentAction } from "@/lib/debt.actions";
@@ -678,10 +679,25 @@ export default function SpeakOn({ role }: { role: Role }) {
       } else {
         const previousAction = [...messages].reverse().find((message) => message.role === "assistant" && message.href);
         const isContextualOpen = /^(open it|go there|yes|continue|take me there)$/i.test(text);
-        const result = isContextualOpen && previousAction?.href
-          ? { reply: "I’ll open the workflow we were just discussing.", href: previousAction.href, label: previousAction.label }
-          : resolveSpeakOnRequest(text, role);
-        say(result.reply, result.href, result.label);
+        if (isContextualOpen && previousAction?.href) {
+          say("I’ll open the workflow we were just discussing.", previousAction.href, previousAction.label);
+        } else {
+          // Speak On shares the authenticated, store-scoped Ask Me intelligence.
+          // The conversation history lets it answer follow-up questions naturally;
+          // it is read-only here. Mutations still use the explicit, confirmed
+          // Speak On action flows above and the existing server actions.
+          const history = [
+            ...messages.slice(-8).map((message) => ({ role: message.role, content: message.text })),
+            { role: "user" as const, content: text },
+          ];
+          const result = await askStoreAssistant(history);
+          if (result.success && result.reply) {
+            say(result.reply);
+          } else {
+            const fallback = resolveSpeakOnRequest(text, role);
+            say(result.success ? fallback.reply : "I’m having trouble reaching the store assistant right now. " + result.error);
+          }
+        }
       }
     } catch (error: any) {
       say(error?.message || "I couldn't complete that request. No success has been assumed.");
